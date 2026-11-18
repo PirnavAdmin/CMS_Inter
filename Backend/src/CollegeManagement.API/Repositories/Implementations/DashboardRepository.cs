@@ -178,11 +178,10 @@ public class DashboardRepository : IDashboardRepository
                           AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
                           AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId)
                           AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId)
-                          AND s.SectionId IS NOT NULL AND s.SectionId > 0
-                          AND s.RollNo IS NOT NULL AND TRIM(s.RollNo) != '';",
+                          ;",
                         new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
 
-                    if (studentManagementCount.HasValue && studentManagementCount.Value > 0)
+                    if (studentManagementCount.HasValue)
                     {
                         summary.TotalStudents = studentManagementCount.Value;
                     }
@@ -220,6 +219,65 @@ public class DashboardRepository : IDashboardRepository
                 catch (Exception staffEx)
                 {
                     _logger?.LogWarning(staffEx, "Could not fetch direct Staff Management count");
+                }
+
+                // Ensure TotalGroups strictly reflects Group Management (Groups table for Board and College)
+                try
+                {
+                    if (campusId == 999999999)
+                    {
+                        summary.TotalGroups = 0;
+                    }
+                    else
+                    {
+                        int? collegeId = null;
+                        if (campusId.HasValue && campusId.Value > 0)
+                        {
+                            collegeId = await conn.ExecuteScalarAsync<int?>(
+                                "SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId LIMIT 1;",
+                                new { CampusId = campusId.Value });
+                        }
+
+                        var groupCount = await conn.ExecuteScalarAsync<int?>(@"
+                            SELECT COUNT(*)
+                            FROM `Groups` g
+                            WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
+                              AND (@p_CollegeId IS NULL OR @p_CollegeId = 0 OR g.CollegeId = @p_CollegeId)
+                              AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR g.BoardId = @p_BoardId)
+                              AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR g.AcademicYearId = @p_AcademicYearId OR g.AcademicYearId IS NULL);",
+                            new { p_CollegeId = collegeId, p_BoardId = boardId, p_AcademicYearId = academicYearId });
+
+                        if (groupCount.HasValue)
+                        {
+                            summary.TotalGroups = groupCount.Value;
+                        }
+                    }
+                }
+                catch (Exception gEx)
+                {
+                    _logger?.LogWarning(gEx, "Could not fetch direct Group Management count");
+                }
+
+                // Ensure TotalSections strictly reflects Section Management (Sections table)
+                try
+                {
+                    var sectionCount = await conn.ExecuteScalarAsync<int?>(@"
+                        SELECT COUNT(*)
+                        FROM `Sections` sec
+                        WHERE (sec.IsActive = 1 OR sec.IsActive IS NULL)
+                          AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sec.CampusId = @p_CampusId)
+                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sec.BoardId = @p_BoardId)
+                          AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sec.AcademicYearId = @p_AcademicYearId);",
+                        new { p_CampusId = campusId, p_BoardId = boardId, p_AcademicYearId = academicYearId });
+
+                    if (sectionCount.HasValue && sectionCount.Value > 0)
+                    {
+                        summary.TotalSections = sectionCount.Value;
+                    }
+                }
+                catch (Exception secEx)
+                {
+                    _logger?.LogWarning(secEx, "Could not fetch direct Section Management count");
                 }
 
                 // If no prior year baseline exists (first recorded academic year), ensure last year staff counts are 0
@@ -260,45 +318,69 @@ public class DashboardRepository : IDashboardRepository
         CancellationToken ct = default)
     {
         var conn = await GetOpenConnectionAsync();
-        var parameters = new DynamicParameters();
-        parameters.Add("p_BoardId", boardId, DbType.Int32);
-        parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
-        parameters.Add("p_CampusId", campusId, DbType.Int32);
 
         try
         {
-            using var multi = await conn.QueryMultipleAsync(
-                "sp_GetDashboardStudentsOverview",
-                parameters,
-                commandType: CommandType.StoredProcedure);
+            // Direct live query from StudentAdmissions table (Source of Truth for Student Admissions module)
+            var admSummary = await conn.QueryFirstOrDefaultAsync<dynamic>(@"
+                SELECT 
+                    COUNT(*) AS TotalAdmissions,
+                    SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) AS MaleStudents,
+                    SUM(CASE WHEN LOWER(COALESCE(sa.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS FemaleStudents,
+                    SUM(CASE WHEN sa.IsActive = 1 OR sa.IsActive IS NULL THEN 1 ELSE 0 END) AS ActiveStudents,
+                    SUM(CASE WHEN sa.IsActive = 0 THEN 1 ELSE 0 END) AS InactiveStudents
+                FROM `StudentAdmissions` sa
+                WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sa.CampusId = @p_CampusId)
+                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sa.AcademicYearId = @p_AcademicYearId)
+                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sa.BoardId = @p_BoardId);",
+                new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
 
-            var overview = await multi.ReadFirstOrDefaultAsync<StudentsOverviewResponseDto>() ?? new StudentsOverviewResponseDto();
+            var totalAdm = Convert.ToInt32(admSummary?.TotalAdmissions ?? 0);
+            var maleAdm = Convert.ToInt32(admSummary?.MaleStudents ?? 0);
+            var femaleAdm = Convert.ToInt32(admSummary?.FemaleStudents ?? 0);
+            var activeAdm = Convert.ToInt32(admSummary?.ActiveStudents ?? 0);
+            var inactiveAdm = Convert.ToInt32(admSummary?.InactiveStudents ?? 0);
 
-            if (!multi.IsConsumed)
+            var monthlyTrend = (await conn.QueryAsync<StudentMonthlyTrendDto>(@"
+                SELECT 
+                    DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y') AS Period,
+                    COUNT(*) AS StudentsJoined
+                FROM `StudentAdmissions` sa
+                WHERE (sa.IsActive = 1 OR sa.IsActive IS NULL)
+                  AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sa.CampusId = @p_CampusId)
+                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sa.AcademicYearId = @p_AcademicYearId)
+                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sa.BoardId = @p_BoardId)
+                  AND (sa.AdmissionDate IS NOT NULL OR sa.CreatedAt IS NOT NULL)
+                GROUP BY DATE_FORMAT(COALESCE(sa.AdmissionDate, sa.CreatedAt), '%b %Y'), 
+                         YEAR(COALESCE(sa.AdmissionDate, sa.CreatedAt)), 
+                         MONTH(COALESCE(sa.AdmissionDate, sa.CreatedAt))
+                ORDER BY YEAR(COALESCE(sa.AdmissionDate, sa.CreatedAt)) ASC, 
+                         MONTH(COALESCE(sa.AdmissionDate, sa.CreatedAt)) ASC;",
+                new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId })).ToList();
+
+            var overview = new StudentsOverviewResponseDto
             {
-                var trend = (await multi.ReadAsync<StudentMonthlyTrendDto>()).ToList();
-                overview.MonthlyTrend = trend;
-            }
-
-            if (overview.TotalStudents == 0 && overview.MonthlyTrend != null && overview.MonthlyTrend.Any())
-            {
-                overview.TotalStudents = overview.MonthlyTrend.Sum(x => x.StudentsJoined);
-            }
-
-            if ((overview.GenderDistribution == null || !overview.GenderDistribution.Any()) && overview.TotalStudents > 0)
-            {
-                overview.GenderDistribution = new List<StudentOverviewDistributionDto>
+                TotalStudents = totalAdm,
+                ActiveStudents = activeAdm,
+                InactiveStudents = inactiveAdm,
+                MaleStudents = maleAdm,
+                FemaleStudents = femaleAdm,
+                MalePercentage = totalAdm > 0 ? Math.Round((maleAdm * 100.0m) / totalAdm, 1) : 0,
+                FemalePercentage = totalAdm > 0 ? Math.Round((femaleAdm * 100.0m) / totalAdm, 1) : 0,
+                MonthlyTrend = monthlyTrend,
+                GenderDistribution = new List<StudentOverviewDistributionDto>
                 {
-                    new() { Category = "Gender", Label = "Boys", Count = overview.MaleStudents, Percentage = overview.MalePercentage, Color = "#3B82F6" },
-                    new() { Category = "Gender", Label = "Girls", Count = overview.FemaleStudents, Percentage = overview.FemalePercentage, Color = "#EC4899" }
-                };
-            }
+                    new() { Category = "Gender", Label = "Boys", Count = maleAdm, Percentage = totalAdm > 0 ? Math.Round((maleAdm * 100.0m) / totalAdm, 1) : 0, Color = "#3B82F6" },
+                    new() { Category = "Gender", Label = "Girls", Count = femaleAdm, Percentage = totalAdm > 0 ? Math.Round((femaleAdm * 100.0m) / totalAdm, 1) : 0, Color = "#EC4899" }
+                }
+            };
 
             return overview;
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to execute sp_GetDashboardStudentsOverview for BoardId {BoardId}, AY {AcademicYearId}, CampusId {CampusId}", boardId, academicYearId, campusId);
+            _logger?.LogError(ex, "Failed to execute GetStudentsOverviewAsync for BoardId {BoardId}, AY {AcademicYearId}, CampusId {CampusId}", boardId, academicYearId, campusId);
         }
 
         return new StudentsOverviewResponseDto();
@@ -318,10 +400,34 @@ public class DashboardRepository : IDashboardRepository
 
         try
         {
-            var items = (await conn.QueryAsync<GroupDistributionItemDto>(
-                "sp_GetDashboardGroupDistribution",
-                parameters,
-                commandType: CommandType.StoredProcedure)).ToList();
+            // Direct query from Groups and Students to guarantee all active board groups (MPC, BiPC, CEC, etc.) are included
+            var items = (await conn.QueryAsync<GroupDistributionItemDto>(@"
+                SELECT 
+                    g.GroupId,
+                    COALESCE(NULLIF(g.GroupCode, ''), g.GroupName) AS GroupCode,
+                    COALESCE(g.GroupName, g.GroupCode) AS GroupName,
+                    COUNT(s.StudentId) AS TotalStudents,
+                    SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('male', 'm', 'boy', 'boys') THEN 1 ELSE 0 END) AS Boys,
+                    SUM(CASE WHEN LOWER(COALESCE(s.Gender, '')) IN ('female', 'f', 'girl', 'girls') THEN 1 ELSE 0 END) AS Girls
+                FROM `Groups` g
+                LEFT JOIN `Students` s ON s.GroupId = g.GroupId 
+                                       AND (s.IsActive = 1 OR s.IsActive IS NULL) 
+                                       AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
+                                       AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId) 
+                                       AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId)
+                WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
+                  AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR g.BoardId = @p_BoardId)
+                GROUP BY g.GroupId, COALESCE(NULLIF(g.GroupCode, ''), g.GroupName), COALESCE(g.GroupName, g.GroupCode)
+                ORDER BY TotalStudents DESC, GroupName ASC;",
+                new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId })).ToList();
+
+            if (!items.Any())
+            {
+                items = (await conn.QueryAsync<GroupDistributionItemDto>(
+                    "sp_GetDashboardGroupDistribution",
+                    parameters,
+                    commandType: CommandType.StoredProcedure)).ToList();
+            }
 
             if (items.Any())
             {

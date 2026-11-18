@@ -49,15 +49,15 @@ function examCellShieldPlugin(apiBaseUrl) {
         // Only intercept endpoints that may return 403, 404, or unhandled errors for Exam Cell
         const isThemePolicy = urlStr.includes("/api/v1/settings/theme-policy");
         const isSupplementalExam = /^\/api\/v1\/examinations\/5\d\d/.test(urlStr);
-        const isMasterGroups = urlStr.startsWith("/api/v1/master-groups");
-        const isGroups = urlStr.startsWith("/api/v1/groups");
-        const isSections = urlStr.startsWith("/api/v1/Sections") || urlStr.startsWith("/api/v1/sections");
+        const isMasterGroups = false;
+        const isGroups = false;
+        const isSections = false;
         const isPromotions = urlStr.startsWith("/api/v1/promotions");
         const isCampusTransfers = urlStr.startsWith("/api/v1/campus-transfers");
         const isExamSettings = urlStr.startsWith("/api/v1/examinations/settings");
         const isYearlyOverview = urlStr.includes("/yearly-overview");
         const isAttendanceDefaulters = urlStr.startsWith("/api/v1/attendance/defaulters");
-        const isSubjectsContext = urlStr.startsWith("/api/v1/subjects/context");
+        const isSubjectsContext = false;
         const isCertStudentsDropdown = urlStr.startsWith("/api/v1/certificates/students-dropdown");
         const isAttendanceTimingEffective = urlStr.startsWith("/api/v1/attendance-timing-config/effective");
         const isResultsGenerateOrProcess = urlStr.startsWith("/api/v1/results/generate") || urlStr.startsWith("/api/v1/results/process");

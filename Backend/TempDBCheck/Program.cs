@@ -1,56 +1,81 @@
 using System;
-using MySqlConnector;
+using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text.Json;
+using System.Threading.Tasks;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Text;
 
 class Program
 {
-    static void Main()
+    static async Task Main()
     {
-        string connStr = "Server=collegemanagementdb-mysql-3069cc62-manikesandeep-1393.g.aivencloud.com;Port=19182;Database=CollegeManagement;User ID=avnadmin;Password=AVNS_jgPZED4pphZib4tvJID;SslMode=Required;";
-        using (var conn = new MySqlConnection(connStr))
+        string secret = "a_very_long_secure_secret_key_of_at_least_32_characters_long";
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secret));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new List<Claim>
         {
-            conn.Open();
+            new Claim(ClaimTypes.NameIdentifier, "1064"),
+            new Claim(ClaimTypes.Email, "mukeshyedida1@gmail.com"),
+            new Claim(ClaimTypes.Role, "Admin"),
+            new Claim("CollegeId", "8"),
+            new Claim("collegeId", "8"),
+            new Claim("AdminId", "1064")
+        };
 
-            Console.WriteLine("Updating sp_SuperAdmin_CreateCollegeAdmin to accept p_PhoneNumber...");
-            using var dropCmd = conn.CreateCommand();
-            dropCmd.CommandText = "DROP PROCEDURE IF EXISTS `sp_SuperAdmin_CreateCollegeAdmin`;";
-            dropCmd.ExecuteNonQuery();
+        var tokenDescriptor = new JwtSecurityToken(
+            issuer: "CollegeManagementAPI",
+            audience: "CollegeManagementFrontend",
+            claims: claims,
+            expires: DateTime.UtcNow.AddHours(2),
+            signingCredentials: creds
+        );
 
-            using var createCmd = conn.CreateCommand();
-            createCmd.CommandText = @"
-CREATE PROCEDURE `sp_SuperAdmin_CreateCollegeAdmin`(
-    IN p_CollegeId INT,
-    IN p_FullName VARCHAR(150),
-    IN p_Email VARCHAR(150),
-    IN p_PhoneNumber VARCHAR(50),
-    IN p_PasswordHash VARCHAR(255),
-    IN p_CreatedBy INT,
-    OUT p_NewUserId INT
-)
-BEGIN
-    DECLARE v_AdminRoleId INT;
+        string token = new JwtSecurityTokenHandler().WriteToken(tokenDescriptor);
+        Console.WriteLine($"Generated token for Mukesh Kumar (CollegeId: 8)");
 
-    IF EXISTS (SELECT 1 FROM `Users` WHERE `Email` = p_Email) THEN
-        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DUPLICATE_USER_EMAIL: An account with this email already exists.';
-    END IF;
+        using var client = new HttpClient();
+        client.BaseAddress = new Uri("http://localhost:5167");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-    SELECT `RoleId` INTO v_AdminRoleId
-    FROM `Roles`
-    WHERE `RoleCode` = 'COLLEGE_ADMIN' OR `RoleName` = 'Admin'
-    ORDER BY `RoleId` ASC LIMIT 1;
+        Console.WriteLine("\n=== 1. GET /api/v1/dashboard/summary?campusId=999999999 ===");
+        var dashRes = await client.GetAsync("/api/v1/dashboard/summary?campusId=999999999");
+        var dashBody = await dashRes.Content.ReadAsStringAsync();
+        Console.WriteLine($"Dashboard status: {dashRes.StatusCode}");
+        Console.WriteLine($"Dashboard body: {dashBody}");
 
-    INSERT INTO `Users` (
-        `CollegeId`, `RoleId`, `Email`, `PhoneNumber`, `PasswordHash`, 
-        `FullName`, `IsActive`, `IsFirstLogin`, `CreatedAt`
-    )
-    VALUES (
-        p_CollegeId, v_AdminRoleId, p_Email, IFNULL(NULLIF(p_PhoneNumber, ''), '+91 9000000000'), p_PasswordHash, 
-        p_FullName, 1, 1, CURRENT_TIMESTAMP(6)
-    );
+        Console.WriteLine("\n=== 2. GET /api/v1/groups?boardId=1 ===");
+        var groupsRes = await client.GetAsync("/api/v1/groups?boardId=1");
+        var groupsBody = await groupsRes.Content.ReadAsStringAsync();
+        Console.WriteLine($"Groups status: {groupsRes.StatusCode}");
+        Console.WriteLine($"Groups response: {groupsBody}");
 
-    SET p_NewUserId = LAST_INSERT_ID();
-END;";
-            createCmd.ExecuteNonQuery();
-            Console.WriteLine("Successfully updated sp_SuperAdmin_CreateCollegeAdmin in MySQL!");
-        }
+        Console.WriteLine("\n=== 3. GET /api/v1/groups/board/1 ===");
+        var boardGroupsRes = await client.GetAsync("/api/v1/groups/board/1");
+        var boardGroupsBody = await boardGroupsRes.Content.ReadAsStringAsync();
+        Console.WriteLine($"Board Groups status: {boardGroupsRes.StatusCode}");
+        Console.WriteLine($"Board Groups response: {boardGroupsBody}");
+
+        Console.WriteLine("\n=== 4. GET /api/v1/subjects/context?boardId=1&groupId=39&academicLevelId=1 ===");
+        var subjRes = await client.GetAsync("/api/v1/subjects/context?boardId=1&groupId=39&academicLevelId=1");
+        var subjBody = await subjRes.Content.ReadAsStringAsync();
+        Console.WriteLine($"Subjects context status: {subjRes.StatusCode}");
+        Console.WriteLine($"Subjects context response: {subjBody}");
+
+        Console.WriteLine("\n=== 5. GET /api/v1/subjects?boardId=1 ===");
+        var allSubjRes = await client.GetAsync("/api/v1/subjects?boardId=1");
+        var allSubjBody = await allSubjRes.Content.ReadAsStringAsync();
+        Console.WriteLine($"All subjects status: {allSubjRes.StatusCode}");
+        Console.WriteLine($"All subjects response: {allSubjBody}");
+
+        Console.WriteLine("\n=== 6. GET /api/v1/subjects/active ===");
+        var activeSubjRes = await client.GetAsync("/api/v1/subjects/active");
+        var activeSubjBody = await activeSubjRes.Content.ReadAsStringAsync();
+        Console.WriteLine($"Active subjects status: {activeSubjRes.StatusCode}");
+        Console.WriteLine($"Active subjects response: {activeSubjBody}");
     }
 }

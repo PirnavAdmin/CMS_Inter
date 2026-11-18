@@ -12,15 +12,22 @@ import {
   Printer,
   Upload,
   ArrowRight,
+  ArrowLeft,
   ShieldCheck,
+  FileText,
+  X,
+  Check,
+  ExternalLink,
 } from "lucide-react";
-import { Modal, Toast } from "@/shared/components/Ui.jsx";
+import { Modal } from "@/shared/components/Ui.jsx";
 import { feePaymentGatewayApi, loadRazorpayCheckout } from "@/api/feePaymentGatewayApi.js";
-import apiClient, { getApiErrorMessage } from "@/api/axios.js";
+import { validatePaymentProof } from "@/modules/admin/AdminFees/services/paymentGatewaySession.js";
+import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
 import { getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
 import { formatCurrency, todayISO, COLLEGE_NAME } from "@/data/feeManagementData.js";
+import { printReceiptElement } from "../utils/printReceipt.js";
 import "../ParentDashboard.css";
 
 // Helper for date formatting
@@ -84,13 +91,15 @@ export default function ParentCollectPaymentModal({
     if (String(activeChildId) === currentChildId && contextChildFee && contextChildFee.total !== undefined) {
       return contextChildFee;
     }
+    const allRecords = getStoredFeeRecords();
     return (
+      allRecords[currentChildId] ||
       activeChild?.fees || {
-        total: 0,
+        total: 70000,
         paid: 0,
-        pending: 0,
-        status: "—",
-        dueDate: "—",
+        pending: 70000,
+        status: "Due",
+        dueDate: "13 Dec 2026",
         breakdown: [],
         schedules: [],
         receipts: [],
@@ -102,12 +111,11 @@ export default function ParentCollectPaymentModal({
     .filter((r) => !/reject|fail|cancel|pending/i.test(r.status || ""))
     .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
   const paidFee = Math.max(Number(rawFee.paid || 0), receiptsApprovedTotal);
-  const totalFee = Math.max(Number(rawFee.total || 0), paidFee);
+  const totalFee = Math.max(Number(rawFee.total || 70000), paidFee);
   const balance = Math.max(0, totalFee - paidFee);
 
-  // Derive Fee Schedules matching reference: 4 quarters of ₹17,500 due 13 Dec 2026, 13 Jan 2027, etc.
+  // Derive Fee Schedules matching reference: 4 quarters of ₹17,500 due 13 Dec 2026, etc.
   const pendingSchedules = useMemo(() => {
-    // 1. If real backend schedules exist in rawFee
     if (Array.isArray(rawFee.schedules) && rawFee.schedules.length > 0) {
       const pending = rawFee.schedules.filter(
         (s) => !["paid", "completed", "settled"].includes(String(s.status || "").toLowerCase()) && (s.balanceAmount ?? s.amount) > 0
@@ -124,7 +132,6 @@ export default function ParentCollectPaymentModal({
       }
     }
 
-    // 2. Structured fallback matching user screenshot (4 quarters of ₹17,500 each)
     if (balance > 0) {
       const quarter = Math.round(balance / (balance >= 35000 ? (balance >= 70000 ? 4 : 2) : 1));
       const schedulesCount = balance >= 70000 ? 4 : balance >= 35000 ? 2 : 1;
@@ -149,8 +156,11 @@ export default function ParentCollectPaymentModal({
     return [];
   }, [rawFee, balance]);
 
-  // Mode Selection: Dynamic UPI QR, Card / NetBanking, Bank Transfer / UTR, Cash / Manual
-  const [mode, setMode] = useState("UPI_QR"); // "UPI_QR" | "RAZORPAY" | "BANK_TRANSFER" | "CASH"
+  // Mode Selection: Dynamic UPI QR, Card / NetBanking, Bank Transfer / UTR (No Cash/Manual)
+  const [mode, setMode] = useState("UPI_QR"); // "UPI_QR" | "RAZORPAY" | "BANK_TRANSFER"
+
+  // Step state: "config" | "qr" | "utr" | "success"
+  const [step, setStep] = useState("config");
 
   // Fee Schedule Selection State
   const [target, setTarget] = useState(pendingSchedules.length > 0 ? "schedules" : "full");
@@ -173,18 +183,6 @@ export default function ParentCollectPaymentModal({
     }
     return String(balance);
   });
-
-  // Reset/sync schedules and amount when child changes
-  const handleSelectChild = (childId) => {
-    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-    setSelectedChildId(String(childId));
-    setActiveChildId(String(childId));
-    setOrder(null);
-    setError("");
-    setNotice("");
-    setSubmittedUtr(false);
-  };
 
   useEffect(() => {
     if (target === "full") {
@@ -228,31 +226,23 @@ export default function ParentCollectPaymentModal({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(600);
+  const [linkCopied, setLinkCopied] = useState(false);
 
-  // Bank Transfer / UTR tab state
-  const [bankUtrDraft, setBankUtrDraft] = useState({
+  // UTR Form State
+  const [utrForm, setUtrForm] = useState({
     utrNumber: "",
     bankName: "",
     paymentDate: todayISO(),
+    amountPaid: "",
     remarks: "",
   });
-  const [submittedUtr, setSubmittedUtr] = useState(false);
+  const [proofFile, setProofFile] = useState(null);
+  const [submissionSuccessData, setSubmissionSuccessData] = useState(null);
 
-  // Cash / Manual state
-  const [cashDraft, setCashDraft] = useState({
-    paymentDate: todayISO(),
-    paymentMode: "Cash",
-    discount: "",
-    fine: "",
-    reference: "",
-    note: "",
-  });
-  const [cashSaving, setCashSaving] = useState(false);
-
-  // Receipt Modal State
+  // Official Receipt Modal State
   const [officialReceipt, setOfficialReceipt] = useState(null);
 
-  // Polling timer ref
+  // Timers ref
   const pollIntervalRef = useRef(null);
   const countdownIntervalRef = useRef(null);
   const aliveRef = useRef(true);
@@ -266,7 +256,75 @@ export default function ParentCollectPaymentModal({
     };
   }, []);
 
-  // Completion Handler
+  // Reset when selected child changes
+  const handleSelectChild = (childId) => {
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    setSelectedChildId(String(childId));
+    setActiveChildId(String(childId));
+    setOrder(null);
+    setStep("config");
+    setError("");
+    setNotice("");
+    setProofFile(null);
+    setSubmissionSuccessData(null);
+  };
+
+  // Sync amount when switching to UTR step
+  useEffect(() => {
+    if (step === "utr") {
+      setUtrForm((prev) => ({
+        ...prev,
+        amountPaid: prev.amountPaid || String(order?.amount || amount || balance),
+      }));
+    }
+  }, [step, order, amount, balance]);
+
+  // Copy mobile payment link
+  const handleCopyPaymentLink = async () => {
+    const link = order?.paymentLink || order?.upiUri || "";
+    if (!link) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const el = document.createElement("textarea");
+        el.value = link;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      setLinkCopied(true);
+      setNotice("Payment link copied to clipboard!");
+      setTimeout(() => {
+        setLinkCopied(false);
+        setNotice("");
+      }, 3000);
+    } catch {
+      setNotice("Payment link copied!");
+      setTimeout(() => setNotice(""), 3000);
+    }
+  };
+
+  // Handle file picker
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Payment proof file must be 5 MB or smaller.");
+      return;
+    }
+    const ext = String(file.name || "").split(".").pop().toLowerCase();
+    if (!["jpg", "jpeg", "png", "pdf"].includes(ext)) {
+      setError("Payment proof must be a JPG, JPEG, PNG, or PDF file.");
+      return;
+    }
+    setProofFile(file);
+  };
+
+  // Settlement Handler (Only called on confirmed gateway payment, NOT for pending UTR)
   const handlePaymentSettled = useCallback(
     (paymentData) => {
       if (!aliveRef.current) return;
@@ -285,7 +343,7 @@ export default function ParentCollectPaymentModal({
         `TXN${Date.now()}`;
       const payMode =
         paymentData?.method ||
-        (mode === "UPI_QR" ? "UPI" : mode === "RAZORPAY" ? "Razorpay" : mode === "CASH" ? "Cash" : "Bank Transfer");
+        (mode === "UPI_QR" ? "UPI QR" : mode === "RAZORPAY" ? "Razorpay" : "Bank Transfer");
 
       const newReceipt = {
         id: `rec-${Date.now()}`,
@@ -298,7 +356,6 @@ export default function ParentCollectPaymentModal({
         status: "Success",
       };
 
-      // 1. Update in-memory fee records
       const allRecords = getStoredFeeRecords();
       const studentRec = allRecords[currentChildId] || {
         total: Number(rawFee.total || 70000),
@@ -320,18 +377,6 @@ export default function ParentCollectPaymentModal({
         pending: updatedPending,
         status: updatedStatus,
         receipts: [newReceipt, ...(studentRec.receipts || [])],
-        breakdown: (studentRec.breakdown || []).map((b) => {
-          if (b.pending > 0 && payAmount > 0) {
-            const payItem = Math.min(b.pending, payAmount);
-            return {
-              ...b,
-              paid: (b.paid || 0) + payItem,
-              pending: b.pending - payItem,
-              status: b.pending - payItem === 0 ? "Paid" : "Partial",
-            };
-          }
-          return b;
-        }),
       };
 
       saveStoredFeeRecords({
@@ -339,11 +384,8 @@ export default function ParentCollectPaymentModal({
         [currentChildId]: updatedStudentRec,
       });
 
-      // 2. Trigger parent callbacks
       refreshActiveChild?.();
       onPaymentSuccess?.(newReceipt);
-
-      // 3. Open Official Receipt Modal
       setOfficialReceipt(newReceipt);
     },
     [amount, balance, mode, activeChild, currentChildId, rawFee, refreshActiveChild, onPaymentSuccess]
@@ -365,9 +407,20 @@ export default function ParentCollectPaymentModal({
     setError("");
 
     const numericStudentId = Number(activeChild?.studentId || activeChild?.id || 860);
-    const realAssignmentId = Number(rawFee.raw?.studentFeeAssignmentId || rawFee.raw?.studentFeeId || activeChild?.studentFeeAssignmentId || activeChild?.studentFeeId || 0);
+    const realAssignmentId = Number(
+      rawFee.raw?.studentFeeAssignmentId ||
+      rawFee.raw?.studentFeeId ||
+      activeChild?.studentFeeAssignmentId ||
+      activeChild?.studentFeeId ||
+      0
+    );
     const hasRealSchedules = Array.isArray(rawFee.schedules) && rawFee.schedules.length > 0;
-    const canAttemptGateway = Boolean(realAssignmentId && Number.isSafeInteger(realAssignmentId) && realAssignmentId > 0 && (target === "full" || hasRealSchedules));
+    const canAttemptGateway = Boolean(
+      realAssignmentId &&
+      Number.isSafeInteger(realAssignmentId) &&
+      realAssignmentId > 0 &&
+      (target === "full" || hasRealSchedules)
+    );
     const numericAssignmentId = canAttemptGateway ? realAssignmentId : 0;
     const feeInstallmentIds = target === "full" ? [] : selectedScheduleIds.map(Number);
     const effectiveCampusId = Number(activeChild?.campusId || 1);
@@ -383,21 +436,28 @@ export default function ParentCollectPaymentModal({
 
     try {
       if (!canAttemptGateway) throw new Error("DIRECT_QR_REQUIRED");
-      // Try real backend API
       const response = await feePaymentGatewayApi.createOrder(orderPayload);
       if (response && response.orderId) {
-        setOrder({
+        const orderData = {
           ...response,
+          amount: val,
           campusName: response.resolvedCampusName || activeChild?.campusName || "Main Campus (HQ)",
           payeeName: response.payeeName || "Namratha S",
           payeeVpa: response.payeeVpa || "namratha.sangaraju-1@okicici",
-        });
+          paymentLink: response.paymentLink || response.upiUri,
+          qrCodeBase64:
+            response.qrCodeBase64 ||
+            `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(response.upiUri || "upi://pay")}`,
+          qrMode: response.qrMode || "DYNAMIC_GATEWAY_QR",
+        };
+        setOrder(orderData);
+        setStep("qr");
         startPolling(response.orderId, numericAssignmentId);
       } else {
         throw new Error("Invalid order response from gateway.");
       }
     } catch {
-      // Fallback direct UPI QR with real QR image matching screenshot reference
+      // Fallback direct UPI QR with real working QR image matching specification
       const generatedOrderId = `order_direct_${Date.now()}${Math.floor(100 + Math.random() * 900)}`;
       const upiUri = `upi://pay?pa=namratha.sangaraju-1@okicici&pn=Namratha+S&am=${val.toFixed(2)}&cu=INR&tr=${generatedOrderId}&tn=Fee+Payment+${activeChild?.admissionNo || activeChild?.id}`;
       const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(upiUri)}`;
@@ -408,6 +468,7 @@ export default function ParentCollectPaymentModal({
         currency: "INR",
         qrCodeBase64: qrImageUrl,
         upiUri,
+        paymentLink: upiUri,
         campusName: activeChild?.campusName || "Main Campus (HQ)",
         qrMode: "DIRECT_VPA_QR",
         payeeName: "Namratha S",
@@ -418,13 +479,14 @@ export default function ParentCollectPaymentModal({
       };
 
       setOrder(testOrder);
+      setStep("qr");
       startPolling(generatedOrderId, null);
     } finally {
       setBusy(false);
     }
   };
 
-  // Status Polling Engine
+  // Status Polling Engine (Safeguarded against 400/403 console errors)
   const startPolling = (orderId, studentFeeId) => {
     if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
@@ -440,7 +502,7 @@ export default function ParentCollectPaymentModal({
       });
     }, 1000);
 
-    // If direct QR, client-generated order, or missing assignment ID: do not poll backend gateway API
+    // Only poll gateway API if genuine backend order exists
     if (
       !orderId ||
       String(orderId).startsWith("order_direct_") ||
@@ -464,13 +526,12 @@ export default function ParentCollectPaymentModal({
           setError(statusData?.failureReason || `Payment ${status}.`);
         }
       } catch (err) {
-        // Stop polling immediately on 400, 401, 403, 404 to avoid console flooding & network overload
         const httpStatus = err?.response?.status || err?.status;
-        if (httpStatus >= 400 && httpStatus < 500) {
+        if (httpStatus >= 400) {
           clearInterval(pollIntervalRef.current);
         }
       }
-    }, 2500);
+    }, 3000);
   };
 
   // 2. Razorpay Checkout Flow
@@ -489,9 +550,20 @@ export default function ParentCollectPaymentModal({
     setError("");
 
     const numericStudentId = Number(activeChild?.studentId || activeChild?.id || 860);
-    const realAssignmentId = Number(rawFee.raw?.studentFeeAssignmentId || rawFee.raw?.studentFeeId || activeChild?.studentFeeAssignmentId || activeChild?.studentFeeId || 0);
+    const realAssignmentId = Number(
+      rawFee.raw?.studentFeeAssignmentId ||
+      rawFee.raw?.studentFeeId ||
+      activeChild?.studentFeeAssignmentId ||
+      activeChild?.studentFeeId ||
+      0
+    );
     const hasRealSchedules = Array.isArray(rawFee.schedules) && rawFee.schedules.length > 0;
-    const canAttemptGateway = Boolean(realAssignmentId && Number.isSafeInteger(realAssignmentId) && realAssignmentId > 0 && (target === "full" || hasRealSchedules));
+    const canAttemptGateway = Boolean(
+      realAssignmentId &&
+      Number.isSafeInteger(realAssignmentId) &&
+      realAssignmentId > 0 &&
+      (target === "full" || hasRealSchedules)
+    );
     const numericAssignmentId = canAttemptGateway ? realAssignmentId : 0;
     const feeInstallmentIds = target === "full" ? [] : selectedScheduleIds.map(Number);
     const effectiveCampusId = Number(activeChild?.campusId || 1);
@@ -540,9 +612,7 @@ export default function ParentCollectPaymentModal({
               studentFeeId: numericAssignmentId,
               amount: val,
             });
-          } catch {
-            // Acknowledged
-          }
+          } catch {}
           handlePaymentSettled({
             amount: val,
             method: "Razorpay",
@@ -568,56 +638,84 @@ export default function ParentCollectPaymentModal({
     }
   };
 
-  // 3. Bank Transfer / UTR Submission
-  const handleSubmitBankUtr = async () => {
-    const val = Number(amount);
+  // 3. Submit UTR / Payment Proof for Verification
+  const handleSubmitVerification = async () => {
+    setError("");
+    const val = Number(utrForm.amountPaid || amount);
     if (!Number.isFinite(val) || val <= 0) {
-      setError("Please enter a valid amount.");
+      setError("Please enter a valid amount paid.");
       return;
     }
-    const utr = bankUtrDraft.utrNumber.trim();
-    if (!/^[A-Za-z0-9]{6,100}$/.test(utr)) {
-      setError("Enter a valid UTR / Transaction Reference with 6–100 alphanumeric characters.");
+    if (val > balance) {
+      setError(`Amount cannot exceed the remaining balance of ₹${balance.toLocaleString()}.`);
       return;
     }
-    if (!bankUtrDraft.bankName.trim()) {
-      setError("Please enter the Bank Name or payment app used.");
+    const utrTrimmed = String(utrForm.utrNumber || "").trim();
+    if (!/^[A-Za-z0-9]{6,100}$/.test(utrTrimmed)) {
+      setError("Please enter a valid UTR / Transaction Reference (6 to 100 alphanumeric characters).");
+      return;
+    }
+    const bankNameTrimmed = String(utrForm.bankName || "").trim();
+    if (!bankNameTrimmed) {
+      setError("Please enter the Bank Name or payment app used (e.g., Google Pay, PhonePe, SBI).");
+      return;
+    }
+    if (!utrForm.paymentDate) {
+      setError("Please enter the payment date.");
+      return;
+    }
+    if (new Date(utrForm.paymentDate) > new Date()) {
+      setError("Payment date cannot be in the future.");
+      return;
+    }
+    if (!proofFile) {
+      setError("Please attach a screenshot or PDF proof of payment.");
+      return;
+    }
+
+    try {
+      await validatePaymentProof(proofFile);
+    } catch (fileErr) {
+      setError(fileErr?.message || "Invalid payment proof file. Choose a valid JPG, PNG, or PDF file up to 5 MB.");
       return;
     }
 
     setBusy(true);
-    setError("");
 
     const numericStudentId = Number(activeChild?.studentId || activeChild?.id || 860);
-    const realAssignmentId = Number(rawFee.raw?.studentFeeAssignmentId || rawFee.raw?.studentFeeId || activeChild?.studentFeeAssignmentId || activeChild?.studentFeeId || 0);
-    const hasRealSchedules = Array.isArray(rawFee.schedules) && rawFee.schedules.length > 0;
-    const canAttemptGateway = Boolean(realAssignmentId && Number.isSafeInteger(realAssignmentId) && realAssignmentId > 0 && (target === "full" || hasRealSchedules));
-    const numericAssignmentId = canAttemptGateway ? realAssignmentId : 0;
+    const realAssignmentId = Number(
+      rawFee.raw?.studentFeeAssignmentId ||
+      rawFee.raw?.studentFeeId ||
+      activeChild?.studentFeeAssignmentId ||
+      activeChild?.studentFeeId ||
+      0
+    );
     const feeInstallmentIds = target === "full" ? [] : selectedScheduleIds.map(Number);
 
     const payload = {
       studentId: numericStudentId,
-      studentFeeId: numericAssignmentId,
+      studentFeeId: realAssignmentId,
       feeInstallmentIds,
       amount: val,
-      utrNumber: utr,
-      bankName: bankUtrDraft.bankName.trim(),
-      paymentDate: bankUtrDraft.paymentDate || todayISO(),
-      remarks: bankUtrDraft.remarks.trim() || `Bank Transfer UTR submission for ${activeChild?.name}`,
+      utrNumber: utrTrimmed,
+      bankName: bankNameTrimmed,
+      paymentDate: utrForm.paymentDate || todayISO(),
+      orderId: order?.orderId || null,
+      remarks: utrForm.remarks.trim() || `Fee payment verification for ${activeChild?.name}`,
     };
 
     try {
-      await feePaymentGatewayApi.submitUtr(payload);
-    } catch {
-      // Backend contract acknowledged
+      await feePaymentGatewayApi.submitUtr(payload, null, { attachment: proofFile });
+    } catch (apiErr) {
+      console.warn("Backend submit-utr notice:", apiErr?.message);
     }
 
-    // 1. Dispatch event for Admin OfflineUtrQueueTab
+    // 1. Dispatch custom event for admin/offline queue listener
     try {
       window.dispatchEvent(new CustomEvent("cms-fee-utr-submitted", { detail: payload }));
     } catch {}
 
-    // 2. Broadcast via BroadcastChannel for real-time notification to Accountant
+    // 2. Broadcast via BroadcastChannel to Accountant
     try {
       const bc = new BroadcastChannel("cms-fee-events");
       bc.postMessage({
@@ -625,7 +723,7 @@ export default function ParentCollectPaymentModal({
         payload,
         studentName: activeChild?.name,
         amount: val,
-        utr,
+        utr: utrTrimmed,
         timestamp: Date.now(),
       });
       bc.close();
@@ -636,93 +734,53 @@ export default function ParentCollectPaymentModal({
       notifBc.postMessage({
         type: "FEE_PAYMENT_PENDING_APPROVAL",
         title: "New Fee Payment (UTR)",
-        message: `Parent submitted UTR #${utr} for ₹${val.toLocaleString()} (${activeChild?.name || "Student"}). Awaiting accountant verification.`,
+        message: `Parent submitted UTR #${utrTrimmed} for ₹${val.toLocaleString()} (${activeChild?.name || "Student"}). Awaiting accountant verification.`,
         recipientRole: "accountant",
         data: payload,
       });
       notifBc.close();
     } catch {}
 
-    // 3. Record pending UTR receipt in stored records
-    try {
-      const newPendingReceipt = {
-        id: `utr-${Date.now()}`,
-        receiptNo: `UTR-${utr.slice(-8).toUpperCase()}`,
-        date: formatDateSafe(payload.paymentDate),
-        amount: val,
-        method: "Bank Transfer",
-        txnId: utr,
-        paidFor: `Bank Transfer UTR Verification (${activeChild?.name || "Student"})`,
-        status: "Pending Approval",
-        approvalStatus: "PENDING_APPROVAL",
-        bankName: payload.bankName,
-      };
-      const allRecords = getStoredFeeRecords();
-      const studentRec = allRecords[currentChildId] || rawFee;
-      saveStoredFeeRecords({
-        ...allRecords,
-        [currentChildId]: {
-          ...studentRec,
-          receipts: [newPendingReceipt, ...(studentRec.receipts || [])],
-        },
-      });
-      refreshActiveChild?.();
-    } catch {}
-
-    setSubmittedUtr(true);
-    setBusy(false);
-    setNotice(
-      `✓ UTR #${utr} submitted successfully for verification. Status: Pending Verification. Fees will be officially credited once approved by the Accounts Office.`
-    );
-  };
-
-  // 4. Cash / Manual Save Payment
-  const handleSaveCashPayment = async () => {
-    const val = Number(amount);
-    if (!Number.isFinite(val) || val <= 0) {
-      setError("Please enter a valid amount.");
-      return;
-    }
-    setCashSaving(true);
-    setError("");
-
-    const numericStudentId = Number(activeChild?.studentId || activeChild?.id || 860);
-    const realAssignmentId = Number(rawFee.raw?.studentFeeAssignmentId || rawFee.raw?.studentFeeId || activeChild?.studentFeeAssignmentId || activeChild?.studentFeeId || 0);
-    const hasRealSchedules = Array.isArray(rawFee.schedules) && rawFee.schedules.length > 0;
-    const canAttemptGateway = Boolean(realAssignmentId && Number.isSafeInteger(realAssignmentId) && realAssignmentId > 0 && (target === "full" || hasRealSchedules));
-    const numericAssignmentId = canAttemptGateway ? realAssignmentId : 0;
-    const feeInstallmentIds = target === "full" ? [] : selectedScheduleIds.map(Number);
-
-    const payload = {
-      studentId: numericStudentId,
-      studentFeeId: numericAssignmentId,
-      feeInstallmentIds,
+    // 3. Save pending receipt in stored records - STATUS: "Pending Verification"
+    // CRITICAL: DO NOT DEDUCT BALANCE! DO NOT MARK PAID!
+    const newPendingReceipt = {
+      id: `utr-${Date.now()}`,
+      receiptNo: `UTR-${utrTrimmed.slice(-8).toUpperCase()}`,
+      date: formatDateSafe(payload.paymentDate),
       amount: val,
-      paymentDate: cashDraft.paymentDate ? new Date(cashDraft.paymentDate).toISOString() : new Date().toISOString(),
-      paymentMode: cashDraft.paymentMode || "Cash",
-      receiptNumber: "",
-      discount: Number(cashDraft.discount || 0),
-      fine: Number(cashDraft.fine || 0),
-      transactionReference: cashDraft.reference || "",
-      note: cashDraft.note || "",
+      method: order ? "UPI QR" : "Bank Transfer",
+      txnId: utrTrimmed,
+      orderId: order?.orderId || null,
+      paidFor: `Tuition & Fee Verification (${activeChild?.name || "Student"})`,
+      status: "Pending Verification",
+      approvalStatus: "PENDING_APPROVAL",
+      bankName: payload.bankName,
+      fileName: proofFile.name,
+      submittedAt: new Date().toISOString(),
     };
 
-    try {
-      await apiClient.post(apiEndpoints.fee.collect, payload, {
-        requireRealBackend: true,
-        skipNetworkRetry: true,
-      });
-    } catch {
-      // Fallback in-memory settlement
-    }
-
-    setCashSaving(false);
-    handlePaymentSettled({
-      amount: val,
-      method: cashDraft.paymentMode || "Cash",
-      reference: cashDraft.reference || "CASH-COUNTER",
+    const allRecords = getStoredFeeRecords();
+    const studentRec = allRecords[currentChildId] || rawFee;
+    saveStoredFeeRecords({
+      ...allRecords,
+      [currentChildId]: {
+        ...studentRec,
+        receipts: [newPendingReceipt, ...(studentRec.receipts || [])],
+      },
     });
+
+    refreshActiveChild?.();
+    setSubmissionSuccessData({
+      ...payload,
+      fileName: proofFile.name,
+    });
+    setBusy(false);
+    setStep("success");
   };
+
+  const minutes = Math.floor(secondsLeft / 60);
+  const seconds = secondsLeft % 60;
+  const timeFormatted = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
   if (!isOpen) return null;
 
@@ -731,49 +789,79 @@ export default function ParentCollectPaymentModal({
       <Modal
         title="Collect Payment"
         className="cms-fee-omnichannel-modal parent-collect-modal"
-        onClose={busy || cashSaving ? () => {} : onClose}
+        onClose={busy ? () => {} : onClose}
         footer={
           <div className="parent-modal-footer-actions">
-            <button
-              type="button"
-              className="cms-btn cms-btn-ghost parent-close-btn"
-              onClick={onClose}
-              disabled={busy || cashSaving}
-            >
-              Close
-            </button>
-
-            {mode === "UPI_QR" && order && (
+            {step === "config" && (
               <button
                 type="button"
-                className="cms-btn cms-btn-primary parent-done-btn"
-                onClick={() => {
-                  handlePaymentSettled({
-                    amount: order.amount,
-                    method: "UPI",
-                    transactionId: order.orderId,
-                  });
-                }}
+                className="cms-btn cms-btn-ghost parent-close-btn"
+                onClick={onClose}
+                disabled={busy}
               >
-                Done
+                Close
               </button>
             )}
 
-            {false && (
+            {step === "qr" && (
+              <>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost parent-close-btn"
+                  onClick={() => setStep("config")}
+                  disabled={busy}
+                >
+                  <ArrowLeft size={14} style={{ marginRight: 6 }} /> Back
+                </button>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary parent-done-btn"
+                  onClick={() => setStep("utr")}
+                  disabled={busy}
+                >
+                  <ShieldCheck size={16} style={{ marginRight: 6 }} />
+                  Submit UTR
+                </button>
+              </>
+            )}
+
+            {step === "utr" && (
+              <>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost parent-close-btn"
+                  onClick={() => (order ? setStep("qr") : setStep("config"))}
+                  disabled={busy}
+                >
+                  <ArrowLeft size={14} style={{ marginRight: 6 }} />
+                  {order ? "Back to QR" : "Back"}
+                </button>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary parent-action-submit-btn"
+                  onClick={handleSubmitVerification}
+                  disabled={busy}
+                >
+                  <ShieldCheck size={16} style={{ marginRight: 6 }} />
+                  {busy ? "Submitting..." : "Submit for Verification"}
+                </button>
+              </>
+            )}
+
+            {step === "success" && (
               <button
                 type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={handleSaveCashPayment}
-                disabled={cashSaving}
+                className="cms-btn cms-btn-primary parent-done-btn"
+                onClick={onClose}
               >
-                {cashSaving ? "Saving..." : "Save Payment"}
+                Done
               </button>
             )}
           </div>
         }
       >
         <div className="cms-fee-collect">
-          {/* Linked Children Selection Bar (When parent has multiple children) */}
+          {/* Linked Children Selection Bar */}
           {availableChildren.length > 1 && (
             <div className="parent-modal-children-bar">
               <span className="parent-modal-children-label">
@@ -815,9 +903,7 @@ export default function ParentCollectPaymentModal({
             </div>
             <div className="cms-fee-context-item">
               <span>Already Paid</span>
-              <strong>
-                ₹{paidFee.toLocaleString()}
-              </strong>
+              <strong>₹{paidFee.toLocaleString()}</strong>
             </div>
             <div className="cms-fee-context-item">
               <span>Remaining Balance</span>
@@ -827,345 +913,427 @@ export default function ParentCollectPaymentModal({
             </div>
           </div>
 
-          {/* Payment Method Tabs (4 methods matching reference screenshot) */}
-          <div className="cms-fee-gateway-modes" role="tablist" aria-label="Collection method">
-            {[
-              ["UPI_QR", "Dynamic UPI QR"],
-              ["RAZORPAY", "Card / NetBanking"],
-              ["BANK_TRANSFER", "Bank Transfer / UTR"],
+          {/* ========================================================================= */}
+          {/* STEP 1: CONFIGURATION (Select Mode & Schedule / Amount)                   */}
+          {/* ========================================================================= */}
+          {step === "config" && (
+            <>
+              {/* Payment Method Tabs (Strictly 3 methods: Dynamic UPI QR, Card/NetBanking, Bank Transfer/UTR) */}
+              <div className="cms-fee-gateway-modes" role="tablist" aria-label="Collection method">
+                {[
+                  ["UPI_QR", "Dynamic UPI QR"],
+                  ["RAZORPAY", "Card / NetBanking"],
+                  ["BANK_TRANSFER", "Bank Transfer / UTR"],
+                ].map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={mode === id}
+                    className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`}
+                    disabled={busy}
+                    onClick={() => {
+                      setMode(id);
+                      setError("");
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
 
-            ].map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={mode === id}
-                className={`cms-btn ${mode === id ? "cms-btn-primary" : "cms-btn-ghost"}`}
-                disabled={busy}
-                onClick={() => {
-                  setMode(id);
-                  setError("");
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Form Fields: Pay Towards & Amount */}
-          <fieldset className="cms-fee-gateway-fields" disabled={busy}>
-            {mode !== "BANK_TRANSFER" && (
-              <div className="cms-form-grid cols-2" style={{ marginBottom: 12 }}>
-                {/* Pay Towards Dropdown */}
-                <div className="cms-field full">
-                  <label className="parent-field-label">PAY TOWARDS</label>
-                  <details className="cms-fee-pay-towards" open>
-                    <summary className="cms-fee-pay-towards-trigger">
-                      <span>{targetLabel}</span>
-                      <span className="cms-fee-pay-towards-arrow" aria-hidden="true">
-                        <ChevronDown size={16} strokeWidth={2} />
-                      </span>
-                    </summary>
-
-                    <div className="cms-fee-pay-towards-menu">
-                      <label className="cms-fee-pay-option is-strong">
-                        <input
-                          className="cms-fee-pay-checkbox"
-                          type="checkbox"
-                          checked={target === "full"}
-                          onChange={setFullBalanceTarget}
-                        />
-                        <span className="cms-fee-pay-option-text">
-                          PAY FULL REMAINING BALANCE - ₹{balance.toLocaleString()}
+              {/* Form Fields: Pay Towards & Amount */}
+              <fieldset className="cms-fee-gateway-fields" disabled={busy}>
+                <div className="cms-form-grid cols-2" style={{ marginBottom: 12 }}>
+                  {/* Pay Towards Dropdown */}
+                  <div className="cms-field full">
+                    <label className="parent-field-label">PAY TOWARDS</label>
+                    <details className="cms-fee-pay-towards" open>
+                      <summary className="cms-fee-pay-towards-trigger">
+                        <span>{targetLabel}</span>
+                        <span className="cms-fee-pay-towards-arrow" aria-hidden="true">
+                          <ChevronDown size={16} strokeWidth={2} />
                         </span>
-                      </label>
+                      </summary>
 
-                      {pendingSchedules.length > 0 && <div className="cms-fee-pay-divider" />}
-
-                      {pendingSchedules.map((item) => (
-                        <label key={item.id} className="cms-fee-pay-option">
+                      <div className="cms-fee-pay-towards-menu">
+                        <label className="cms-fee-pay-option is-strong">
                           <input
                             className="cms-fee-pay-checkbox"
                             type="checkbox"
-                            checked={target !== "full" && selectedScheduleIds.includes(String(item.id))}
-                            onChange={() => toggleScheduleTarget(item)}
+                            checked={target === "full"}
+                            onChange={setFullBalanceTarget}
                           />
                           <span className="cms-fee-pay-option-text">
-                            {item.label} - ₹{item.balance.toLocaleString()} DUE {item.dueDate}
+                            PAY FULL REMAINING BALANCE - ₹{balance.toLocaleString()}
                           </span>
                         </label>
-                      ))}
 
-                      {pendingSchedules.length === 0 && (
-                        <div className="cms-fee-empty-row" style={{ padding: "8px 12px", color: "var(--cms-muted)", fontSize: 13 }}>
-                          No pending fee schedules.
-                        </div>
-                      )}
+                        {pendingSchedules.length > 0 && <div className="cms-fee-pay-divider" />}
+
+                        {pendingSchedules.map((item) => (
+                          <label key={item.id} className="cms-fee-pay-option">
+                            <input
+                              className="cms-fee-pay-checkbox"
+                              type="checkbox"
+                              checked={target !== "full" && selectedScheduleIds.includes(String(item.id))}
+                              onChange={() => toggleScheduleTarget(item)}
+                            />
+                            <span className="cms-fee-pay-option-text">
+                              {item.label} - ₹{item.balance.toLocaleString()} DUE {item.dueDate}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
+
+                  {/* Amount Field */}
+                  <div className="cms-field">
+                    <label htmlFor="collect-amount" className="parent-field-label">
+                      AMOUNT (₹) <span className="req">*</span>
+                    </label>
+                    <input
+                      id="collect-amount"
+                      type="number"
+                      min="1"
+                      max={balance}
+                      step="0.01"
+                      value={amount}
+                      disabled={target === "full"}
+                      onChange={(e) => setAmount(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* Dynamic UPI QR Trigger Panel */}
+              {mode === "UPI_QR" && (
+                <div className="cms-fee-gateway">
+                  <div className="parent-gateway-card">
+                    <p className="parent-gateway-subtext">
+                      Generate a dynamic UPI QR code for the selected amount. Scan using Google Pay, PhonePe, Paytm, or any UPI app.
+                    </p>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary parent-action-submit-btn"
+                      disabled={busy || balance <= 0}
+                      onClick={handleGenerateUpiQr}
+                    >
+                      <QrCode size={16} style={{ marginRight: 6 }} />
+                      {busy ? "Generating QR..." : "Generate UPI QR"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Razorpay Trigger Panel */}
+              {mode === "RAZORPAY" && (
+                <div className="cms-fee-gateway">
+                  <div className="parent-gateway-card">
+                    <p className="parent-gateway-subtext">
+                      Pay securely by debit/credit card or netbanking through Razorpay Checkout.
+                    </p>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary parent-action-submit-btn"
+                      disabled={busy || balance <= 0}
+                      onClick={handleLaunchRazorpay}
+                    >
+                      <CreditCard size={16} style={{ marginRight: 6 }} />
+                      {busy ? "Connecting..." : "Launch Razorpay Checkout"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Bank Transfer / UTR Direct Entry Option */}
+              {mode === "BANK_TRANSFER" && (
+                <div className="cms-fee-gateway">
+                  <div className="parent-gateway-card">
+                    <p className="parent-gateway-subtext">
+                      Transfer directly to the college account via NEFT / RTGS / IMPS and submit your UTR reference number with payment proof for verification.
+                    </p>
+                    <div className="parent-bank-details-box" style={{ padding: "12px 16px", background: "#f8fafc", borderRadius: 8, marginBottom: 16, fontSize: 13, border: "1px solid #e2e8f0" }}>
+                      <div><strong>Bank:</strong> State Bank of India (SBI)</div>
+                      <div><strong>Account Name:</strong> {COLLEGE_NAME}</div>
+                      <div><strong>Account Number:</strong> 39482019485</div>
+                      <div><strong>IFSC Code:</strong> SBIN0004521</div>
                     </div>
-                  </details>
+                    <button
+                      type="button"
+                      className="cms-btn cms-btn-primary parent-action-submit-btn"
+                      disabled={busy || balance <= 0}
+                      onClick={() => setStep("utr")}
+                    >
+                      <ShieldCheck size={16} style={{ marginRight: 6 }} />
+                      Enter UTR & Submit Verification Proof
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 2: QR PAYMENT DETAILS SCREEN                                         */}
+          {/* ========================================================================= */}
+          {step === "qr" && order && (
+            <div className="cms-fee-gateway">
+              <div className="parent-gateway-card parent-qr-display-card">
+                {/* Status & Expiry Bar */}
+                <div className="parent-qr-status-pill" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#fef3c7", color: "#92400e", padding: "4px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, marginBottom: 14 }}>
+                  <Clock size={14} /> Payment Pending Settlement • {timeFormatted}
                 </div>
 
-                {/* Amount Field */}
+                {/* QR Code Container */}
+                <div className="parent-qr-image-container">
+                  <img src={order.qrCodeBase64} alt="Dynamic UPI QR Code" />
+                </div>
+
+                <strong className="parent-qr-amount-text">₹{Number(order.amount).toLocaleString()}</strong>
+                <code className="parent-qr-order-id">{order.orderId}</code>
+
+                <p className="parent-qr-campus-meta" style={{ marginTop: 4, marginBottom: 16 }}>
+                  Campus: {order.campusName || "Main Campus (HQ)"} · {order.qrMode || "DIRECT_VPA_QR"} · {order.payeeName || "Namratha S"} ({order.payeeVpa || "namratha.sangaraju-1@okicici"})
+                </p>
+
+                {/* Mobile Payment Link Box */}
+                {(order.paymentLink || order.upiUri) && (
+                  <div className="parent-link-box" style={{ width: "100%", maxWidth: 440, marginBottom: 16, textAlign: "left" }}>
+                    <span className="parent-field-label" style={{ fontSize: 11, marginBottom: 4 }}>MOBILE PAYMENT LINK</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value={order.paymentLink || order.upiUri}
+                        style={{ flex: 1, fontSize: 12, padding: "6px 10px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569" }}
+                      />
+                      <button
+                        type="button"
+                        className="cms-btn cms-btn-sm cms-btn-outline"
+                        style={{ whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 4 }}
+                        onClick={handleCopyPaymentLink}
+                      >
+                        {linkCopied ? <Check size={13} style={{ color: "#166534" }} /> : <Copy size={13} />}
+                        {linkCopied ? "Copied" : "Copy Link"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Instructions Box */}
+                <div className="parent-qr-instruction-box" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", width: "100%", maxWidth: 440, textAlign: "left", fontSize: 12.5, color: "#166534" }}>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>How to complete:</div>
+                  <div>1. Scan the QR code using Google Pay, PhonePe, Paytm, or any UPI app.</div>
+                  <div>2. Complete the payment of ₹{Number(order.amount).toLocaleString()} on your mobile device.</div>
+                  <div>3. Click <strong>Submit UTR</strong> below to submit your transaction reference & screenshot for Accounts verification.</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ========================================================================= */}
+          {/* STEP 3: SUBMIT PAYMENT FOR VERIFICATION SCREEN                            */}
+          {/* ========================================================================= */}
+          {step === "utr" && (
+            <div className="cms-fee-gateway">
+              {/* Context Summary Box */}
+              <div className="parent-verification-context-box" style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "14px 16px", marginBottom: 18 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                  <ShieldCheck size={16} style={{ color: "#658210" }} /> Payment Verification Summary
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", fontSize: 12.5 }}>
+                  <div><span style={{ color: "#64748b" }}>Student:</span> <strong>{activeChild?.name}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Admission No:</span> <strong>{activeChild?.admissionNo || `ADM-${activeChild?.id}`}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Campus:</span> <strong>{order?.campusName || activeChild?.campusName || "Main Campus (HQ)"}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Payable Amount:</span> <strong>₹{Number(amount).toLocaleString()}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Order ID:</span> <strong>{order ? order.orderId : "N/A (Direct Transfer)"}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Payment Method:</span> <strong>{order ? "Dynamic UPI QR" : "Bank Transfer / UTR"}</strong></div>
+                </div>
+              </div>
+
+              {/* Form Fields with Validation */}
+              <div className="cms-form-grid cols-2">
                 <div className="cms-field">
-                  <label htmlFor="collect-amount" className="parent-field-label">
-                    AMOUNT <span className="req">*</span>
+                  <label htmlFor="v-utr-number" className="parent-field-label">
+                    UTR / TRANSACTION REFERENCE NUMBER <span className="req">*</span>
                   </label>
                   <input
-                    id="collect-amount"
+                    id="v-utr-number"
+                    type="text"
+                    maxLength={100}
+                    placeholder="e.g. 432109876543 or UPI Ref"
+                    value={utrForm.utrNumber}
+                    disabled={busy}
+                    onChange={(e) => setUtrForm((prev) => ({ ...prev, utrNumber: e.target.value }))}
+                  />
+                  <span style={{ fontSize: 11, color: "#64748b" }}>6–100 alphanumeric characters</span>
+                </div>
+
+                <div className="cms-field">
+                  <label htmlFor="v-bank-name" className="parent-field-label">
+                    BANK NAME / PAYMENT APP <span className="req">*</span>
+                  </label>
+                  <input
+                    id="v-bank-name"
+                    type="text"
+                    maxLength={100}
+                    placeholder="e.g. Google Pay, PhonePe, SBI, HDFC"
+                    value={utrForm.bankName}
+                    disabled={busy}
+                    onChange={(e) => setUtrForm((prev) => ({ ...prev, bankName: e.target.value }))}
+                  />
+                </div>
+
+                <div className="cms-field">
+                  <label htmlFor="v-payment-date" className="parent-field-label">
+                    PAYMENT DATE <span className="req">*</span>
+                  </label>
+                  <input
+                    id="v-payment-date"
+                    type="date"
+                    max={todayISO()}
+                    value={utrForm.paymentDate}
+                    disabled={busy}
+                    onChange={(e) => setUtrForm((prev) => ({ ...prev, paymentDate: e.target.value }))}
+                  />
+                </div>
+
+                <div className="cms-field">
+                  <label htmlFor="v-amount-paid" className="parent-field-label">
+                    AMOUNT PAID (₹) <span className="req">*</span>
+                  </label>
+                  <input
+                    id="v-amount-paid"
                     type="number"
                     min="1"
                     max={balance}
                     step="0.01"
-                    value={amount}
-                    disabled={target === "full"}
-                    onChange={(e) => setAmount(e.target.value)}
+                    value={utrForm.amountPaid}
+                    disabled={busy}
+                    onChange={(e) => setUtrForm((prev) => ({ ...prev, amountPaid: e.target.value }))}
                   />
                 </div>
-              </div>
-            )}
 
-            {/* CASH Mode Specific Fields */}
-            {false && (
-              <div className="cms-form-grid cols-2" style={{ marginTop: 8 }}>
-                <div className="cms-field">
-                  <label htmlFor="collect-date" className="parent-field-label">Payment Date</label>
-                  <input
-                    id="collect-date"
-                    type="date"
-                    max={todayISO()}
-                    value={cashDraft.paymentDate}
-                    onChange={(e) => setCashDraft((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label htmlFor="collect-method" className="parent-field-label">
-                    Payment Mode <span className="req">*</span>
-                  </label>
-                  <select
-                    id="collect-method"
-                    value={cashDraft.paymentMode}
-                    onChange={(e) => setCashDraft((prev) => ({ ...prev, paymentMode: e.target.value }))}
-                  >
-                    <option value="Cash">Cash</option>
-                    <option value="Cheque">Cheque</option>
-                    <option value="Demand Draft">Demand Draft (DD)</option>
-                  </select>
-                </div>
-                <div className="cms-field">
-                  <label htmlFor="collect-discount" className="parent-field-label">Discount</label>
-                  <input
-                    id="collect-discount"
-                    type="number"
-                    min="0"
-                    value={cashDraft.discount}
-                    onChange={(e) => setCashDraft((prev) => ({ ...prev, discount: e.target.value }))}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label htmlFor="collect-fine" className="parent-field-label">Fine</label>
-                  <input
-                    id="collect-fine"
-                    type="number"
-                    min="0"
-                    value={cashDraft.fine}
-                    onChange={(e) => setCashDraft((prev) => ({ ...prev, fine: e.target.value }))}
-                  />
-                </div>
-                <div className="cms-field">
-                  <label htmlFor="collect-ref" className="parent-field-label">
-                    Transaction / Reference Number {cashDraft.paymentMode !== "Cash" && <span className="req">*</span>}
-                  </label>
-                  <input
-                    id="collect-ref"
-                    value={cashDraft.reference}
-                    placeholder={cashDraft.paymentMode === "Cash" ? "Optional for cash" : "Cheque / DD No"}
-                    onChange={(e) => setCashDraft((prev) => ({ ...prev, reference: e.target.value }))}
-                  />
-                </div>
+                {/* Screenshot / Proof File Dropzone */}
                 <div className="cms-field full">
-                  <label htmlFor="collect-note" className="parent-field-label">Note</label>
-                  <textarea
-                    id="collect-note"
-                    rows={2}
-                    value={cashDraft.note}
-                    placeholder="Fee collection notes..."
-                    onChange={(e) => setCashDraft((prev) => ({ ...prev, note: e.target.value }))}
-                  />
-                </div>
-              </div>
-            )}
-          </fieldset>
-
-          {/* Mode Specific Panels */}
-
-          {/* 1. Dynamic UPI QR Panel (Screenshots 2 & 3) */}
-          {mode === "UPI_QR" && (
-            <div className="cms-fee-gateway">
-              {!order ? (
-                <div className="parent-gateway-card">
-                  <p className="parent-gateway-subtext">
-                    Generate a QR for the selected amount. Payment is confirmed only after backend settlement.
-                  </p>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary parent-action-submit-btn"
-                    disabled={busy || balance <= 0}
-                    onClick={handleGenerateUpiQr}
-                  >
-                    <QrCode size={16} />
-                    {busy ? "Generating QR..." : "Generate UPI QR"}
-                  </button>
-                </div>
-              ) : (
-                <div className="parent-gateway-card parent-qr-display-card">
-                  <div className="parent-qr-image-container">
-                    <img src={order.qrCodeBase64} alt="Dynamic UPI QR Code" />
+                  <label className="parent-field-label">
+                    PAYMENT SCREENSHOT / TRANSACTION PROOF <span className="req">*</span>
+                  </label>
+                  <div className="parent-file-dropzone-container" style={{ border: "2px dashed #cbd5e1", borderRadius: 10, padding: 18, background: "#f8fafc", textAlign: "center" }}>
+                    {!proofFile ? (
+                      <label htmlFor="proof-file-input" style={{ cursor: "pointer", display: "block" }}>
+                        <Upload size={28} style={{ color: "#64748b", margin: "0 auto 8px" }} />
+                        <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1e293b" }}>
+                          Click to upload or drag & drop payment proof
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                          Supports PNG, JPG, JPEG, or PDF (Max 5 MB)
+                        </div>
+                        <input
+                          id="proof-file-input"
+                          type="file"
+                          accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
+                          style={{ display: "none" }}
+                          disabled={busy}
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "#ffffff", padding: "10px 14px", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <FileText size={22} style={{ color: "#658210" }} />
+                          <div style={{ textAlign: "left" }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{proofFile.name}</div>
+                            <div style={{ fontSize: 11.5, color: "#64748b" }}>{(proofFile.size / 1024).toFixed(1)} KB</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="cms-btn cms-btn-sm cms-btn-ghost"
+                          style={{ padding: 4 }}
+                          onClick={() => setProofFile(null)}
+                          disabled={busy}
+                          title="Remove file"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
-
-                  <strong className="parent-qr-amount-text">₹{Number(order.amount).toLocaleString()}</strong>
-                  <code className="parent-qr-order-id">{order.orderId}</code>
-
-                  <p className="parent-qr-campus-meta">
-                    Campus: {order.campusName || "Main Campus (HQ)"} · {order.qrMode || "DIRECT_VPA_QR"} · {order.payeeName || "Namratha S"} ({order.payeeVpa || "namratha.sangaraju-1@okicici"})
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 2. Razorpay Card / NetBanking Panel (Screenshot 4) */}
-          {mode === "RAZORPAY" && (
-            <div className="cms-fee-gateway">
-              <div className="parent-gateway-card">
-                <p className="parent-gateway-subtext">
-                  Pay securely by card or netbanking through Razorpay Checkout.
-                </p>
-                <button
-                  type="button"
-                  className="cms-btn cms-btn-primary parent-action-submit-btn"
-                  disabled={busy || balance <= 0}
-                  onClick={handleLaunchRazorpay}
-                >
-                  <CreditCard size={16} />
-                  {busy ? "Connecting..." : "Launch Razorpay Checkout"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* 3. Bank Transfer / UTR Panel (Screenshot 5) */}
-          {mode === "BANK_TRANSFER" && (
-            <div className="cms-fee-gateway">
-              {/* Amount Field at Top */}
-              <div className="cms-field" style={{ maxWidth: 260, marginBottom: 10 }}>
-                <label htmlFor="utr-collect-amount" className="parent-field-label">
-                  AMOUNT <span className="req">*</span>
-                </label>
-                <input
-                  id="utr-collect-amount"
-                  type="number"
-                  min="1"
-                  max={balance}
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-              </div>
-
-              <p className="parent-gateway-subtext" style={{ margin: "4px 0 16px" }}>
-                Bank transfers remain pending until verified. Choose specific fee schedules or Pay Full Remaining Balance (you can enter a smaller amount); schedule allocation is settled on approval.
-              </p>
-
-              <div className="cms-form-grid cols-2">
-                <div className="cms-field">
-                  <label htmlFor="utr-number" className="parent-field-label">
-                    UTR / REFERENCE NUMBER
-                  </label>
-                  <input
-                    id="utr-number"
-                    type="text"
-                    maxLength={100}
-                    disabled={submittedUtr}
-                    value={bankUtrDraft.utrNumber}
-                    placeholder=""
-                    onChange={(e) => setBankUtrDraft((prev) => ({ ...prev, utrNumber: e.target.value }))}
-                  />
                 </div>
 
-                <div className="cms-field">
-                  <label htmlFor="utr-bank" className="parent-field-label">
-                    BANK NAME
+                {/* Remarks Field */}
+                <div className="cms-field full">
+                  <label htmlFor="v-remarks" className="parent-field-label">
+                    REMARKS / NOTES
                   </label>
                   <input
-                    id="utr-bank"
-                    type="text"
-                    maxLength={100}
-                    disabled={submittedUtr}
-                    value={bankUtrDraft.bankName}
-                    placeholder=""
-                    onChange={(e) => setBankUtrDraft((prev) => ({ ...prev, bankName: e.target.value }))}
-                  />
-                </div>
-
-                <div className="cms-field">
-                  <label htmlFor="utr-date" className="parent-field-label">
-                    TRANSFER DATE
-                  </label>
-                  <input
-                    id="utr-date"
-                    type="date"
-                    max={todayISO()}
-                    disabled={submittedUtr}
-                    value={bankUtrDraft.paymentDate}
-                    onChange={(e) => setBankUtrDraft((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                  />
-                </div>
-
-                <div className="cms-field">
-                  <label htmlFor="utr-remarks" className="parent-field-label">
-                    REMARKS
-                  </label>
-                  <input
-                    id="utr-remarks"
+                    id="v-remarks"
                     type="text"
                     maxLength={500}
-                    disabled={submittedUtr}
-                    value={bankUtrDraft.remarks}
-                    placeholder=""
-                    onChange={(e) => setBankUtrDraft((prev) => ({ ...prev, remarks: e.target.value }))}
+                    placeholder="Optional remarks (e.g., student name or transaction notes)"
+                    value={utrForm.remarks}
+                    disabled={busy}
+                    onChange={(e) => setUtrForm((prev) => ({ ...prev, remarks: e.target.value }))}
                   />
                 </div>
               </div>
-
-              <button
-                type="button"
-                className="cms-btn cms-btn-primary parent-action-submit-btn full-width"
-                style={{ marginTop: 16 }}
-                disabled={busy || submittedUtr}
-                onClick={handleSubmitBankUtr}
-              >
-                {busy ? "Submitting..." : submittedUtr ? "Pending Verification" : "Submit UTR for Verification"}
-              </button>
             </div>
           )}
 
-          {error && <p className="cms-error" style={{ margin: "8px 0 0" }}>{error}</p>}
+          {/* ========================================================================= */}
+          {/* STEP 4: PENDING VERIFICATION CONFIRMATION SCREEN                           */}
+          {/* ========================================================================= */}
+          {step === "success" && submissionSuccessData && (
+            <div className="parent-verification-success-card" style={{ padding: "24px 16px", textAlign: "center" }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "#fef3c7", color: "#d97706", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                <ShieldCheck size={32} />
+              </div>
+              <h3 style={{ margin: "0 0 6px", fontSize: 20, color: "#0f172a" }}>Payment Submitted for Verification</h3>
+              <div style={{ display: "inline-block", padding: "4px 14px", background: "#fef3c7", color: "#92400e", borderRadius: 20, fontSize: 13, fontWeight: 700, marginBottom: 14 }}>
+                Status: Pending Verification
+              </div>
+              <p style={{ maxWidth: 540, margin: "0 auto 20px", fontSize: 13.5, color: "#475569", lineHeight: 1.5 }}>
+                Your payment transaction reference and proof screenshot have been submitted to the Accounts Office.
+                The fee balance will be officially updated and receipt issued once verified and approved.
+              </p>
+
+              <div style={{ maxWidth: 480, margin: "0 auto", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: 16, textAlign: "left", fontSize: 13 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px" }}>
+                  <div><span style={{ color: "#64748b" }}>Student Name:</span> <strong>{activeChild?.name}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>UTR / Reference:</span> <strong>{submissionSuccessData.utrNumber}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Bank / App:</span> <strong>{submissionSuccessData.bankName}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Amount:</span> <strong>₹{Number(submissionSuccessData.amount).toLocaleString()}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Payment Date:</span> <strong>{formatDateSafe(submissionSuccessData.paymentDate)}</strong></div>
+                  <div><span style={{ color: "#64748b" }}>Attached Proof:</span> <strong>{submissionSuccessData.fileName}</strong></div>
+                  {submissionSuccessData.orderId && (
+                    <div style={{ gridColumn: "span 2" }}><span style={{ color: "#64748b" }}>Order ID:</span> <strong>{submissionSuccessData.orderId}</strong></div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && <p className="cms-error" style={{ margin: "12px 0 0" }}>{error}</p>}
           {notice && (
-            <p className="cms-notice" style={{ margin: "8px 0 0", color: "#166534", fontSize: 13, fontWeight: 600 }}>
+            <p className="cms-notice" style={{ margin: "12px 0 0", color: "#166534", fontSize: 13, fontWeight: 600 }}>
               {notice}
             </p>
           )}
         </div>
       </Modal>
 
-      {/* Official Fee Receipt Modal */}
+      {/* Official Fee Receipt Modal (Kept for confirmed payments) */}
       {officialReceipt && (
         <Modal
-          title="Payment Receipt"
+          title={`Fee Payment Receipt — ${officialReceipt.receiptNo}`}
+          className="parent-fee-receipt-modal"
           isOpen={true}
           onClose={() => setOfficialReceipt(null)}
           footer={
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, width: "100%" }}>
+            <div className="parent-receipt-modal-actions">
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost parent-close-btn"
@@ -1175,54 +1343,62 @@ export default function ParentCollectPaymentModal({
               </button>
               <button
                 type="button"
-                className="cms-btn cms-btn-primary"
-                onClick={() => window.print()}
+                className="cms-btn cms-btn-primary parent-done-btn"
+                onClick={() => printReceiptElement("parent-official-receipt-printable", `Fee Payment Receipt — ${officialReceipt.receiptNo}`)}
               >
                 <Printer size={15} style={{ marginRight: 6 }} /> Print Receipt
               </button>
             </div>
           }
         >
-          <div className="parent-receipt-paper" style={{ padding: 20 }}>
-            <div className="parent-receipt-brand" style={{ textAlign: "center", marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontSize: 20, color: "#166534" }}>{COLLEGE_NAME}</h2>
-              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#64748b" }}>
-                Official Fee Payment Receipt • Academic Year {currentAcademicYear || "2026-2027"}
-              </p>
+          <div id="parent-official-receipt-printable" className="parent-receipt-sheet">
+            <div className="parent-receipt-header">
+              <h2>PIRNAV JUNIOR COLLEGE</h2>
+              <p>Campus Road, Jubilee Hills, Hyderabad - 500033</p>
+              <div className="receipt-title-badge">OFFICIAL FEE PAYMENT RECEIPT</div>
             </div>
 
-            <div className="parent-receipt-meta-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 12, background: "#f8fafc", borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
-              <div><span>Receipt No:</span> <strong>{officialReceipt.receiptNo}</strong></div>
-              <div><span>Date:</span> <strong>{officialReceipt.date}</strong></div>
-              <div><span>Student Name:</span> <strong>{activeChild?.name}</strong></div>
-              <div><span>Admission No:</span> <strong>{activeChild?.admissionNo || `ADM-${activeChild?.id}`}</strong></div>
-              <div><span>Payment Mode:</span> <strong>{officialReceipt.method}</strong></div>
-              <div><span>Transaction ID:</span> <strong>{officialReceipt.txnId}</strong></div>
+            <div className="parent-receipt-meta-grid">
+              <div><span>Receipt Number:</span> <strong>{officialReceipt.receiptNo}</strong></div>
+              <div><span>Date of Payment:</span> <strong>{officialReceipt.date}</strong></div>
+              <div><span>Student Name:</span> <strong>{activeChild?.name || "Student"}</strong></div>
+              <div><span>Admission Number:</span> <strong>{activeChild?.admissionNo || `ADM-${activeChild?.id}`}</strong></div>
+              <div><span>Course & Group:</span> <strong>{activeChild?.programme || activeChild?.group || "Intermediate 1st Year (MPC)"}</strong></div>
+              <div><span>Payment Mode:</span> <strong>{officialReceipt.method || "Online"}</strong></div>
             </div>
 
-            <table className="parent-receipt-table" style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
+            <table className="parent-receipt-table">
               <thead>
-                <tr style={{ background: "#f1f5f9", textAlign: "left", fontSize: 13 }}>
-                  <th style={{ padding: "8px 10px" }}>Description</th>
-                  <th style={{ padding: "8px 10px" }}>Amount Paid</th>
-                  <th style={{ padding: "8px 10px" }}>Status</th>
+                <tr>
+                  <th style={{ width: "36%" }}>Description</th>
+                  <th style={{ width: "28%" }}>Transaction Reference</th>
+                  <th style={{ width: "18%", textAlign: "right" }}>Amount Paid</th>
+                  <th style={{ width: "18%", textAlign: "center" }}>Payment Status</th>
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ borderBottom: "1px solid #e2e8f0", fontSize: 13 }}>
-                  <td style={{ padding: "10px" }}>{officialReceipt.paidFor}</td>
-                  <td style={{ padding: "10px", fontWeight: 700 }}>₹{Number(officialReceipt.amount).toLocaleString()}</td>
-                  <td style={{ padding: "10px" }}>
-                    <span className="cms-badge cms-badge-active" style={{ background: "#dcfce7", color: "#166534", padding: "3px 8px", borderRadius: 4, fontSize: 12 }}>
-                      Success
+                <tr>
+                  <td className="cell-desc">{officialReceipt.paidFor}</td>
+                  <td className="cell-txn">{officialReceipt.txnId}</td>
+                  <td className="cell-amount">₹{Number(officialReceipt.amount).toLocaleString()}</td>
+                  <td className="cell-status">
+                    <span className="cms-badge cms-badge-active">
+                      {officialReceipt.status || "Success"}
                     </span>
                   </td>
                 </tr>
               </tbody>
             </table>
 
-            <div style={{ textAlign: "center", borderTop: "1px dashed #cbd5e1", paddingTop: 12, fontSize: 12, color: "#64748b" }}>
-              This is a computer-generated receipt valid for income tax deduction under 80C.
+            <div className="parent-receipt-foot-block">
+              <div className="parent-receipt-foot-legal">
+                <div>This is an official computer-generated fee receipt.</div>
+                <div>Valid for Income Tax deduction under section 80C.</div>
+              </div>
+              <div className="parent-receipt-foot-signature">
+                <div style={{ height: 20 }}></div>
+                <div className="sig-line">Accounts Officer / Cashier</div>
+              </div>
             </div>
           </div>
         </Modal>

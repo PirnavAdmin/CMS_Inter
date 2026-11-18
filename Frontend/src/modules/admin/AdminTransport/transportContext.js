@@ -6,19 +6,37 @@ const ids = (rows, ...keys) => new Set(rows.map((row) => id(transportValue(row, 
 const contains = (set, row, ...keys) => set.has(id(transportValue(row, ...keys)));
 export function scopeTransportRecords(records, context) {
   const campus = id(context.campusId);
+  if (!campus) {
+    return {
+      routes: [],
+      vehicles: [],
+      staff: [],
+      drivers: [],
+      attendants: [],
+      pickups: [],
+      assignments: [],
+      students: [],
+      studentAssignments: [],
+      trips: [],
+      gps: [],
+      maintenance: [],
+    };
+  }
+
   const exactCampus = (row) => campus && id(transportValue(row, 'campusId')) === campus;
   const compatible = (row, fields) => fields.every((key) => {
     const actual = transportValue(row, key);
     return !context[key] || actual == null || id(actual) === id(context[key]);
   });
-  // Routes are fetched with CampusId. Some route list DTOs omit CampusId, so
-  // keep those API-scoped rows while still rejecting an explicit mismatch.
-  const routes = records.routes.filter((row) => compatible(row, ['campusId']));
-  // Resolve legacy vehicles through known route/assignment campus links.
-  // Never assume that a vehicle with no campus belongs to the selected campus.
-  const routeCampuses = new Map(records.routes.map((route) => [
+
+  // Routes are strictly scoped to the active campus
+  const routes = records.routes.filter((row) => exactCampus(row) || compatible(row, ['campusId']));
+  const routeCampuses = new Map(routes.map((route) => [
     id(transportValue(route, 'routeId', 'id')), id(transportValue(route, 'campusId')),
   ]));
+
+  const routeIds = ids(routes, 'routeId', 'id');
+
   const linkedCampuses = new Map();
   for (const assignment of records.assignments) {
     const status = transportValue(assignment, 'status', 'isActive');
@@ -29,16 +47,19 @@ export function scopeTransportRecords(records, context) {
     if (!linkedCampuses.has(vehicle)) linkedCampuses.set(vehicle, new Set());
     linkedCampuses.get(vehicle).add(owner);
   }
+
+  // Vehicles must belong to this campus explicitly or through linked route
   const vehicles = records.vehicles.filter((row) => {
-    if (!campus) return false;
     const explicit = transportValue(row, 'campusId') ?? transportValue(transportValue(row, 'campus'), 'campusId', 'id');
     if (explicit != null) return id(explicit) === campus;
     const owners = new Set(linkedCampuses.get(id(transportValue(row, 'vehicleId', 'id'))) || []);
     const routeCampus = routeCampuses.get(id(transportValue(row, 'routeId', 'assignedRouteId')));
     if (routeCampus) owners.add(routeCampus);
-    // Conflicting relationships cannot establish a single owning campus.
     return owners.size === 1 && owners.has(campus);
   });
+
+  const vehicleIds = ids(vehicles, 'vehicleId', 'id');
+
   const staff = records.staff.filter((row) => {
     const assignments = transportValue(row, 'assignedCampuses', 'staffCampusAssignments');
     if (Array.isArray(assignments) && assignments.length) return assignments.some((assignment) =>
@@ -46,25 +67,45 @@ export function scopeTransportRecords(records, context) {
       && id(transportValue(assignment, 'campusId', 'id')) === campus);
     const campusIds = transportValue(row, 'assignedCampusIds');
     if (Array.isArray(campusIds) && campusIds.length) return campusIds.some((value) => id(value) === campus);
-    // Staff is fetched with CampusId; reject explicit conflicts if present.
-    return compatible(row, ['campusId']);
+    return exactCampus(row) || compatible(row, ['campusId']);
   });
-  const routeIds = ids(routes, 'routeId', 'id'), vehicleIds = ids(vehicles, 'vehicleId', 'id');
+
   const staffIds = ids(staff, 'staffId', 'id', 'facultyId'), employees = ids(staff, 'employeeId');
-  const linkedStaff = (row) => contains(staffIds, row, 'staffId') || contains(employees, row, 'employeeId');
-  // Drivers are requested with CampusId. Some driver DTOs omit campus and
-  // staff links; preserve those results while rejecting explicit conflicts.
-  const drivers = records.drivers.filter((row) => compatible(row, ['campusId']));
-  const attendants = records.attendants.filter((row) => compatible(row, ['campusId']));
-  const pickups = records.pickups.filter((row) => compatible(row, ['campusId']) && (routeIds.size === 0 || contains(routeIds, row, 'routeId')));
-  const assignments = records.assignments.filter((row) => (routeIds.size === 0 || contains(routeIds, row, 'routeId')) && (vehicleIds.size === 0 || contains(vehicleIds, row, 'vehicleId')));
-  const assignmentIds = ids(assignments, 'assignmentId', 'id');
+  const drivers = records.drivers.filter((row) => exactCampus(row) || (contains(staffIds, row, 'staffId') || contains(employees, row, 'employeeId')));
+  const attendants = records.attendants.filter((row) => exactCampus(row) || (contains(staffIds, row, 'staffId') || contains(employees, row, 'employeeId')));
+  const pickups = records.pickups.filter((row) => exactCampus(row) || (routeIds.size > 0 && contains(routeIds, row, 'routeId')));
+
+  // Assignments, trips, maintenance, and student transport MUST strictly belong to this campus's routes or vehicles.
+  // If the campus has 0 routes and 0 vehicles, they MUST be empty, never leaking other campuses' data.
+  const hasFleet = routeIds.size > 0 || vehicleIds.size > 0;
+
+  const assignments = hasFleet
+    ? records.assignments.filter((row) => (routeIds.has(id(transportValue(row, 'routeId'))) || vehicleIds.has(id(transportValue(row, 'vehicleId')))))
+    : [];
+
+  const trips = hasFleet
+    ? records.trips.filter((row) => (routeIds.has(id(transportValue(row, 'routeId'))) || vehicleIds.has(id(transportValue(row, 'vehicleId')))))
+    : [];
+
+  const maintenance = vehicleIds.size > 0
+    ? records.maintenance.filter((row) => vehicleIds.has(id(transportValue(row, 'vehicleId'))))
+    : [];
+
+  const studentAssignments = hasFleet
+    ? (records.studentAssignments || []).filter((row) => {
+        const rowCampus = id(transportValue(row, 'campusId'));
+        if (rowCampus && rowCampus === campus) return true;
+        const rowRoute = id(transportValue(row, 'routeId'));
+        return rowRoute && routeIds.has(rowRoute);
+      }).map((row) => ({
+        ...row,
+        studentName: transportValue(row, 'studentName') || '',
+        admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || '',
+      }))
+    : [];
+
   const students = records.students || [];
-  const studentAssignments = (records.studentAssignments || []).filter((row) => compatible(row, ['campusId', 'boardId', 'academicYearId'])).map((row) => ({
-    ...row,
-    studentName: transportValue(row, 'studentName') || '',
-    admissionNo: transportValue(row, 'admissionNo', 'admissionNumber') || '',
-  }));
+
   return {
     routes,
     vehicles,
@@ -75,9 +116,9 @@ export function scopeTransportRecords(records, context) {
     assignments,
     students,
     studentAssignments,
-    trips: records.trips.filter((row) => (routeIds.size === 0 || contains(routeIds, row, 'routeId')) && (vehicleIds.size === 0 || contains(vehicleIds, row, 'vehicleId'))),
-    gps: records.gps.filter((row) => compatible(row, ['campusId'])),
-    maintenance: records.maintenance.filter((row) => vehicleIds.size === 0 || contains(vehicleIds, row, 'vehicleId')),
+    trips,
+    gps: records.gps.filter((row) => exactCampus(row)),
+    maintenance,
   };
 }
 

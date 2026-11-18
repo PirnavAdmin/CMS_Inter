@@ -93,12 +93,20 @@ namespace CollegeManagement.API.Controllers
         [HttpGet("salary-structures")]
         public async Task<IActionResult> GetSalaryStructures(
             [FromQuery] string? staffType,
-            [FromQuery] string? search)
+            [FromQuery] string? search,
+            [FromQuery] int? campusId = null)
         {
+            var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SalaryStructureDto>());
+            }
+
             var result =
                 await _payrollService.GetSalaryStructuresAsync(
                     staffType,
-                    search);
+                    search,
+                    resolvedCampusId);
 
             return Ok(result);
         }
@@ -187,9 +195,14 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetEmployees(
             [FromQuery] string? staffType,
             [FromQuery] string? search,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<PayrollEmployeeDto>());
+            }
+
             var result =
                 await _payrollService.GetEmployeesAsync(
                     staffType,
@@ -204,7 +217,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetSalaryAssignments(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -217,6 +230,11 @@ namespace CollegeManagement.API.Controllers
                 });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SalaryAssignmentDto>());
+            }
+
             var result = await _payrollService
                 .GetSalaryAssignmentsAsync(staffId, status, resolvedCampusId);
             return Ok(result);
@@ -664,9 +682,14 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? payrollYear,
             [FromQuery] string? staffType,
             [FromQuery] string? search,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<PayslipDto>());
+            }
+
             var result =
                 await _payrollService.GetPayslipHistoryAsync(
                     payrollMonth,
@@ -807,7 +830,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetSalaryRevisions(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
             {
@@ -829,6 +852,11 @@ namespace CollegeManagement.API.Controllers
             }
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SalaryRevisionDto>());
+            }
+
             var result = await _payrollService
                 .GetSalaryRevisionsAsync(staffId, status, resolvedCampusId);
 
@@ -958,7 +986,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetBonuses(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -973,6 +1001,11 @@ namespace CollegeManagement.API.Controllers
                 });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<BonusDto>());
+            }
+
             var result = await _payrollService.GetBonusesAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
@@ -1050,7 +1083,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetAdvances(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -1066,6 +1099,11 @@ namespace CollegeManagement.API.Controllers
                 });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<AdvanceDto>());
+            }
+
             var result = await _payrollService.GetAdvancesAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
@@ -1211,7 +1249,7 @@ namespace CollegeManagement.API.Controllers
         // GET: api/v1/payroll/summary?month=9&year=2026
         [HttpGet("summary")]
         public async Task<IActionResult> GetMonthlyPayrollSummary(
-            [FromQuery] int? month, [FromQuery] int? year, [FromQuery] int? campusId)
+            [FromQuery] int? month, [FromQuery] int? year, [FromQuery] int? campusId = null)
         {
             var targetMonth = month.GetValueOrDefault(DateTime.UtcNow.Month);
             var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
@@ -1220,6 +1258,11 @@ namespace CollegeManagement.API.Controllers
                 return BadRequest(new { Message = "Valid month (1-12) and year (>= 2000) are required." });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new MonthlyPayrollSummaryDto());
+            }
+
             var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear, resolvedCampusId);
             return Ok(result);
         }

@@ -57,7 +57,12 @@ namespace CollegeManagement.API.Controllers
             {
                 return null;
             }
-            return _jwtTokenHelper.GetCollegeId(User) ?? 1;
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                return collegeId.Value;
+            }
+            return TenantIsolationActionFilter.NoCampusSentinel;
         }
 
         // =========================================================

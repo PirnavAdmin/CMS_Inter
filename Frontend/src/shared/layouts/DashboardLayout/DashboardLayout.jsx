@@ -656,6 +656,7 @@ export default function DashboardLayout({
   showBoardSelector = true,
   showAcademicYearSelector = true,
   hidePageHeader = false,
+  contentClassName = "",
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -1201,8 +1202,8 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Campus</span>
-                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No active campuses available"}>
-                      {selectedCampus?.name || selectedCampus?.code || "No active campuses available"}
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No Campus"}>
+                      {selectedCampus?.name || selectedCampus?.code || "No Campus"}
                     </span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1271,9 +1272,9 @@ export default function DashboardLayout({
                       <span className="cms-academic-btn-label">Board</span>
                       <span
                         className="cms-academic-btn-value"
-                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       >
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       </span>
                     </div>
                   </div>
@@ -1297,7 +1298,7 @@ export default function DashboardLayout({
                     <div className="cms-academic-btn-text">
                       <span className="cms-academic-btn-label">Board</span>
                       <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No Board")}
                       </span>
                     </div>
                     <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1363,7 +1364,7 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Academic Year</span>
-                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No active academic years")}</span>
+                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No Active Academic Year")}</span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
                 </button>
@@ -1502,15 +1503,15 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="cms-content">
-          {!hidePageHeader && <div className="cms-page-head">
+        <main className={`cms-content ${contentClassName}`.trim()}>
+          {!hidePageHeader && (title || actions || backLink) ? <div className="cms-page-head">
             {backLink ? (
               <div className="cms-page-heading-with-back">
                 {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
               </div>
             ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
-          </div>}
+          </div> : null}
 
           {children}
         </main>
