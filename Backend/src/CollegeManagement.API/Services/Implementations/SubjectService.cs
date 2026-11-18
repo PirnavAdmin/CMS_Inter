@@ -136,9 +136,10 @@ namespace CollegeManagement.API.Services.Implementations
             int? groupId = null,
             int? academicLevelId = null,
             bool? isActive = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
-            return _repository.GetAllAsync(search, boardId, groupId, academicLevelId, isActive, cancellationToken);
+            return _repository.GetAllAsync(search, boardId, groupId, academicLevelId, isActive, collegeId, cancellationToken);
         }
 
         public Task<SubjectDto?> GetByIdAsync(int subjectId, CancellationToken cancellationToken = default)
@@ -151,7 +152,7 @@ namespace CollegeManagement.API.Services.Implementations
             return _repository.GetByGroupIdAsync(groupId, cancellationToken);
         }
 
-        public async Task<List<SubjectDto>> GetByContextAsync(int boardId, int groupId, int academicLevelId, CancellationToken cancellationToken = default)
+        public async Task<List<SubjectDto>> GetByContextAsync(int boardId, int groupId, int academicLevelId, int? collegeId = null, CancellationToken cancellationToken = default)
         {
             if (boardId <= 0 && groupId > 0)
             {
@@ -163,7 +164,7 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            return await _repository.GetByContextAsync(boardId, groupId, academicLevelId, cancellationToken);
+            return await _repository.GetByContextAsync(boardId, groupId, academicLevelId, collegeId, cancellationToken);
         }
 
         public async Task<SubjectDto> CreateAsync(CreateSubjectDto dto, CancellationToken cancellationToken = default)
@@ -211,14 +212,14 @@ namespace CollegeManagement.API.Services.Implementations
             return _repository.ChangeStatusAsync(subjectId, isActive, cancellationToken);
         }
 
-        public Task<List<SubjectDto>> SearchAsync(string? search, int? boardId, int? groupId, int? academicLevelId, bool? isActive, CancellationToken cancellationToken = default)
+        public Task<List<SubjectDto>> SearchAsync(string? search, int? boardId, int? groupId, int? academicLevelId, bool? isActive, int? collegeId = null, CancellationToken cancellationToken = default)
         {
-            return _repository.SearchAsync(search, boardId, groupId, academicLevelId, isActive, cancellationToken);
+            return _repository.SearchAsync(search, boardId, groupId, academicLevelId, isActive, collegeId, cancellationToken);
         }
 
-        public Task<List<SubjectDto>> GetActiveAsync(CancellationToken cancellationToken = default)
+        public Task<List<SubjectDto>> GetActiveAsync(int? collegeId = null, CancellationToken cancellationToken = default)
         {
-            return _repository.GetActiveAsync(cancellationToken);
+            return _repository.GetActiveAsync(collegeId, cancellationToken);
         }
 
         public Task<List<SubjectDto>> GetByBoardIdAsync(int boardId, CancellationToken cancellationToken = default)
