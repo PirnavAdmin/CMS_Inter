@@ -15,8 +15,7 @@ import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 import { Settings } from "lucide-react";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
-import { getAuthUser } from "@/modules/auth/authStorage.js";
-import { can, ACTIONS } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 // Shared by the Student sidebar and its navbar search.
 export const studentMenuGroups = [
@@ -44,7 +43,7 @@ export const studentMenuGroups = [
 
 export default function StudentSidebar({ open, collapsed, mobile, onClose, onResizePointerDown, onResizePointerMove, onResizePointerUp, onResizePointerCancel }) {
   const { facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
-  const authUser = getAuthUser();
+  const { canView, permissions, loading } = useEffectivePermissions();
 
   return (
     <aside id="sp-student-sidebar" className={`sp-sidebar ${open ? "is-open" : ""}`} inert={mobile && !open ? true : undefined}>
@@ -54,16 +53,25 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose, onRes
       <nav aria-label="Student Portal pages">
         {studentMenuGroups.map(([heading, links]) => {
           const visibleLinks = links.filter(([label, path, icon, moduleKey]) => {
-            if (path === "transport" || path === "hostel" || moduleKey === "transport" || moduleKey === "hostel-management") {
+            const isFacilityItem =
+              path === "transport" ||
+              path === "hostel" ||
+              moduleKey === "transport" ||
+              moduleKey === "hostel-management";
+
+            if (isFacilityItem) {
               if (facilityAccess.loading) return false;
-              if (facilityAccess.type === "transport") return path === "transport";
-              if (facilityAccess.type === "hostel") return path === "hostel";
-              return false;
+              const facilityAllowed =
+                (facilityAccess.type === "transport" && (path === "transport" || moduleKey === "transport")) ||
+                (facilityAccess.type === "hostel" && (path === "hostel" || moduleKey === "hostel-management"));
+              if (!facilityAllowed) return false;
+              if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+              return canView(moduleKey);
             }
-            if (moduleKey && moduleKey !== "dashboard" && (authUser?.permissions || authUser?.rolePermissions)) {
-              return can(moduleKey, ACTIONS.VIEW, authUser?.permissions, authUser);
-            }
-            return true;
+
+            if (!moduleKey || moduleKey === "dashboard") return true;
+            if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+            return canView(moduleKey);
           });
 
           if (!visibleLinks.length) return null;

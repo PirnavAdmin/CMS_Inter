@@ -76,10 +76,10 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// Gets the landing page configuration for the current authenticated college admin.
+        /// Gets the landing page configuration for the current authenticated user's college.
         /// </summary>
         [HttpGet("config")]
-        [Authorize(Roles = "Admin,Super Admin,College Admin")]
+        [Authorize]
         [ProducesResponseType(typeof(LandingPageConfigDto), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetConfig([FromQuery] int? collegeId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {

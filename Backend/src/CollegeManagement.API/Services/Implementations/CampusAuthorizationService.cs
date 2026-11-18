@@ -81,6 +81,18 @@ public class CampusAuthorizationService : ICampusAuthorizationService
                     "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId AND IsActive = 1 ORDER BY IsHQ DESC, CampusId ASC;",
                     new { CollegeId = collegeId.Value })).ToList();
 
+                // If college has no campuses configured yet, gracefully return NoCampusSentinel
+                if (collegeCampuses.Count == 0)
+                {
+                    return new CampusResolutionResult
+                    {
+                        IsAuthorized = true,
+                        IsAdmin = true,
+                        EffectiveCampusId = TenantIsolationActionFilter.NoCampusSentinel,
+                        AuthorizedCampusIds = collegeCampuses
+                    };
+                }
+
                 if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
                 {
                     if (requestedCampusId.Value == TenantIsolationActionFilter.NoCampusSentinel)
@@ -90,6 +102,18 @@ public class CampusAuthorizationService : ICampusAuthorizationService
                             IsAuthorized = true,
                             IsAdmin = true,
                             EffectiveCampusId = TenantIsolationActionFilter.NoCampusSentinel,
+                            AuthorizedCampusIds = collegeCampuses
+                        };
+                    }
+
+                    // If request carries legacy/dummy CampusId = 1, remap to the tenant's primary campus
+                    if (requestedCampusId.Value == 1 && !collegeCampuses.Contains(1))
+                    {
+                        return new CampusResolutionResult
+                        {
+                            IsAuthorized = true,
+                            IsAdmin = true,
+                            EffectiveCampusId = collegeCampuses.First(),
                             AuthorizedCampusIds = collegeCampuses
                         };
                     }

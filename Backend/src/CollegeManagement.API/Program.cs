@@ -47,6 +47,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.Extensions.Caching.Memory;
 using MySqlConnector;
 
 using Serilog;
@@ -476,6 +479,67 @@ builder.Services.AddAuthentication(options =>
     };
     options.Events = new JwtBearerEvents
     {
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            if (principal == null) return;
+
+            if (principal.IsInRole("Super Admin")
+                || principal.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role")
+                    && string.Equals(c.Value, "Super Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            var userIdClaim = principal.FindFirst("UserId")
+                           ?? principal.FindFirst(ClaimTypes.NameIdentifier)
+                           ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)
+                           ?? principal.FindFirst("sub");
+
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId <= 0)
+            {
+                return;
+            }
+
+            var cache = context.HttpContext.RequestServices.GetService<IMemoryCache>();
+            var cacheKey = $"user_active_status:{userId}";
+
+            if (cache != null && cache.TryGetValue(cacheKey, out bool cachedIsActive))
+            {
+                if (!cachedIsActive)
+                {
+                    context.Fail("Account is inactive. Please contact your administrator.");
+                }
+                return;
+            }
+
+            var config = context.HttpContext.RequestServices.GetService<IConfiguration>();
+            var connStr = config?.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(connStr)) return;
+
+            try
+            {
+                await using var conn = new MySqlConnection(connStr);
+                await conn.OpenAsync(context.HttpContext.RequestAborted);
+                await using var cmd = new MySqlCommand("SELECT IsActive FROM Users WHERE UserId = @UserId LIMIT 1", conn);
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                var result = await cmd.ExecuteScalarAsync(context.HttpContext.RequestAborted);
+
+                if (result != null && result != DBNull.Value)
+                {
+                    bool isActive = Convert.ToBoolean(result);
+                    cache?.Set(cacheKey, isActive, TimeSpan.FromSeconds(60));
+                    if (!isActive)
+                    {
+                        context.Fail("Account is inactive. Please contact your administrator.");
+                    }
+                }
+            }
+            catch
+            {
+                // Preserve availability on transient DB errors
+            }
+        },
         OnMessageReceived = context =>
         {
             var accessToken = context.Request.Query["access_token"];
@@ -1569,7 +1633,7 @@ catch (Exception ex)
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         var deptColExists = await db.Database.SqlQueryRaw<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS 
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId'
         ").FirstOrDefaultAsync();
         if (deptColExists == 0)
@@ -1578,7 +1642,7 @@ catch (Exception ex)
         }
 
         var desigColExists = await db.Database.SqlQueryRaw<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS 
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId'
         ").FirstOrDefaultAsync();
         if (desigColExists == 0)
@@ -1587,7 +1651,7 @@ catch (Exception ex)
         }
 
         var stColExists = await db.Database.SqlQueryRaw<int>(@"
-            SELECT COUNT(*) FROM information_schema.COLUMNS 
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType'
         ").FirstOrDefaultAsync();
         if (stColExists == 0)

@@ -1173,12 +1173,26 @@ export const storedFeeRecords = {
 export const initialFeeRecords = storedFeeRecords;
 
 export const getStoredFeeRecords = () => {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = window.localStorage.getItem('cms-parent-fee-records');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {}
+  }
   if (inMemoryStore.fees) return inMemoryStore.fees;
   return initialFeeRecords;
 };
 
 export const saveStoredFeeRecords = (records) => {
   inMemoryStore.fees = records;
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem('cms-parent-fee-records', JSON.stringify(records));
+    } catch {}
+  }
 };
 
 // ==========================================================================

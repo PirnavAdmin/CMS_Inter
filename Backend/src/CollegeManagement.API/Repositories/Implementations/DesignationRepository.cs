@@ -55,6 +55,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<DesignationResponseDto>();
+            }
+
             string normalizedStaffType = staffType ?? "";
             if (normalizedStaffType.Equals("NonTeaching", StringComparison.OrdinalIgnoreCase))
             {
@@ -213,6 +218,11 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return new DesignationSummaryDto();
+            }
+
             var conn = await GetOpenConnectionAsync();
             var summary = await conn.QueryFirstOrDefaultAsync<DesignationSummaryDto>(
                 "sp_GetDesignationSummary",

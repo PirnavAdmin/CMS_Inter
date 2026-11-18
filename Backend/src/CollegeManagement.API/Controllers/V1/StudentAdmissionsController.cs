@@ -182,6 +182,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+                {
+                    return Ok(new List<StudentAdmissionResponseDto>());
+                }
+
                 var result =
                     await _service.GetAllAsync(campusId);
 

@@ -49,6 +49,7 @@ import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.js
 import { Modal, ConfirmDialog, StatusBadge, Toast, Skeleton, SkeletonRow, SkeletonInput, SkeletonButton } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
@@ -407,6 +408,9 @@ export default function HostelPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAuthUser();
+  const { selectedCampus } = useCampusContext();
+  const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
+  const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
   const adminView = useMemo(() => resolveHostelView(location.pathname, location.search), [location.pathname, location.search]);
   const isAdminHostelRoute = Boolean(adminView);
   const isWardenRoute = /^\/warden(?:-|\/|$)/i.test(location.pathname);
@@ -572,8 +576,8 @@ export default function HostelPage() {
     const matchedBlk = blks.find(
       (b) => Number(b.id) === Number(r.hostelId) || b.code === r.hostelCode || b.name === r.hostelName
     );
-    const resolvedBlockName = (r.hostelName || "").trim() || matchedBlk?.name || r.blockName || r.block || (Number(r.hostelId) === 1 ? "Boys Hostel 1" : (r.hostelId ? `Hostel Block #${r.hostelId}` : "Boys Hostel 1"));
-    const resolvedBlockCode = (r.hostelCode || "").trim() || matchedBlk?.code || r.blockCode || (Number(r.hostelId) === 1 ? "BH-1" : (r.hostelId ? `BLK-${r.hostelId}` : "BH-1"));
+    const resolvedBlockName = (r.hostelName || "").trim() || matchedBlk?.name || r.blockName || r.block || (r.hostelId ? `Hostel Block #${r.hostelId}` : "—");
+    const resolvedBlockCode = (r.hostelCode || "").trim() || matchedBlk?.code || r.blockCode || (r.hostelId ? `BLK-${r.hostelId}` : "—");
 
     const matchedCat = cats.find(
       (c) => Number(c.id) === Number(r.roomTypeId) || c.name === r.roomTypeSpecification || c.specification === r.roomTypeSpecification
@@ -707,7 +711,7 @@ export default function HostelPage() {
     );
     const sName = o.studentName || alloc?.studentName || (o.studentId ? `Student #${o.studentId}` : "Resident Student");
     const admNo = o.admissionNo || alloc?.admissionNo || "-";
-    const bName = o.blockName || o.hostelName || alloc?.blockName || alloc?.hostelName || "Boys Hostel 1";
+    const bName = o.blockName || o.hostelName || alloc?.blockName || alloc?.hostelName || (o.hostelId ? `Block #${o.hostelId}` : "—");
     const rNo = o.roomNumber || o.roomNo || alloc?.roomNumber || alloc?.room || "-";
     const cleanRNo = String(rNo).replace("Room #", "").trim();
 
@@ -746,7 +750,7 @@ export default function HostelPage() {
     );
     const sName = t.studentName || alloc?.studentName || (t.studentId ? `Student #${t.studentId}` : "Resident Student");
     const admNo = t.admissionNo || alloc?.admissionNo || "-";
-    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || "Boys Hostel 1";
+    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || (t.fromHostelId ? `Block #${t.fromHostelId}` : "—");
     const fromR = t.fromRoomNumber || t.currentRoom || alloc?.roomNumber || alloc?.room || "-";
     const cleanFromR = String(fromR).replace("Room #", "").trim();
     const actType = t.actionType || (t.requestType === "Vacate" ? "Bed Vacate" : "Room Transfer");
@@ -828,9 +832,18 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
+      if (isTenantCollege && !curCampusId) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setCandidateAdmissions([]); setCandidateStudents([]);
+        setDashboardData(null);
+        setIsLoading(false);
+        return;
+      }
       if (isWarden && !wardenStaffId) {
         setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
         setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setCandidateAdmissions([]); setCandidateStudents([]);
         setDashboardData(null);
         setApiError("Your warden account is not linked to a Staff ID. Please contact Admin.");
         return;
@@ -839,27 +852,29 @@ export default function HostelPage() {
       const shouldFetchAdmissions = canAccessAdminEndpoints;
       const shouldFetchAllStudents = canAccessAdminEndpoints;
 
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
+
       const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes, attRes] = await Promise.allSettled([
-        hostelApi.getHostelBlocks().catch(() => null),
-        hostelApi.getRoomTypes().catch(() => null),
-        hostelApi.getRooms().catch(() => null),
-        hostelApi.getBeds().catch(() => null),
-        hostelApi.getWardens(isWarden ? { staffId: wardenStaffId, status: "Active" } : undefined).catch(() => null),
-        hostelApi.getStudentAllocations().catch(() => null),
-        hostelApi.getOutpassLeave().catch(() => null),
-        hostelApi.getTransferVacate().catch(() => null),
-        isWarden ? Promise.resolve(null) : hostelApi.getHostelDashboard().catch(() => null),
-        shouldFetchStaff ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
+        hostelApi.getHostelBlocks(campusParams).catch(() => null),
+        hostelApi.getRoomTypes(campusParams).catch(() => null),
+        hostelApi.getRooms(campusParams).catch(() => null),
+        hostelApi.getBeds(campusParams).catch(() => null),
+        hostelApi.getWardens({ ...(campusParams || {}), ...(isWarden ? { staffId: wardenStaffId, status: "Active" } : {}) }).catch(() => null),
+        hostelApi.getStudentAllocations(campusParams).catch(() => null),
+        hostelApi.getOutpassLeave(campusParams).catch(() => null),
+        hostelApi.getTransferVacate(campusParams).catch(() => null),
+        isWarden ? Promise.resolve(null) : hostelApi.getHostelDashboard(campusParams).catch(() => null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
           : Promise.resolve(null),
-        shouldFetchStaff ? apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
-        shouldFetchStaff ? apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
-        shouldFetchAdmissions ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
-        shouldFetchAllStudents ? apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true })
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAdmissions ? apiClient.get("/api/v1/student-admissions", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/certificates/students-dropdown", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
           .catch(() => null)
           : Promise.resolve(null),
-        shouldFetchAllStudents ? apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
         hostelApi.getAttendance().catch(() => null),
       ]);
 
@@ -1145,12 +1160,9 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canAccessAdminEndpoints, isWarden, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord, wardenStaffId]);
+  }, [canAccessAdminEndpoints, isWarden, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord, wardenStaffId, curCampusId, isTenantCollege]);
 
-  const hasFetchedInitialRef = useRef(false);
   useEffect(() => {
-    if (hasFetchedInitialRef.current) return;
-    hasFetchedInitialRef.current = true;
     fetchHostelData();
   }, [fetchHostelData]);
 
@@ -1773,6 +1785,10 @@ export default function HostelPage() {
 
   // Students who opted for hostel during admission or registration and await room allocation
   const unallocatedHostelStudents = useMemo(() => {
+    if (isTenantCollege && !curCampusId) {
+      return [];
+    }
+
     const activeAllocStudentIds = new Set();
     allocations.forEach((a) => {
       if (String(a.status || "").toLowerCase() === "active") {
@@ -1786,6 +1802,14 @@ export default function HostelPage() {
 
     const considerStudent = (st) => {
       if (!st) return;
+      if (curCampusId) {
+        const studentCampusId = st.campusId ?? st.CampusId;
+        if (studentCampusId && Number(studentCampusId) !== Number(curCampusId)) return;
+      }
+      if (isTenantCollege && user?.collegeId) {
+        const studentCollegeId = st.collegeId ?? st.CollegeId;
+        if (studentCollegeId && Number(studentCollegeId) !== Number(user.collegeId)) return;
+      }
       const sId = st.studentId || st.id || st.admissionId;
       const admNo = String(st.admissionNo || st.admissionNumber || "").trim();
       const sName = st.studentName || [st.firstName, st.middleName, st.lastName].filter(Boolean).join(" ") || st.name || "";
@@ -1833,18 +1857,20 @@ export default function HostelPage() {
     if (Array.isArray(candidateStudents)) candidateStudents.forEach(considerStudent);
     if (Array.isArray(candidateAdmissions)) candidateAdmissions.forEach(considerStudent);
 
-    try {
-      const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
-      if (Array.isArray(localAdms)) {
-        localAdms.forEach((entry) => {
-          const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
-          considerStudent(x);
-        });
-      }
-    } catch (_) { /* Intentionally ignored. */ }
+    if (!isTenantCollege) {
+      try {
+        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+        if (Array.isArray(localAdms)) {
+          localAdms.forEach((entry) => {
+            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+            considerStudent(x);
+          });
+        }
+      } catch (_) { /* Intentionally ignored. */ }
+    }
 
     return list;
-  }, [allocations, candidateStudents, candidateAdmissions, blocks]);
+  }, [allocations, candidateStudents, candidateAdmissions, blocks, isTenantCollege, curCampusId, user?.collegeId]);
 
   // ── Block CRUD ──────────────────────────────────────────────────────
   const handleSaveBlock = async (blockData) => {
@@ -4145,8 +4171,11 @@ export default function HostelPage() {
             </p>
           </div>
           <div className="cms-dash-live-badge">
-            <span className="cms-dash-live-dot" />
-            <span>Live Status • All Blocks Operational</span>
+            <span
+              className="cms-dash-live-dot"
+              style={{ background: blocks.length > 0 ? "var(--cms-green)" : "var(--cms-muted)" }}
+            />
+            <span>{blocks.length > 0 ? "Live Status • All Blocks Operational" : "No Active Blocks Registered"}</span>
           </div>
         </div>
 
@@ -4401,13 +4430,13 @@ export default function HostelPage() {
           <div className="cms-dash-progress-track">
             <div
               className="cms-dash-progress-fill"
-              style={{ width: `${Math.max(3, occupancyRate)}%` }}
+              style={{ width: `${totalBeds > 0 ? Math.max(3, occupancyRate) : 0}%` }}
             />
           </div>
           <div className="cms-dash-occ-footer">
             <div style={{ display: "flex", gap: 18 }}>
-              <span>Occupied Beds ({occupancyRate}%)</span>
-              <span>Vacant Beds ({100 - occupancyRate}%)</span>
+              <span>Occupied Beds ({totalBeds > 0 ? occupancyRate : 0}%)</span>
+              <span>Vacant Beds ({totalBeds > 0 ? (100 - occupancyRate) : 0}%)</span>
             </div>
             <span style={{ fontWeight: 600 }}>Live Status</span>
           </div>
@@ -9369,6 +9398,8 @@ export default function HostelPage() {
             blocks={blocks}
             wardens={wardens}
             candidateStaff={candidateStaff}
+            isTenantCollege={isTenantCollege}
+            curCampusId={curCampusId}
             handleSaveWarden={handleSaveWarden}
             showToast={showToast}
           />
@@ -9385,6 +9416,8 @@ export default function HostelPage() {
             candidateAdmissions={candidateAdmissions}
             candidateStudents={candidateStudents}
             canAccessAdminEndpoints={canAccessAdminEndpoints}
+            isTenantCollege={isTenantCollege}
+            curCampusId={curCampusId}
             handleSaveAllocation={handleSaveAllocation}
             showToast={showToast}
           />
@@ -14545,7 +14578,7 @@ function RoomModal({
 }
 
 // Warden Modal (Matching Screenshot 2: exactly 3 fields)
-function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handleSaveWarden, showToast }) {
+function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, isTenantCollege = false, curCampusId = null, handleSaveWarden, showToast }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -14553,9 +14586,14 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
     const [hostelStaff, setHostelStaff] = useState([]);
     useEffect(() => {
       let isMounted = true;
+      if (isTenantCollege && !curCampusId) {
+        setHostelStaff([]);
+        return;
+      }
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
       // Fetch fresh Hostel department staff
-      apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-        .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }))
+      apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+        .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }))
         .then((res) => {
           if (isMounted && res?.data) {
             const items = extractCollection(res.data);
@@ -14564,7 +14602,7 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
         })
         .catch(() => {});
       return () => { isMounted = false; };
-    }, []);
+    }, [isTenantCollege, curCampusId]);
 
     const effectiveStaff = useMemo(() => {
       const merged = [];
@@ -14860,6 +14898,8 @@ function AllocationModal({
   candidateAdmissions,
   candidateStudents,
   canAccessAdminEndpoints = false,
+  isTenantCollege = false,
+  curCampusId = null,
   handleSaveAllocation,
   showToast,
 }) {
@@ -14978,17 +15018,23 @@ function AllocationModal({
 
     useEffect(() => {
       let cancelled = false;
+      if (isTenantCollege && !curCampusId) {
+        setModalAdmissions([]);
+        setModalStudents([]);
+        return;
+      }
       const needAdm = !candidateAdmissions || candidateAdmissions.length === 0;
       const needStu = !candidateStudents || candidateStudents.length === 0;
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
       if (canAccessAdminEndpoints && (needAdm || needStu)) {
         Promise.allSettled([
-          needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+          needAdm ? apiClient.get("/api/v1/student-admissions", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
+            apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
           ) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
+            apiClient.get("/api/v1/certificates/students-dropdown", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
           ) : Promise.resolve(null),
         ]).then(([admR, stuActiveR, stuCertR]) => {
           if (cancelled) return;
@@ -15033,6 +15079,10 @@ function AllocationModal({
 
     // Student candidate suggestions: prioritized by Hostel opt-in during admission
     const allCandidates = useMemo(() => {
+      if (isTenantCollege && !curCampusId) {
+        return [];
+      }
+
       const admissionsMap = new Map();
       const registerAdmission = (ca) => {
         if (!ca) return;
@@ -15056,18 +15106,20 @@ function AllocationModal({
 
       let localAdmissionsList = [];
       let localAssignments = null;
-      try {
-        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
-        if (Array.isArray(localAdms) && localAdms.length > 0) {
-          localAdmissionsList = localAdms;
-          localAdms.forEach((entry) => {
-            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
-            registerAdmission(x);
-          });
+      if (!isTenantCollege) {
+        try {
+          const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+          if (Array.isArray(localAdms) && localAdms.length > 0) {
+            localAdmissionsList = localAdms;
+            localAdms.forEach((entry) => {
+              const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+              registerAdmission(x);
+            });
+          }
+          localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
+        } catch {
+          // ignore storage errors
         }
-        localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
-      } catch {
-        // ignore storage errors
       }
 
       const checkHostelOpted = (student, admission) => {
@@ -15313,7 +15365,7 @@ function AllocationModal({
       }
 
       return hostelCandidates;
-    }, [effectiveStudents, effectiveAdmissions, activeAllocationsMap, modal.mode, modal.data, blocks]);
+    }, [effectiveStudents, effectiveAdmissions, activeAllocationsMap, modal.mode, modal.data, blocks, isTenantCollege, curCampusId]);
 
     // Handle student select change - matching Warden selection behavior
     const handleStudentChange = (selectedVal) => {

@@ -210,6 +210,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             int page = 1,
             int pageSize = 20)
         {
+            if (campusId.HasValue && campusId.Value == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return (new List<EnquiryDto>(), 0);
+            }
+
             var conn = await GetOpenConnectionAsync();
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 100);
@@ -220,7 +225,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (campusId.HasValue && campusId.Value > 0)
             {
-                whereClauses.Add("(e.`CampusId` = @CampusId OR e.`CampusId` IS NULL)");
+                whereClauses.Add("e.`CampusId` = @CampusId");
                 p.Add("@CampusId", campusId.Value);
             }
 
@@ -265,8 +270,13 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task<EnquiryStatsDto> GetStatsAsync(int? campusId = null)
         {
+            if (campusId.HasValue && campusId.Value == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return new EnquiryStatsDto();
+            }
+
             var conn = await GetOpenConnectionAsync();
-            string campusFilter = campusId.HasValue && campusId.Value > 0 ? "WHERE (`CampusId` = @CampusId OR `CampusId` IS NULL)" : "";
+            string campusFilter = campusId.HasValue && campusId.Value > 0 ? "WHERE `CampusId` = @CampusId" : "";
 
             string sql = $@"
                 SELECT 

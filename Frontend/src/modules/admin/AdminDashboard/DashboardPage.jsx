@@ -5,12 +5,16 @@ import {
   Award,
   BookOpen,
   CalendarDays,
+  CalendarCheck,
+  CalendarX,
   ChevronRight,
   ClipboardCheck,
   Clock,
+  FileEdit,
   FileText,
   GraduationCap,
   Info,
+  Plus,
   RefreshCw,
   RotateCcw,
   Users,
@@ -75,14 +79,14 @@ const DASHBOARD_API = {
   staffStats: "/api/v1/staff/dashboard-stats",
 };
 
-const QUICK_ACTIONS = [
-  { label: "Enquiries", to: "/dashboard/enquiry-management", icon: addStudentIcon, tone: "teal" },
+const QUICK_SETUP = [
+  { label: "+ Add Campus", to: "/dashboard/settings/campus-configuration", isPlus: true, tone: "setup-green" },
+  { label: "+ Add Board", to: "/dashboard/board-academic-year?tab=boards", isPlus: true, tone: "setup-green" },
+  { label: "+ Create Academic Year", to: "/dashboard/board-academic-year?tab=academic-years", isPlus: true, tone: "setup-green" },
   { label: "Add Student", to: "/dashboard/admission?view=new", icon: addStudentIcon, tone: "green" },
   { label: "Add Staff", to: "/dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
   { label: "Create Group", to: "/dashboard/courses/add", icon: createGroupIcon, tone: "violet" },
   { label: "Create Section", to: "/dashboard/sections?tab=sections&view=add", icon: createSectionIcon, tone: "cyan" },
-  { label: "Create Exam", to: "/dashboard/examinations/add", icon: createExamIcon, tone: "orange" },
-  { label: "Mark Attendance", to: "/dashboard/attendance/student", icon: markAttendanceIcon, tone: "green" },
 ];
 
 function unwrap(payload) {
@@ -124,9 +128,9 @@ function metric(payload, keys) {
 }
 
 function formatNumber(value) {
-  if (value === undefined || value === null || value === "") return "Unavailable";
+  if (value === undefined || value === null || value === "") return "0";
   const num = Number(value);
-  if (!Number.isFinite(num)) return "Unavailable";
+  if (!Number.isFinite(num)) return "0";
   return new Intl.NumberFormat("en-IN").format(num);
 }
 
@@ -242,6 +246,29 @@ function EmptyState({ message = "No data available." }) {
   );
 }
 
+function ZeroStateCard({ icon: Icon, title = "No data available", subtitle, actionLabel, actionTo, onAction }) {
+  return (
+    <div className="dashboard-card-zero-state">
+      <div className="dashboard-zero-icon-wrap">
+        <Icon size={44} strokeWidth={1.5} className="dashboard-zero-icon" />
+      </div>
+      <h3 className="dashboard-zero-title">{title}</h3>
+      {subtitle && <p className="dashboard-zero-subtitle">{subtitle}</p>}
+      {actionLabel && (
+        actionTo ? (
+          <Link to={actionTo} className="dashboard-zero-btn">
+            {actionLabel}
+          </Link>
+        ) : (
+          <button type="button" className="dashboard-zero-btn" onClick={onAction}>
+            {actionLabel}
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
 function CustomDonutTooltip({ active, payload }) {
   if (active && payload && payload.length) {
     const data = payload[0];
@@ -345,7 +372,9 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
 
 function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last year", changePct = "NEW", previousValue, to }) {
   const isAvailable = value !== undefined && value !== null && value !== "";
+  const numVal = Number(value ?? 0);
   const formattedPrev = isAvailable && previousValue !== undefined && previousValue !== null ? formatNumber(previousValue) : "0";
+  const isZeroState = !isAvailable || (numVal === 0 && Number(previousValue ?? 0) === 0);
   const content = (
     <article className={`dashboard-kpi dashboard-kpi-${tone} ${to ? "dashboard-kpi-clickable" : ""}`} style={to ? { cursor: "pointer" } : {}}>
       <div className="dashboard-kpi-pop" role="tooltip">
@@ -358,10 +387,10 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
         <div className="dashboard-kpi-title-wrap">
           <span className="dashboard-kpi-label">{label}</span>
           <div className="dashboard-kpi-value-row">
-            <strong className="dashboard-kpi-value">{loading ? "—" : formatNumber(value)}</strong>
-            <span className="dashboard-kpi-trend">{isAvailable ? changePct : "—"}</span>
+            <strong className="dashboard-kpi-value">{loading ? "—" : formatNumber(value ?? 0)}</strong>
+            {!isZeroState && isAvailable && <span className="dashboard-kpi-trend">{changePct}</span>}
           </div>
-          <span className="dashboard-kpi-subtext">{isAvailable ? changeLabel : "No data available"}</span>
+          {!isZeroState && isAvailable && <span className="dashboard-kpi-subtext">{changeLabel}</span>}
         </div>
       </div>
     </article>
@@ -1339,8 +1368,8 @@ export default function DashboardPage() {
   const kpis = [
     {
       label: "Total Students",
-      value: studentManagementCount ?? studentsKpi.value,
-      previousValue: studentsKpi.previousValue,
+      value: (studentManagementCount ?? studentsKpi.value) ?? 0,
+      previousValue: studentsKpi.previousValue ?? 0,
       icon: totalStudentsIcon,
       tone: "green",
       changeLabel: studentsKpi.label,
@@ -1349,8 +1378,8 @@ export default function DashboardPage() {
     },
     {
       label: "Teaching Staff",
-      value: (staffStatsState.data?.teachingStaff !== undefined ? staffStatsState.data.teachingStaff : teachingKpi.value),
-      previousValue: teachingKpi.previousValue,
+      value: (staffStatsState.data?.teachingStaff !== undefined ? staffStatsState.data.teachingStaff : teachingKpi.value) ?? 0,
+      previousValue: teachingKpi.previousValue ?? 0,
       icon: teachingStaffIcon,
       tone: "blue",
       changeLabel: teachingKpi.label,
@@ -1359,8 +1388,8 @@ export default function DashboardPage() {
     },
     {
       label: "Non-Teaching Staff",
-      value: (staffStatsState.data?.nonTeachingStaff !== undefined ? staffStatsState.data.nonTeachingStaff : nonTeachingKpi.value),
-      previousValue: nonTeachingKpi.previousValue,
+      value: (staffStatsState.data?.nonTeachingStaff !== undefined ? staffStatsState.data.nonTeachingStaff : nonTeachingKpi.value) ?? 0,
+      previousValue: nonTeachingKpi.previousValue ?? 0,
       icon: nonTeachingStaffIcon,
       tone: "orange",
       changeLabel: nonTeachingKpi.label,
@@ -1369,8 +1398,8 @@ export default function DashboardPage() {
     },
     {
       label: "Total Groups",
-      value: groupsKpi.value,
-      previousValue: groupsKpi.previousValue,
+      value: groupsKpi.value ?? 0,
+      previousValue: groupsKpi.previousValue ?? 0,
       icon: totalGroupsIcon,
       tone: "violet",
       changeLabel: groupsKpi.label,
@@ -1379,8 +1408,8 @@ export default function DashboardPage() {
     },
     {
       label: "Total Sections",
-      value: sectionsKpi.value,
-      previousValue: sectionsKpi.previousValue,
+      value: sectionsKpi.value ?? 0,
+      previousValue: sectionsKpi.previousValue ?? 0,
       icon: totalSectionsIcon,
       tone: "cyan",
       changeLabel: sectionsKpi.label,
@@ -1875,6 +1904,45 @@ export default function DashboardPage() {
 
   const greeting = greetingForHour(currentHour);
 
+  const isAccessDenied = (error) => {
+    if (!error) return false;
+    const str = String(error).toLowerCase();
+    return str.includes("access denied") || str.includes("authorization") || str.includes("403") || str.includes("campus");
+  };
+
+  const hasActiveData = Boolean(
+    campusId &&
+    ((summaryState.data?.totalStudents > 0) ||
+     (summaryState.data?.teachingStaff > 0) ||
+     (studentManagementCount > 0) ||
+     (overviewState.data?.totalAdmissions > 0))
+  );
+
+  const hasAdmissionData = Boolean(
+    campusId &&
+    overviewChartData.length > 0 &&
+    (overviewChartData.some((d) => Number(d.studentsJoined || 0) > 0) || Number(overviewState.data?.totalAdmissions || 0) > 0)
+  );
+
+  const hasGroupData = Boolean(
+    campusId &&
+    groupChartData.length > 0 &&
+    groupChartData.some((g) => Number(g.value || 0) > 0)
+  );
+
+  const hasStudentAttData = Boolean(
+    campusId &&
+    (studentAttData.total > 0 || Number(summaryState.data?.totalStudents || 0) > 0)
+  );
+
+  const hasStaffAttData = Boolean(
+    campusId &&
+    (staffAttData.total > 0 || Number(summaryState.data?.teachingStaff || 0) > 0 || Number(summaryState.data?.nonTeachingStaff || 0) > 0)
+  );
+
+  const hasHolidayData = Boolean(campusId && holidaysList.length > 0);
+  const hasExamData = Boolean(campusId && examsList.length > 0);
+
   return (
     <DashboardLayout hidePageHeader contentClassName="cms-content-dashboard" title={null} subtitle={null} actions={null} breadcrumb={["Overview"]}>
       {initialLoading ? <DashboardSkeleton /> : <main className="dashboard-page">
@@ -1887,10 +1955,17 @@ export default function DashboardPage() {
             <p className="dashboard-greeting-sub">Here's what's happening in your college today.</p>
           </div>
           <div className="dashboard-header-controls">
-            <div className="dashboard-last-updated-badge">
-              <Clock size={14} />
-              <span>Last updated <strong>{lastUpdated}</strong></span>
-            </div>
+            {!hasActiveData ? (
+              <div className="dashboard-last-updated-badge dashboard-setup-badge">
+                <Info size={14} />
+                <span>Get started by setting up your college</span>
+              </div>
+            ) : (
+              <div className="dashboard-last-updated-badge">
+                <Clock size={14} />
+                <span>Last updated <strong>{lastUpdated}</strong></span>
+              </div>
+            )}
             <button
               type="button"
               className="cms-btn cms-btn-primary dashboard-refresh-btn"
@@ -1904,8 +1979,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-
-
         {/* 5 KPI Cards with 3D Icons */}
         <section className="dashboard-kpi-grid" aria-label="College metrics">
           {kpis.map((item) => (
@@ -1913,16 +1986,20 @@ export default function DashboardPage() {
           ))}
         </section>
 
-        {/* Quick Actions Bar with 3D Icons */}
-        <nav className="dashboard-quick-actions" aria-label="Quick Actions">
-          <h2>Quick Actions</h2>
+        {/* Quick Setup Bar */}
+        <nav className="dashboard-quick-actions" aria-label="Quick Setup">
+          <h2>Quick Setup</h2>
           <div className="dashboard-quick-actions-list">
-            {QUICK_ACTIONS.map(({ label, to, icon, tone }) => (
+            {QUICK_SETUP.map(({ label, to, icon, tone, isPlus }) => (
               <Link key={label} to={to} className={`dashboard-quick-action tone-${tone}`}>
-                <span className="dashboard-quick-action-icon">
-                  <img src={icon} alt="" aria-hidden="true" />
-                </span>
-                <span>{label}</span>
+                {isPlus ? (
+                  <Plus size={13} strokeWidth={2.5} className="dashboard-plus-icon" />
+                ) : (
+                  <span className="dashboard-quick-action-icon">
+                    <img src={icon} alt="" aria-hidden="true" />
+                  </span>
+                )}
+                <span>{label.replace(/^\+\s*/, "")}</span>
               </Link>
             ))}
           </div>
@@ -1935,10 +2012,16 @@ export default function DashboardPage() {
             <CardHeader title="Admission Overview" />
             {overviewState.loading ? (
               <LoadingState label="Loading overview..." />
+            ) : (!hasAdmissionData || isAccessDenied(overviewState.error)) ? (
+              <ZeroStateCard
+                icon={FileText}
+                title="No data available"
+                subtitle="Add a campus and academic year to start admissions."
+                actionLabel="+ Add Campus"
+                actionTo="/dashboard/settings/campus-configuration"
+              />
             ) : overviewState.error ? (
               <ErrorState message={overviewState.error} onRetry={fetchStudentsOverview} />
-            ) : overviewChartData.length === 0 ? (
-              <EmptyState message="No admission overview data available." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-area-chart-container">
@@ -2048,10 +2131,16 @@ export default function DashboardPage() {
             <CardHeader title="Students by Group" />
             {groupState.loading ? (
               <LoadingState label="Loading groups..." />
+            ) : (!hasGroupData || isAccessDenied(groupState.error)) ? (
+              <ZeroStateCard
+                icon={Users}
+                title="No data available"
+                subtitle="Create a group to view student distribution."
+                actionLabel="+ Create Group"
+                actionTo="/dashboard/courses/add"
+              />
             ) : groupState.error ? (
               <ErrorState message={groupState.error} onRetry={fetchGroupDistribution} />
-            ) : groupChartData.length === 0 ? (
-              <EmptyState message="No group distribution data available." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ overflowX: groupChartData.length > 5 ? "auto" : "visible", width: "100%" }}>
@@ -2132,6 +2221,14 @@ export default function DashboardPage() {
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
+            ) : (!hasStudentAttData || isAccessDenied(studentAttState.error)) ? (
+              <ZeroStateCard
+                icon={CalendarCheck}
+                title="No data available"
+                subtitle="Add students and mark attendance to see today's overview."
+                actionLabel="+ Add Student"
+                actionTo="/dashboard/admission?view=new"
+              />
             ) : studentAttState.error ? (
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
@@ -2242,10 +2339,16 @@ export default function DashboardPage() {
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
+            ) : (!hasStaffAttData || isAccessDenied(staffAttState.error)) ? (
+              <ZeroStateCard
+                icon={UserCheck}
+                title="No data available"
+                subtitle="Add staff and mark attendance to see today's overview."
+                actionLabel="+ Add Staff"
+                actionTo="/dashboard/staff/add"
+              />
             ) : staffAttState.error ? (
               <ErrorState message={staffAttState.error} onRetry={fetchStaffAttendance} />
-            ) : staffAttData.total === 0 ? (
-              <EmptyState message="No staff attendance data available for today." />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
                 {/* Donut Chart & Side Status Legend (Centered Together) */}
@@ -2355,14 +2458,20 @@ export default function DashboardPage() {
           {/* Card 2: Upcoming Holidays & College Breaks */}
           <article className="dashboard-card dashboard-holiday-card">
             <CardHeader
-              title={`Upcoming Holidays (${holidaysList.length})`}
+              title={holidaysList.length > 0 ? `Upcoming Holidays (${holidaysList.length})` : "Upcoming Holidays"}
             />
             {holidayState.loading ? (
               <LoadingState label="Loading holidays..." />
+            ) : (!hasHolidayData || isAccessDenied(holidayState.error)) ? (
+              <ZeroStateCard
+                icon={CalendarX}
+                title="No holidays added"
+                subtitle="Add holidays to manage academic breaks."
+                actionLabel="+ Add Holiday"
+                actionTo="/dashboard/holidays"
+              />
             ) : holidayState.error ? (
               <ErrorState message={holidayState.error} onRetry={fetchUpcomingHolidays} />
-            ) : holidaysList.length === 0 ? (
-              <EmptyState message="No upcoming holidays scheduled." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
@@ -2398,14 +2507,20 @@ export default function DashboardPage() {
           {/* Card 3: Upcoming Examinations */}
           <article className="dashboard-card dashboard-exams-card">
             <CardHeader
-              title={`Upcoming Examinations (${examsList.length})`}
+              title={examsList.length > 0 ? `Upcoming Examinations (${examsList.length})` : "Upcoming Examinations"}
             />
             {examState.loading ? (
               <LoadingState label="Loading exams..." />
+            ) : (!hasExamData || isAccessDenied(examState.error)) ? (
+              <ZeroStateCard
+                icon={FileEdit}
+                title="No examinations scheduled"
+                subtitle="Create an examination to see the upcoming list."
+                actionLabel="+ Create Exam"
+                actionTo="/dashboard/examinations/add"
+              />
             ) : examState.error ? (
               <ErrorState message={examState.error} onRetry={fetchUpcomingExaminations} />
-            ) : examsList.length === 0 ? (
-              <EmptyState message="No upcoming examinations scheduled." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">

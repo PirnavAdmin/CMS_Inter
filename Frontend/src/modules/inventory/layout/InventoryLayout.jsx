@@ -8,8 +8,7 @@ import logo from "@/assets/pirnav-colleges-logo.png";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { inventoryLogout } from "../data/inventorySession.js";
 import { useInventory } from "../InventoryDataContext.jsx";
-import { getAuthUser } from "@/modules/auth/authStorage.js";
-import { can, ACTIONS } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 const menu = [
   ["", "Dashboard", "dashboard", "dashboard"],
@@ -47,13 +46,11 @@ export default function InventoryLayout({ children }) {
         ).length
       : 0);
 
-  const authUser = getAuthUser();
+  const { canView, loading: permsLoading, permissions } = useEffectivePermissions();
   const visibleMenu = menu.filter(([, , , moduleKey]) => {
     if (!moduleKey || moduleKey === "dashboard") return true;
-    if (authUser?.permissions || authUser?.rolePermissions) {
-      return can(moduleKey, ACTIONS.VIEW, authUser?.permissions, authUser);
-    }
-    return true;
+    if (permsLoading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+    return canView(moduleKey);
   });
 
   return (

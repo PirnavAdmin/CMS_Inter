@@ -65,7 +65,8 @@ namespace CollegeManagement.API.Repositories
                     p_AcademicYearId = academicYearId,
                     p_AcademicLevelId = academicLevelId,
                     p_IsActive = isActive,
-                    p_MasterGroupId = masterGroupId
+                    p_MasterGroupId = masterGroupId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -125,7 +126,8 @@ namespace CollegeManagement.API.Repositories
                 {
                     p_BoardId = boardId,
                     p_AcademicYearId = academicYearId,
-                    p_AcademicLevelId = academicLevelId
+                    p_AcademicLevelId = academicLevelId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -163,7 +165,8 @@ namespace CollegeManagement.API.Repositories
                     p_GroupCode = request.GroupCode.Trim(),
                     p_Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                     p_IsActive = request.IsActive,
-                    p_MasterGroupId = (int?)null
+                    p_MasterGroupId = (int?)null,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -320,7 +323,8 @@ namespace CollegeManagement.API.Repositories
                 {
                     p_BoardId = boardId,
                     p_GroupCode = groupCode.Trim(),
-                    p_ExcludeGroupId = excludeGroupId
+                    p_ExcludeGroupId = excludeGroupId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -410,7 +414,8 @@ namespace CollegeManagement.API.Repositories
                 {
                     p_BoardId = boardId,
                     p_AcademicYearId = academicYearId,
-                    p_AcademicLevelId = academicLevelId
+                    p_AcademicLevelId = academicLevelId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken

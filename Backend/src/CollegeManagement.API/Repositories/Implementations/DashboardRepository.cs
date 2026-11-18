@@ -235,20 +235,36 @@ public class DashboardRepository : IDashboardRepository
                     _logger?.LogWarning(staffEx, "Could not fetch direct Staff Management count");
                 }
 
-                // Ensure TotalGroups strictly reflects Group Management (Groups table for Board)
+                // Ensure TotalGroups strictly reflects Group Management (Groups table for Board and College)
                 try
                 {
-                    var groupCount = await conn.ExecuteScalarAsync<int?>(@"
-                        SELECT COUNT(*)
-                        FROM `Groups` g
-                        WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
-                          AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR g.BoardId = @p_BoardId)
-                  AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR g.AcademicYearId = @p_AcademicYearId OR g.AcademicYearId IS NULL);",
-                        new { p_BoardId = boardId, p_AcademicYearId = academicYearId });
-
-                    if (groupCount.HasValue && groupCount.Value > 0)
+                    if (campusId == 999999999)
                     {
-                        summary.TotalGroups = groupCount.Value;
+                        summary.TotalGroups = 0;
+                    }
+                    else
+                    {
+                        int? collegeId = null;
+                        if (campusId.HasValue && campusId.Value > 0)
+                        {
+                            collegeId = await conn.ExecuteScalarAsync<int?>(
+                                "SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId LIMIT 1;",
+                                new { CampusId = campusId.Value });
+                        }
+
+                        var groupCount = await conn.ExecuteScalarAsync<int?>(@"
+                            SELECT COUNT(*)
+                            FROM `Groups` g
+                            WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
+                              AND (@p_CollegeId IS NULL OR @p_CollegeId = 0 OR g.CollegeId = @p_CollegeId)
+                              AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR g.BoardId = @p_BoardId)
+                              AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR g.AcademicYearId = @p_AcademicYearId OR g.AcademicYearId IS NULL);",
+                            new { p_CollegeId = collegeId, p_BoardId = boardId, p_AcademicYearId = academicYearId });
+
+                        if (groupCount.HasValue)
+                        {
+                            summary.TotalGroups = groupCount.Value;
+                        }
                     }
                 }
                 catch (Exception gEx)

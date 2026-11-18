@@ -18,6 +18,7 @@ import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import * as payrollApi from "@/api/payrollApi.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import "./PayrollPage.css";
 
 // 3D Unique Icons
@@ -165,6 +166,8 @@ export default function PayrollPage({ mode = "payroll", layout = true, menuOverr
   const { id, month, staffId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const { selectedCampusId } = useCampusContext();
+  const user = getAuthUser();
+  const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
 
   const [store, setStore] = useState(createEmptyPayrollStore);
   const [toast, setToast] = useState(null);
@@ -177,17 +180,21 @@ export default function PayrollPage({ mode = "payroll", layout = true, menuOverr
     const requestId = ++payrollRequestRef.current;
     let isMounted = true;
     const fetchPayrollFromApi = async () => {
+      if (isTenantCollege && !selectedCampusId) {
+        setStore(createEmptyPayrollStore());
+        return;
+      }
       const campusParams = selectedCampusId != null && selectedCampusId !== ""
         ? { campusId: Number(selectedCampusId) || selectedCampusId }
         : {};
       const results = await Promise.allSettled([
-        payrollApi.getSalaryStructures(),
+        payrollApi.getSalaryStructures(campusParams),
         payrollApi.getEmployees(campusParams),
         payrollApi.getSalaryAssignments(campusParams),
         payrollApi.getPayslips(campusParams),
         payrollApi.getSalaryRevisions(campusParams),
         payrollApi.getBonuses(campusParams),
-        payrollApi.getSalaryAdvances(),
+        payrollApi.getSalaryAdvances(campusParams),
         payrollApi.getPayrollSummary({ month: new Date().getMonth() + 1, year: new Date().getFullYear(), ...campusParams }),
       ]);
 

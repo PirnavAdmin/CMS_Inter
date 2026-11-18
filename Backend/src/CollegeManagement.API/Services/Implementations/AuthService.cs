@@ -241,7 +241,7 @@ namespace CollegeManagement.API.Services.Implementations
                     return new AuthResult
                     {
                         Status = false,
-                        Message = "Invalid Email or Password"
+                        Message = "Your account is inactive. Please contact your administrator."
                     };
                 }
 

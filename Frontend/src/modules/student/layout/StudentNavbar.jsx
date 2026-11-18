@@ -14,14 +14,16 @@ import academicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import { clearAuthSession } from "@/modules/auth/authStorage.js";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import { studentMenuGroups } from "./StudentSidebar.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
-const studentPages = studentMenuGroups.flatMap(([section, links]) => links.map(([label, path, icon]) => ({
-  label, section, icon, to: `/student-dashboard${path ? `/${path}` : ""}`,
+const studentPages = studentMenuGroups.flatMap(([section, links]) => links.map(([label, path, icon, moduleKey]) => ({
+  label, section, icon, moduleKey, to: `/student-dashboard${path ? `/${path}` : ""}`,
 })));
 
 export default function StudentNavbar({ onMenu, sidebarExpanded }) {
   const navigate = useNavigate();
   const { profile, photoUrl, loading, error, notifications = [], unreadCount = 0, markAsRead, markAllAsRead, facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
+  const { canView } = useEffectivePermissions();
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
 
@@ -56,9 +58,14 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
   const [activeResult, setActiveResult] = useState(0);
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const availableStudentPages = studentPages.filter((page) => {
-    if (page.to.endsWith("/transport")) return facilityAccess.type === "transport";
-    if (page.to.endsWith("/hostel")) return facilityAccess.type === "hostel";
-    return true;
+    if (page.to.endsWith("/transport")) {
+      return !facilityAccess.loading && facilityAccess.type === "transport" && canView(page.moduleKey || "transport");
+    }
+    if (page.to.endsWith("/hostel")) {
+      return !facilityAccess.loading && facilityAccess.type === "hostel" && canView(page.moduleKey || "hostel-management");
+    }
+    if (!page.moduleKey || page.moduleKey === "dashboard") return true;
+    return canView(page.moduleKey);
   });
   const suggestions = availableStudentPages.filter((page) => terms.every((term) => `${page.label} ${page.section}`.toLowerCase().includes(term)));
 
@@ -168,8 +175,8 @@ export default function StudentNavbar({ onMenu, sidebarExpanded }) {
           </button>
           {profileOpen ? (
             <div className="sp-profile-dropdown">
-              <Link to="/student-dashboard/profile" onClick={() => setProfileOpen(false)}><UserRound size={16} /> My Profile</Link>
-              <Link to="/student-dashboard/settings" onClick={() => setProfileOpen(false)}><Settings size={16} /> Settings</Link>
+              {canView("profile") ? <Link to="/student-dashboard/profile" onClick={() => setProfileOpen(false)}><UserRound size={16} /> My Profile</Link> : null}
+              {canView("settings") ? <Link to="/student-dashboard/settings" onClick={() => setProfileOpen(false)}><Settings size={16} /> Settings</Link> : null}
               <div className="sp-profile-divider" />
               <button
                 type="button"

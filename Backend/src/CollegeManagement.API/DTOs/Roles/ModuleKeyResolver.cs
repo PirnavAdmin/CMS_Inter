@@ -9,6 +9,11 @@ namespace CollegeManagement.API.DTOs.Roles
         {
             // Overview & Academic
             { "dashboard", "Dashboard" },
+            { "parent-dashboard", "Dashboard" },
+            { "accountant-dashboard", "Dashboard" },
+            { "exam-cell-dashboard", "Dashboard" },
+            { "driver-dashboard", "Dashboard" },
+            { "inventory-notifications", "Dashboard" },
             { "board-academic-year", "Board & Academic Year" },
             { "board-academic-years", "Board & Academic Year" },
             { "group-management", "Group Management" },
@@ -24,9 +29,12 @@ namespace CollegeManagement.API.DTOs.Roles
             { "warden-holidays", "Holiday Management" },
             { "driver-holidays", "Holiday Management" },
             { "accountant-holidays", "Holiday Management" },
+            { "exam-cell-holiday-management", "Holiday Management" },
 
             // Student & Admissions
             { "student-admission", "Student Admission" },
+            { "enquiry-management", "Enquiry Management" },
+            { "enquiries", "Enquiry Management" },
             { "student-management", "Student Management" },
             { "parent-children", "Student Management" },
             { "section-allocation", "Section Allocation" },
@@ -139,6 +147,7 @@ namespace CollegeManagement.API.DTOs.Roles
             { "accountant-settings", "Settings" },
             { "exam-cell-settings", "Settings" },
             { "inventory-settings", "Settings" },
+            { "warden-settings", "Settings" },
             { "roles-permissions", "Roles & Permissions" },
             { "profile", "My Profile" },
             { "my-profile", "My Profile" },
@@ -147,7 +156,29 @@ namespace CollegeManagement.API.DTOs.Roles
             { "exam-cell-profile", "My Profile" },
             { "inventory-profile", "My Profile" },
             { "warden-profile", "My Profile" },
-            { "parent-profile", "My Profile" }
+            { "parent-profile", "My Profile" },
+
+            // Receptionist & Non-Teaching Portal Aliases
+            { "receptionist-dashboard", "Dashboard" },
+            { "receptionist-my-tasks", "Dashboard" },
+            { "non-teaching-dashboard", "Dashboard" },
+            { "non-teaching-tasks", "Dashboard" },
+            { "receptionist-profile", "My Profile" },
+            { "non-teaching-profile", "My Profile" },
+            { "receptionist-my-attendance", "Staff Attendance" },
+            { "non-teaching-attendance", "Staff Attendance" },
+            { "receptionist-leave-management", "Staff Leave Management" },
+            { "non-teaching-leave", "Staff Leave Management" },
+            { "receptionist-payslips", "Payroll" },
+            { "non-teaching-payslip", "Payroll" },
+            { "receptionist-announcements", "Reports & Analytics" },
+            { "non-teaching-announcements", "Reports & Analytics" },
+            { "receptionist-enquiries", "Enquiry Management" },
+            { "non-teaching-enquiries", "Enquiry Management" },
+            { "receptionist-department-portal", "Department & Designation" },
+            { "non-teaching-department", "Department & Designation" },
+            { "receptionist-help-support", "Settings" },
+            { "non-teaching-support", "Settings" }
         };
 
         public static string ResolveToSubModule(string? moduleId)

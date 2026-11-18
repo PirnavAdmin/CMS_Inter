@@ -9,7 +9,7 @@ import {
 } from "./rolesPermissions.constants.js";
 import { normalizeModuleKey, normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
-import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
+import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, RECEPTIONIST_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
 
 const cloneItem = (item) => {
   if (!item || typeof item !== "object") return item;
@@ -27,15 +27,28 @@ const apiResult = (data, source = "api") => ({ data: clone(data), meta: { source
 
 const notifyRolesUpdated = () => {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("roles-updated"));
     try {
       localStorage.setItem("cms_permissions_updated_at", String(Date.now()));
     } catch {
       // ignore
     }
+    window.dispatchEvent(new Event("roles-updated"));
   }
 };
 
+// Live role-code -> numeric roleId map populated from backend responses (getRoles / getRoleById).
+const dynamicRoleIdByCode = new Map();
+
+const cacheRoleIdMapping = (role) => {
+  if (!role || typeof role !== "object") return;
+  const numericId = Number(role.roleId ?? role.id);
+  const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
+  if (code && !Number.isNaN(numericId) && numericId > 0) {
+    dynamicRoleIdByCode.set(code, numericId);
+  }
+};
+
+// Non-colliding fallback IDs for core seeded roles; other roles resolve dynamically via dynamicRoleIdByCode.
 const ROLE_CODE_TO_ID = {
   SUPER_ADMIN: 1,
   ADMIN: 2,
@@ -52,22 +65,22 @@ const ROLE_CODE_TO_ID = {
   PLACEMENT_OFFICER: 11,
   BUS_DRIVER: 12,
   DRIVER: 12,
-  ATTENDANT: 13,
   OFFICE_STAFF: 13,
-  RECEPTIONIST: 13,
   DEAN: 14,
-  LAB_ASSISTANT: 14,
-  ADMISSION_STAFF: 14,
   PRINCIPAL: 15,
   INVENTORY_MANAGER: 16,
   INVENTORY: 16,
   UNASSIGNED: 17,
+  TRANSPORT_MANAGER: 18,
 };
 
 const resolveRoleIdParam = (roleId, roleCode) => {
   const parsed = Number(roleId);
   if (!Number.isNaN(parsed) && parsed > 0) return parsed;
   const norm = normalizeRoleCode(roleCode || roleId);
+  if (norm && dynamicRoleIdByCode.has(norm)) {
+    return dynamicRoleIdByCode.get(norm);
+  }
   return ROLE_CODE_TO_ID[norm] || roleId;
 };
 
@@ -81,7 +94,7 @@ const normalizeRole = (role = {}) => {
   return {
     ...role,
     id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-    roleId: Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
+    roleId: Number(role.roleId ?? role.id) || dynamicRoleIdByCode.get(code) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
     code,
     name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
     description: role.description || matchedSeed?.description || "",
@@ -120,7 +133,10 @@ const normalizeUserAssignment = (user = {}) => {
     department: user.department || "",
     designation: user.designation || "",
     roleCodes: roleCodes.map(normalizeRoleCode).filter(Boolean),
-    status: user.status || "Active",
+    isActive: user.isActive !== undefined && user.isActive !== null
+      ? Boolean(user.isActive)
+      : String(user.status || "Active").trim().toLowerCase() !== "inactive",
+    status: user.status || (user.isActive === false ? "Inactive" : "Active"),
   };
 };
 
@@ -189,7 +205,10 @@ export async function getRoles(filters = {}) {
     const response = await apiClient.get(apiEndpoints.roles.cards, { params: filters });
     const payload = response?.data?.data || response?.data || [];
     if (Array.isArray(payload) && payload.length > 0) {
-      return apiResult(sortRolesByPriority(payload.map(normalizeRole)), "api");
+      payload.forEach(cacheRoleIdMapping);
+      const normalizedRoles = payload.map(normalizeRole);
+      normalizedRoles.forEach(cacheRoleIdMapping);
+      return apiResult(sortRolesByPriority(normalizedRoles), "api");
     }
   } catch (err) {
     console.warn("Live getRoles failed, falling back to cached/seed data:", err?.message);
@@ -203,7 +222,12 @@ export async function getRoleById(roleId) {
   const targetId = resolveRoleIdParam(roleId);
   try {
     const response = await apiClient.get(apiEndpoints.roles.getById(targetId));
-    if (response?.data?.data) return apiResult(normalizeRole(response.data.data), "api");
+    if (response?.data?.data) {
+      cacheRoleIdMapping(response.data.data);
+      const normalized = normalizeRole(response.data.data);
+      cacheRoleIdMapping(normalized);
+      return apiResult(normalized, "api");
+    }
   } catch (err) {
     console.warn("Live getRoleById failed:", err?.message);
   }
@@ -224,7 +248,9 @@ export async function createRole(payload = {}) {
       newDesignationName: payload.newDesignationName || null,
     });
     notifyRolesUpdated();
-    return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
+    const created = normalizeRole(response?.data?.data || response?.data);
+    cacheRoleIdMapping(created);
+    return apiResult(created, "api");
   } catch (err) {
     console.error("createRole failed:", err);
     throw err;
@@ -244,7 +270,9 @@ export async function updateRole(roleId, payload = {}) {
       isActive: payload.isActive ?? true,
     });
     notifyRolesUpdated();
-    return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
+    const created = normalizeRole(response?.data?.data || response?.data);
+    cacheRoleIdMapping(created);
+    return apiResult(created, "api");
   } catch (err) {
     console.error("updateRole failed:", err);
     throw err;
@@ -347,6 +375,17 @@ export function getRoleEligibleModules(roleCode, catalog = ALL_PERMISSION_MODULE
   }
   if (normalizeRoleCode(roleCode) === "TRANSPORT_MANAGER") {
     return TRANSPORT_MANAGER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  const normalizedRole = normalizeRoleCode(roleCode);
+  if (
+    normalizedRole === "RECEPTIONIST" ||
+    normalizedRole === "NON_TEACHING" ||
+    normalizedRole === "NON_TEACHING_STAFF"
+  ) {
+    return RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => ({
       ...item,
       name: item.label,
     }));
@@ -570,6 +609,7 @@ export async function getUserRoleAssignments(params = {}) {
   const search = String(params.search || "").trim().toLowerCase();
   const roleCode = params.roleCode ? normalizeRoleCode(params.roleCode) : null;
   const userType = String(params.userType || "").trim().toLowerCase();
+  const statusParam = String(params.status || "").trim().toLowerCase();
   const page = Number(params.page || 1);
   const pageSize = Number(params.pageSize || 8);
 
@@ -578,7 +618,8 @@ export async function getUserRoleAssignments(params = {}) {
       .some((value) => String(value || "").toLowerCase().includes(search));
     const matchesRole = !roleCode || (user.roleCodes || []).includes(roleCode);
     const matchesUserType = !userType || String(user.userType || "").toLowerCase() === userType;
-    return matchesSearch && matchesRole && matchesUserType;
+    const matchesStatus = !statusParam || statusParam === "all" || String(user.status || "Active").toLowerCase() === statusParam;
+    return matchesSearch && matchesRole && matchesUserType && matchesStatus;
   });
   const start = (page - 1) * pageSize;
   return apiResult({
@@ -612,6 +653,27 @@ export async function removeRoleFromUser(userId, roleCode) {
     return apiResult({ userId, roleCode }, "api");
   } catch (err) {
     console.error("removeRoleFromUser failed:", err);
+    throw err;
+  }
+}
+
+export async function updateUserStatus(userId, isActive, reason = "") {
+  try {
+    const response = await apiClient.patch(apiEndpoints.roles.updateUserStatus(userId), {
+      isActive: Boolean(isActive),
+      reason,
+    });
+    notifyRolesUpdated();
+    return apiResult(
+      response?.data?.data || {
+        userId,
+        isActive: Boolean(isActive),
+        status: isActive ? "Active" : "Inactive",
+      },
+      "api",
+    );
+  } catch (err) {
+    console.error("updateUserStatus failed:", err);
     throw err;
   }
 }

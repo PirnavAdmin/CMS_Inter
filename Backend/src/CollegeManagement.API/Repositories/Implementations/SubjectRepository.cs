@@ -46,6 +46,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             int? groupId = null,
             int? academicLevelId = null,
             bool? isActive = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -59,7 +60,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_GroupId = groupId,
                     p_AcademicLevelId = academicLevelId,
                     p_IsActive = isActive,
-                    p_CollegeId = (int?)null
+p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -95,6 +96,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             int boardId,
             int groupId,
             int academicLevelId,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -105,7 +107,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     p_BoardId = boardId,
                     p_GroupId = groupId,
-                    p_AcademicLevelId = academicLevelId
+                    p_AcademicLevelId = academicLevelId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -157,12 +160,13 @@ namespace CollegeManagement.API.Repositories.Implementations
         // GET ACTIVE SUBJECTS
         // =========================================================
 
-        public async Task<List<SubjectDto>> GetActiveAsync(CancellationToken cancellationToken = default)
+        public async Task<List<SubjectDto>> GetActiveAsync(int? collegeId = null, CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
 
             var cmd = new CommandDefinition(
                 "sp_GetActiveSubjects",
+                new { p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
             );
@@ -181,6 +185,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             int? groupId,
             int? academicLevelId,
             bool? isActive,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -193,7 +198,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_BoardId = boardId,
                     p_GroupId = groupId,
                     p_AcademicLevelId = academicLevelId,
-                    p_IsActive = isActive
+                    p_IsActive = isActive,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken

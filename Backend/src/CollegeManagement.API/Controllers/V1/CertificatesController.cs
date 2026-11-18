@@ -170,6 +170,10 @@ public class CertificatesController : ControllerBase
         CancellationToken ct = default)
     {
         campusId = GetCampusIdFromRequest(campusId);
+        if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new List<StudentCertificateDropdownDto>());
+        }
         var students = await _service.GetStudentsDropdownAsync(campusId, boardId, academicYearId, ct);
         return Ok(students);
     }

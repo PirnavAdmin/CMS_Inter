@@ -12,6 +12,7 @@ import managementIconsSprite from "@/assets/sidebar-3d/management-icons-sprite.p
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { Route as RouteIcon } from "lucide-react";
 import { useTransportManager } from "../TransportManagerContext.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 export const generatedSidebarIcons = {
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
@@ -129,7 +130,17 @@ export const NAV_GROUPS = [
 
 export default function TransportManagerSidebar() {
   const { sidebarOpen, sidebarCollapsed, closeSidebar } = useTransportManager();
+  const { canView, loading, permissions } = useEffectivePermissions();
   const location = useLocation();
+
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+      if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+      return canView(item.moduleKey);
+    }),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -146,7 +157,7 @@ export default function TransportManagerSidebar() {
 
         {/* Navigation List */}
         <nav className="cms-nav">
-          {NAV_GROUPS.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label} className="cms-nav-group-wrap">
               <div className="cms-nav-group">{group.label}</div>
               {group.items.map((item) => {

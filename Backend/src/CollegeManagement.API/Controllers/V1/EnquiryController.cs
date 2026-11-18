@@ -61,6 +61,19 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    data = Enumerable.Empty<object>(),
+                    totalCount = 0,
+                    page,
+                    pageSize,
+                    totalPages = 0
+                });
+            }
+
             try
             {
                 var (items, totalCount) = await _enquiryService.ListEnquiriesAsync(campusId, status, search, page, pageSize);
@@ -88,6 +101,11 @@ namespace CollegeManagement.API.Controllers.V1
         [Authorize]
         public async Task<IActionResult> GetStats([FromQuery] int? campusId = null)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new { success = true, data = new EnquiryStatsDto() });
+            }
+
             try
             {
                 var stats = await _enquiryService.GetStatsAsync(campusId);

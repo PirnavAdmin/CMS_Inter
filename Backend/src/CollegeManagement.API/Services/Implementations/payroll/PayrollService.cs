@@ -41,10 +41,11 @@ namespace CollegeManagement.API.Services.Implementations.Payroll
         public async Task<IEnumerable<SalaryStructureDto>>
             GetSalaryStructuresAsync(
                 string? staffType,
-                string? search)
+                string? search,
+                int? campusId = null)
         {
             return await _payrollRepository
-                .GetSalaryStructuresAsync(staffType, search);
+                .GetSalaryStructuresAsync(staffType, search, campusId);
         }
 
         public async Task<SalaryStructureDto?>
