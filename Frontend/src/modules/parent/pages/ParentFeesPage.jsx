@@ -7,6 +7,7 @@ import { useParentPortal } from "../context/ParentPortalContext.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import ParentPayFeeScreen from "./ParentPayFeeScreen.jsx";
 import ParentCollectPaymentModal from "../components/ParentCollectPaymentModal.jsx";
+import { printReceiptElement } from "../utils/printReceipt.js";
 import "../ParentDashboard.css";
 
 export default function ParentFeesPage({ initialView }) {
@@ -441,61 +442,69 @@ export default function ParentFeesPage({ initialView }) {
           <Modal
             title={`Fee Payment Receipt — ${selectedReceipt.receiptNo}`}
             onClose={handleCloseReceipt}
-            size="lg"
+            className="parent-fee-receipt-modal"
             footer={
-              <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={handleCloseReceipt}>Close</button>
-                <button type="button" className="cms-btn cms-btn-primary" onClick={() => window.print()}>
-                  <Printer size={15} /> Print Receipt
+              <div className="parent-receipt-modal-actions">
+                <button type="button" className="cms-btn cms-btn-ghost parent-close-btn" onClick={handleCloseReceipt}>
+                  Close
                 </button>
-              </>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary parent-done-btn"
+                  onClick={() => printReceiptElement("parent-fee-receipt-printable", `Fee Payment Receipt — ${selectedReceipt.receiptNo}`)}
+                >
+                  <Printer size={15} style={{ marginRight: 6 }} /> Print Receipt
+                </button>
+              </div>
             }
           >
-            <div className="parent-receipt-sheet">
+            <div id="parent-fee-receipt-printable" className="parent-receipt-sheet">
               <div className="parent-receipt-header">
                 <h2>PIRNAV JUNIOR COLLEGE</h2>
                 <p>Campus Road, Jubilee Hills, Hyderabad - 500033</p>
-                <strong style={{ display: "block", marginTop: 6, fontSize: 15 }}>OFFICIAL FEE PAYMENT RECEIPT</strong>
+                <div className="receipt-title-badge">OFFICIAL FEE PAYMENT RECEIPT</div>
               </div>
 
-              <div className="parent-profile-meta-grid" style={{ marginBottom: 16 }}>
-                <div className="parent-meta-item"><span>Receipt No:</span> <strong>{selectedReceipt.receiptNo}</strong></div>
-                <div className="parent-meta-item"><span>Date of Payment:</span> <strong>{selectedReceipt.date}</strong></div>
-                <div className="parent-meta-item"><span>Student Name:</span> <strong>{child.name}</strong></div>
-                <div className="parent-meta-item"><span>Admission No:</span> <strong>{child.admissionNo}</strong></div>
-                <div className="parent-meta-item"><span>Course & Group:</span> <strong>{child.programme}</strong></div>
-                <div className="parent-meta-item"><span>Payment Mode:</span> <strong>{selectedReceipt.method}</strong></div>
+              <div className="parent-receipt-meta-grid">
+                <div><span>Receipt Number:</span> <strong>{selectedReceipt.receiptNo}</strong></div>
+                <div><span>Date of Payment:</span> <strong>{selectedReceipt.date}</strong></div>
+                <div><span>Student Name:</span> <strong>{child?.name || "Student"}</strong></div>
+                <div><span>Admission Number:</span> <strong>{child?.admissionNo || `ADM-${child?.id}`}</strong></div>
+                <div><span>Course & Group:</span> <strong>{child?.programme || child?.group || "Intermediate 1st Year (MPC)"}</strong></div>
+                <div><span>Payment Mode:</span> <strong>{selectedReceipt.method || "Online"}</strong></div>
               </div>
 
               <table className="parent-receipt-table">
                 <thead>
                   <tr>
-                    <th>Description</th>
-                    <th>Transaction Reference</th>
-                    <th>Amount Paid</th>
-                    <th>Status</th>
+                    <th style={{ width: "36%" }}>Description</th>
+                    <th style={{ width: "28%" }}>Transaction Reference</th>
+                    <th style={{ width: "18%", textAlign: "right" }}>Amount Paid</th>
+                    <th style={{ width: "18%", textAlign: "center" }}>Payment Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>{selectedReceipt.paidFor}</td>
-                    <td>{selectedReceipt.txnId}</td>
-                    <td style={{ fontWeight: 700 }}>₹{selectedReceipt.amount.toLocaleString()}</td>
-                    <td>
-                      <span className="cms-badge cms-badge-active">Success</span>
+                    <td className="cell-desc">{selectedReceipt.paidFor}</td>
+                    <td className="cell-txn">{selectedReceipt.txnId}</td>
+                    <td className="cell-amount">₹{Number(selectedReceipt.amount || 0).toLocaleString()}</td>
+                    <td className="cell-status">
+                      <span className={`cms-badge ${/pending/i.test(selectedReceipt.status) ? "cms-badge-warn" : /reject|fail/i.test(selectedReceipt.status) ? "cms-badge-danger" : "cms-badge-active"}`}>
+                        {selectedReceipt.status || "Success"}
+                      </span>
                     </td>
                   </tr>
                 </tbody>
               </table>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 30, paddingTop: 16, borderTop: "1px solid #cbd5e1" }}>
-                <div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>This is a computer-generated fee receipt.</div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>Valid for Income Tax deduction under section 80C.</div>
+              <div className="parent-receipt-foot-block">
+                <div className="parent-receipt-foot-legal">
+                  <div>This is an official computer-generated fee receipt.</div>
+                  <div>Valid for Income Tax deduction under section 80C.</div>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ height: 35 }}></div>
-                  <div style={{ borderTop: "1px solid #334155", paddingTop: 4, fontSize: 12, fontWeight: 600 }}>Accounts Officer / Cashier</div>
+                <div className="parent-receipt-foot-signature">
+                  <div style={{ height: 20 }}></div>
+                  <div className="sig-line">Accounts Officer / Cashier</div>
                 </div>
               </div>
             </div>
