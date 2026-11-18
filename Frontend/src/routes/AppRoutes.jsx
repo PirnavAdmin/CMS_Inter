@@ -565,23 +565,23 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute requireParent />}>
         <Route element={<ParentPortalProvider><ErrorBoundary><Outlet /></ErrorBoundary></ParentPortalProvider>}>
           <Route path="/parent-dashboard" element={<ParentDashboard />} />
-          <Route path="/parent-dashboard/children" element={<ParentChildrenPage />} />
-          <Route path="/parent-dashboard/children/:id" element={<ParentChildDetailsRoute />} />
-          <Route path="/parent-dashboard/attendance" element={<ParentAttendancePage />} />
-          <Route path="/parent-dashboard/academics" element={<ParentAcademicsPage />} />
-          <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
+          <Route path="/parent-dashboard/children" element={<ProtectedRoute requiredModule="student-management"><ParentChildrenPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/children/:id" element={<ProtectedRoute requiredModule="student-management"><ParentChildDetailsRoute /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/attendance" element={<ProtectedRoute requiredModule="attendance"><ParentAttendancePage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/academics" element={<ProtectedRoute requiredModule="results"><ParentAcademicsPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/examinations" element={<ProtectedRoute requiredModule="examination"><ParentExaminationsPage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
-          <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
-          <Route path="/parent-dashboard/pay-fee" element={<ParentFeesPage initialView="pay" />} />
-          <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
+          <Route path="/parent-dashboard/fees" element={<ProtectedRoute requiredModule="fee-management"><ParentFeesPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/pay-fee" element={<ProtectedRoute requiredModule="fee-management"><ParentFeesPage initialView="pay" /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/timetable" element={<ProtectedRoute requiredModule="timetable"><ParentTimetablePage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
-          <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />
-          <Route path="/parent-dashboard/announcements" element={<ParentAnnouncementsPage />} />
+          <Route path="/parent-dashboard/communication" element={<ProtectedRoute requiredModule="reports-analytics"><ParentCommunicationPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/announcements" element={<ProtectedRoute requiredModule="reports-analytics"><ParentAnnouncementsPage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/events" element={<Navigate to="/parent-dashboard/announcements?tab=events" replace />} />
-          <Route path="/parent-dashboard/documents" element={<ParentDocumentsPage />} />
+          <Route path="/parent-dashboard/documents" element={<ProtectedRoute requiredModule="certificates"><ParentDocumentsPage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/notifications" element={<ParentNotificationsPage />} />
-          <Route path="/parent-dashboard/profile" element={<ParentProfilePage />} />
-          <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
+          <Route path="/parent-dashboard/profile" element={<ProtectedRoute requiredModule="profile"><ParentProfilePage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/settings" element={<ProtectedRoute requiredModule="settings"><ParentSettingsPage /></ProtectedRoute>} />
         </Route>
       </Route>
 
@@ -603,11 +603,14 @@ export default function AppRoutes() {
         <Route path="/transport-manager" element={<Navigate to="/transport-manager/overview" replace />} />
         <Route path="/transport-manager/*" element={<TransportManagerRoutes />} />
       </Route>
-      <Route path="/driver" element={<DriverDashboard />} />
-      <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
-      <Route path="/driver/*" element={<DriverDashboard />} />
-      <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
-      <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      {/* Driver & Inventory Portals Protected with Authentication */}
+      <Route element={<ProtectedRoute />}>
+        <Route path="/driver" element={<DriverDashboard />} />
+        <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
+        <Route path="/driver/*" element={<DriverDashboard />} />
+        <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
+        <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      </Route>
       <Route path="/staff/onboarding/:id" element={<StaffManagementPage />} />
       <Route path="/staff/onboarding/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />

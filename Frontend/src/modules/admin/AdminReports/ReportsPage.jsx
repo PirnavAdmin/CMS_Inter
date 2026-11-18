@@ -1,9 +1,7 @@
 import { SkeletonTable } from "@/shared/components/Skeleton.jsx";
-import { useSearchParams } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  AlertTriangle,
   Award,
   BriefcaseBusiness,
   CalendarCheck,
@@ -27,7 +25,6 @@ import {
   UserCheck,
   Users,
   WalletCards,
-  X,
 } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import {
@@ -52,7 +49,6 @@ import {
   getSubjectsDetails,
   getGroupsDetails,
   getSectionsDetails,
-  getAuditLogs,
   exportReportPdf,
   exportReportExcel,
 } from "@/api/reportApi.js";
@@ -883,23 +879,6 @@ export default function ReportsPage() {
   const [detailPage, setDetailPage] = useState(1);
   const [detailPageSize, setDetailPageSize] = useState(10);
 
-  // Top Tabs & Audit Log states
-  const [searchParams, setSearchParams] = useSearchParams();
-  const activeMainTab = ["audit-logs", "auditLogs"].includes(searchParams.get("tab")) ? "auditLogs" : "overview";
-  const setActiveMainTab = useCallback((tab) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("tab", tab === "auditLogs" ? "audit-logs" : "overview");
-    if (next.toString() !== searchParams.toString()) setSearchParams(next);
-  }, [searchParams, setSearchParams]);
-  const previousMainTab = useRef(null);
-  const auditRequested = useRef(false);
-  const [auditLogData, setAuditLogData] = useState([]);
-  const [auditLogLoading, setAuditLogLoading] = useState(false);
-  const [auditLogError, setAuditLogError] = useState("");
-  const [auditLogSearch, setAuditLogSearch] = useState("");
-  const [auditLogPage, setAuditLogPage] = useState(1);
-  const auditLogPageSize = 12;
-
   const initialized = useRef(false);
   const mountedRef = useRef(true);
   const requestControllersRef = useRef({});
@@ -926,7 +905,6 @@ export default function ReportsPage() {
   const syncedCampusRef = useRef(selectedCampusId || selectedCampus?.id || "");
   const syncedBoardRef = useRef(selectedBoardId || selectedBoard?.id || "");
   const syncedYearRef = useRef(selectedAcademicYearId || selectedAcademicYear?.id || "");
-  const lastAuditFilterKeyRef = useRef("");
 
   // Load Boards scoped to currently chosen campus (directly from CampusBoards via API)
   const loadBoardsForCampus = useCallback(async (campusVal) => {
@@ -1368,49 +1346,6 @@ export default function ReportsPage() {
     }
   }, [filters]);
 
-  const loadAuditLogs = useCallback(async (customFilters = null) => {
-    const targetFilters = customFilters || filters;
-    const params = buildReportQuery(targetFilters);
-    lastAuditFilterKeyRef.current = JSON.stringify(params);
-    auditRequested.current = true;
-    setAuditLogLoading(true);
-    setAuditLogError("");
-    setAuditLogPage(1);
-    try {
-      const res = await getAuditLogs(params);
-      const list = res.data?.records || res.data?.details || (Array.isArray(res.data) ? res.data : []);
-      setAuditLogData(list);
-    } catch (err) {
-      setAuditLogError(getApiErrorMessage(err) || "Failed to load audit logs.");
-      setAuditLogData([]);
-    } finally {
-      setAuditLogLoading(false);
-    }
-  }, [filters]);
-
-  useEffect(() => {
-    const previous = previousMainTab.current;
-    previousMainTab.current = activeMainTab;
-    const currentKey = JSON.stringify(buildReportQuery(filters));
-    if (activeMainTab === "auditLogs" && (previous !== activeMainTab || lastAuditFilterKeyRef.current !== currentKey) && (!auditRequested.current || lastAuditFilterKeyRef.current !== currentKey)) {
-      loadAuditLogs(filters);
-    }
-  }, [activeMainTab, filters, loadAuditLogs]);
-
-  const filteredAuditLogs = useMemo(() => {
-    if (!Array.isArray(auditLogData)) return [];
-    if (!auditLogSearch.trim()) return auditLogData;
-    const q = auditLogSearch.toLowerCase().trim();
-    return auditLogData.filter((item) =>
-      Object.values(item).some((val) => val !== null && val !== undefined && String(val).toLowerCase().includes(q))
-    );
-  }, [auditLogData, auditLogSearch]);
-
-  const totalAuditPages = Math.max(1, Math.ceil(filteredAuditLogs.length / auditLogPageSize));
-  const safeAuditPage = Math.min(Math.max(1, auditLogPage), totalAuditPages);
-  const auditStartIndex = (safeAuditPage - 1) * auditLogPageSize;
-  const pageAuditLogs = filteredAuditLogs.slice(auditStartIndex, auditStartIndex + auditLogPageSize);
-
   const selectDetailCard = (card) => {
     loadDetailData(card.key);
   };
@@ -1423,10 +1358,6 @@ export default function ReportsPage() {
         showToast("From Date must be earlier than or equal to To Date.", "warning");
         return;
       }
-    }
-    if (activeMainTab === "auditLogs") {
-      loadAuditLogs(activeFilters);
-      return;
     }
     setLoading(true);
     setError("");
@@ -1445,7 +1376,7 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeMainTab, filters, loadAuditLogs, loadDetailData, loading, selectedCardKey, showToast]);
+  }, [filters, loadDetailData, loading, selectedCardKey, showToast]);
 
   const resetReports = () => {
     const defaultFilters = {
@@ -1467,12 +1398,6 @@ export default function ReportsPage() {
       if (prev?.url) URL.revokeObjectURL(prev.url);
       return null;
     });
-    auditRequested.current = false;
-    lastAuditFilterKeyRef.current = "";
-    setAuditLogData([]);
-    setAuditLogError("");
-    setAuditLogSearch("");
-    setAuditLogPage(1);
     setError("");
     showToast("Filters reset. Click 'Generate Report' to view metrics.", "info");
   };
@@ -1627,30 +1552,6 @@ export default function ReportsPage() {
     >
       <Toast message={toast?.message || ""} type={toast?.type || "info"} onClose={() => setToast(null)} />
 
-      {/* Navigation Tabs: Reports Overview vs Audit Logs */}
-      <div className="reports-tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeMainTab === "overview"}
-          className={`reports-tab ${activeMainTab === "overview" ? "is-active" : ""}`}
-          onClick={() => setActiveMainTab("overview")}
-        >
-          Reports Overview
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeMainTab === "auditLogs"}
-          className={`reports-tab ${activeMainTab === "auditLogs" ? "is-active" : ""}`}
-          onClick={() => {
-            setActiveMainTab("auditLogs");
-          }}
-        >
-          Audit Logs
-        </button>
-      </div>
-
       {/* Cascading Filter Bar */}
       <section className="cms-card reports-filter-card">
         <div className="cms-card-body">
@@ -1660,10 +1561,10 @@ export default function ReportsPage() {
             ))}
           </div>
           <div className="reports-filter-actions">
-            <button className="cms-btn cms-btn-primary" onClick={() => generateReport()} disabled={loading || auditLogLoading}>
-              {loading || auditLogLoading ? "Loading Data..." : activeMainTab === "auditLogs" ? "Filter Logs" : "Generate Report"}
+            <button className="cms-btn cms-btn-primary" onClick={() => generateReport()} disabled={loading}>
+              {loading ? "Loading Data..." : "Generate Report"}
             </button>
-            <button className="cms-btn cms-btn-ghost" onClick={resetReports} disabled={loading || auditLogLoading}>
+            <button className="cms-btn cms-btn-ghost" onClick={resetReports} disabled={loading}>
               <RotateCcw size={14} /> Reset
             </button>
           </div>
@@ -1679,126 +1580,8 @@ export default function ReportsPage() {
         </div>
       ) : null}
 
-      {/* Audit Logs Tab View */}
-      {activeMainTab === "auditLogs" ? (
-        <section className="reports-detail-section" style={{ marginTop: "16px" }}>
-          <div className="reports-detail-head">
-            <div className="reports-detail-title-group">
-              <h3>System Audit &amp; Activity Logs</h3>
-              <p>Showing {filteredAuditLogs.length} audit trail records matching active filters</p>
-            </div>
-            <div className="reports-detail-search-bar">
-              <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                <Search size={14} style={{ position: "absolute", left: "10px", color: "var(--cms-muted)", pointerEvents: "none" }} />
-                <input
-                  type="text"
-                  className="reports-search-input"
-                  style={{ paddingLeft: "32px" }}
-                  placeholder="Search audit logs..."
-                  value={auditLogSearch}
-                  onChange={(e) => {
-                    setAuditLogSearch(e.target.value);
-                    setAuditLogPage(1);
-                  }}
-                />
-              </div>
-              <button
-                className="cms-btn cms-btn-ghost"
-                type="button"
-                onClick={() => {
-                  if (filteredAuditLogs.length === 0) return;
-                  const cols = ["id", "time", "actor", "role", "action", "module", "target", "status", "ip"];
-                  exportCsv(filteredAuditLogs, cols, `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`);
-                }}
-                disabled={filteredAuditLogs.length === 0}
-                title="Export audit logs to CSV"
-              >
-                <FileText size={13} /> CSV
-              </button>
-            </div>
-          </div>
-
-          {auditLogLoading ? (
-            <SkeletonTable columns={9} rows={5} />
-          ) : auditLogError ? (
-            <div style={{ padding: "30px 20px", textAlign: "center", color: "#dc2626" }}>
-              <AlertCircle size={24} style={{ margin: "0 auto 8px" }} />
-              <p>{auditLogError}</p>
-            </div>
-          ) : filteredAuditLogs.length === 0 ? (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--cms-muted)" }}>
-              <p>No audit trail records found for the applied filter.</p>
-            </div>
-          ) : (
-            <div className="reports-table-wrap">
-              <table className="reports-top-students">
-                <thead>
-                  <tr>
-                    <th>Audit ID</th>
-                    <th>Timestamp</th>
-                    <th>Actor</th>
-                    <th>Role</th>
-                    <th>Action</th>
-                    <th>Module</th>
-                    <th>Target</th>
-                    <th>Status</th>
-                    <th>IP Address</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pageAuditLogs.map((log, idx) => (
-                    <tr key={log.auditLogId || log.id || idx}>
-                      <td><code>{log.id || `AUD-${log.auditLogId}`}</code></td>
-                      <td>{log.time || (log.createdAt ? new Date(log.createdAt).toLocaleString("en-IN") : "—")}</td>
-                      <td><strong>{log.actor || log.userName || "System"}</strong></td>
-                      <td><span className="reports-badge reports-badge-info">{log.role || "User"}</span></td>
-                      <td><strong>{log.action || "—"}</strong></td>
-                      <td>{log.module || "—"}</td>
-                      <td>{log.target || "—"}</td>
-                      <td><StatusPill value={log.status || "Success"} /></td>
-                      <td><small>{log.ip || log.remoteIpAddress || "—"}</small></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {filteredAuditLogs.length > 0 ? (
-            <div className="reports-detail-footer">
-              <span>
-                Showing {auditStartIndex + 1} to {Math.min(auditStartIndex + auditLogPageSize, filteredAuditLogs.length)} of {filteredAuditLogs.length} logs
-              </span>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  type="button"
-                  disabled={safeAuditPage <= 1}
-                  onClick={() => setAuditLogPage(safeAuditPage - 1)}
-                  style={{ padding: "4px 8px" }}
-                >
-                  <ChevronLeft size={14} /> Prev
-                </button>
-                <span style={{ fontSize: "12px", fontWeight: 600 }}>
-                  Page {safeAuditPage} of {totalAuditPages}
-                </span>
-                <button
-                  className="cms-btn cms-btn-ghost"
-                  type="button"
-                  disabled={safeAuditPage >= totalAuditPages}
-                  onClick={() => setAuditLogPage(safeAuditPage + 1)}
-                  style={{ padding: "4px 8px" }}
-                >
-                  Next <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
       {/* 10 Summary KPI Cards - Only visible in Overview tab after user clicks Generate Report */}
-      {activeMainTab === "overview" && reportGenerated ? (
+      {reportGenerated ? (
         <section className="reports-summary-panel" aria-labelledby="reports-summary-title">
           <div className="reports-summary-panel-head">
             <div>
@@ -1970,7 +1753,7 @@ export default function ReportsPage() {
             exportingExcel={Boolean(exportingCards[`${selectedCardKey}-excel`])}
           />
         </section>
-      ) : activeMainTab === "overview" && !loading ? (
+      ) : !loading ? (
         <section className="cms-card reports-empty-callout">
           <div className="cms-card-body">
             <h3>Ready to Generate Institution Analytics</h3>

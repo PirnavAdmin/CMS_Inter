@@ -37,3 +37,7 @@ hostel screens/
 # Scratch & Local Development Agents
 scratch/
 .agents/
+
+# Runtime Logs
+Logs/
+*.log

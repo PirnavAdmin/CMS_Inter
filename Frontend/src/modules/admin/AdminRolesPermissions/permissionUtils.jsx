@@ -25,6 +25,87 @@ const MODULE_ALIASES = Object.freeze({
   "course-management": "group-management",
   "examinations": "examination",
   "examination": "examination",
+  "my-profile": "profile",
+  "my profile": "profile",
+  "profile": "profile",
+  "driver-profile": "profile",
+  "accountant-profile": "profile",
+  "exam-cell-profile": "profile",
+  "inventory-profile": "profile",
+  "warden-profile": "profile",
+  "parent-dashboard": "dashboard",
+  "parent-children": "student-management",
+  "parent-attendance": "attendance",
+  "parent-academics-results": "results",
+  "parent-examinations": "examination",
+  "parent-fees-payments": "fee-management",
+  "parent-timetable": "timetable",
+  "parent-communication": "reports-analytics",
+  "parent-announcements": "reports-analytics",
+  "parent-announcements-events": "reports-analytics",
+  "parent-documents": "certificates",
+  "parent-settings": "settings",
+  "parent-profile": "profile",
+  "warden-dashboard": "dashboard",
+  "warden-rooms-beds": "hostel-management",
+  "warden-student-allocations": "hostel-management",
+  "warden-hostel-attendance": "hostel-management",
+  "warden-outpass-leaves": "hostel-management",
+  "warden-resident-students": "hostel-management",
+  "warden-hostel-reports": "hostel-management",
+  "warden-my-attendance": "staff-attendance",
+  "warden-staff-leave": "staff-leave-management",
+  "warden-holidays": "holiday-management",
+  "warden-reimbursements": "reimbursement",
+  "warden-settings": "settings",
+  // Driver aliases
+  "driver-todays-trips": "transport",
+  "driver-route-stops": "transport",
+  "driver-live-navigation": "transport",
+  "driver-student-manifest": "transport",
+  "driver-my-attendance": "staff-attendance",
+  "driver-leave-management": "staff-leave-management",
+  "driver-my-payslips": "payroll",
+  "driver-trip-reports": "reports-analytics",
+  "driver-holidays": "holiday-management",
+  "driver-settings": "settings",
+  // Accountant aliases
+  "accountant-dashboard": "dashboard",
+  "accountant-fee-management": "fee-management",
+  "accountant-payment-history": "fee-management",
+  "accountant-reimbursements": "reimbursement",
+  "accountant-payroll": "payroll",
+  "accountant-attendance-impact": "payroll",
+  "accountant-financial-reports": "reports-analytics",
+  "accountant-my-attendance": "staff-attendance",
+  "accountant-staff-leave": "staff-leave-management",
+  "accountant-holidays": "holiday-management",
+  "accountant-settings": "settings",
+  // Exam Cell aliases
+  "exam-cell-dashboard": "dashboard",
+  "exam-cell-examination": "examination",
+  "exam-cell-marks-entry": "marks-evaluation",
+  "exam-cell-results": "results",
+  "exam-cell-attendance": "attendance",
+  "exam-cell-my-attendance": "staff-attendance",
+  "exam-cell-certificates": "certificates",
+  "exam-cell-settings": "settings",
+  "exam-cell-promotions": "promotion",
+  // Inventory Manager aliases
+  "inventory-dashboard": "dashboard",
+  "inventory-items": "inventory-management",
+  "inventory-stock-in": "inventory-management",
+  "inventory-stock-out": "inventory-management",
+  "inventory-suppliers": "inventory-management",
+  "inventory-categories": "inventory-management",
+  "inventory-purchase-orders": "inventory-management",
+  "inventory-returns": "inventory-management",
+  "inventory-reports": "inventory-management",
+  "inventory-leave-management": "staff-leave-management",
+  "inventory-my-payslips": "payroll",
+  "inventory-notifications": "dashboard",
+  "inventory-profile": "profile",
+  "inventory-settings": "settings",
 });
 
 export const normalizeModuleKey = (value = "") => {
@@ -220,9 +301,118 @@ export const toPermissionMap = (permissions = []) => {
     map["academics"] = map["group-management"];
     map["courses"] = map["group-management"];
   }
+  // Certificates & Documents
   if (map["certificates"]) {
     map["documents"] = map["certificates"];
     map["parent-documents"] = map["certificates"];
+    map["exam-cell-certificates"] = map["certificates"];
+  }
+
+  // Dashboard
+  if (map["dashboard"]) {
+    map["parent-dashboard"] = map["dashboard"];
+    map["warden-dashboard"] = map["dashboard"];
+    map["inventory-dashboard"] = map["dashboard"];
+    map["inventory-notifications"] = map["dashboard"];
+    map["driver-dashboard"] = map["dashboard"];
+    map["accountant-dashboard"] = map["dashboard"];
+    map["exam-cell-dashboard"] = map["dashboard"];
+  }
+
+  // Attendance
+  if (map["attendance"]) {
+    map["parent-attendance"] = map["attendance"];
+    map["exam-cell-attendance"] = map["attendance"];
+  }
+
+  // Timetable
+  if (map["timetable"]) {
+    map["parent-timetable"] = map["timetable"];
+  }
+
+  // Reports & Analytics / Communication
+  if (map["reports-analytics"]) {
+    map["parent-communication"] = map["reports-analytics"];
+    map["parent-announcements"] = map["reports-analytics"];
+    map["parent-announcements-events"] = map["reports-analytics"];
+    map["driver-trip-reports"] = map["reports-analytics"];
+    map["accountant-financial-reports"] = map["reports-analytics"];
+  }
+
+  // Settings
+  if (map["settings"]) {
+    map["parent-settings"] = map["settings"];
+    map["inventory-settings"] = map["settings"];
+    map["warden-settings"] = map["settings"];
+    map["driver-settings"] = map["settings"];
+    map["accountant-settings"] = map["settings"];
+    map["exam-cell-settings"] = map["settings"];
+  }
+
+  // Profile
+  if (map["profile"]) {
+    map["parent-profile"] = map["profile"];
+    map["warden-profile"] = map["profile"];
+    map["driver-profile"] = map["profile"];
+    map["accountant-profile"] = map["profile"];
+    map["inventory-profile"] = map["profile"];
+    map["exam-cell-profile"] = map["profile"];
+  }
+
+  // Staff Attendance
+  if (map["staff-attendance"]) {
+    map["warden-my-attendance"] = map["staff-attendance"];
+    map["driver-my-attendance"] = map["staff-attendance"];
+    map["accountant-my-attendance"] = map["staff-attendance"];
+    map["exam-cell-my-attendance"] = map["staff-attendance"];
+  }
+
+  // Staff Leave Management
+  if (map["staff-leave-management"]) {
+    map["warden-staff-leave"] = map["staff-leave-management"];
+    map["inventory-leave-management"] = map["staff-leave-management"];
+    map["driver-leave-management"] = map["staff-leave-management"];
+    map["accountant-staff-leave"] = map["staff-leave-management"];
+  }
+
+  // Holiday Management
+  if (map["holiday-management"]) {
+    map["warden-holidays"] = map["holiday-management"];
+    map["driver-holidays"] = map["holiday-management"];
+    map["accountant-holidays"] = map["holiday-management"];
+  }
+
+  // Reimbursements
+  if (map["reimbursement"]) {
+    map["warden-reimbursements"] = map["reimbursement"];
+    map["accountant-reimbursements"] = map["reimbursement"];
+  }
+
+  // Payroll
+  if (map["payroll"]) {
+    map["inventory-my-payslips"] = map["payroll"];
+    map["driver-my-payslips"] = map["payroll"];
+    map["accountant-payroll"] = map["payroll"];
+    map["accountant-attendance-impact"] = map["payroll"];
+  }
+
+  // Promotion
+  if (map["promotion"]) {
+    map["exam-cell-promotions"] = map["promotion"];
+  }
+
+  // Marks & Exams
+  if (map["examination"]) {
+    map["parent-examinations"] = map["examination"];
+    map["exam-cell-examination"] = map["examination"];
+  }
+  if (map["marks-evaluation"]) {
+    map["exam-cell-marks-entry"] = map["marks-evaluation"];
+  }
+
+  // Inventory Management
+  if (map["inventory-management"]) {
+    ["inventory-items", "inventory-stock-in", "inventory-stock-out", "inventory-suppliers", "inventory-categories", "inventory-purchase-orders", "inventory-returns", "inventory-reports"].forEach((k) => { map[k] = map["inventory-management"]; });
   }
   if (map["transport"]) {
     ["driver-todays-trips", "driver-route-stops", "driver-live-navigation", "driver-student-manifest"].forEach((k) => { map[k] = map["transport"]; });
@@ -324,10 +514,7 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
   let normMod = normalizeModuleKey(moduleKey);
   const normAct = normalizeActionKey(actionKey);
 
-  // Baseline dashboard and profile view access for any authenticated role
-  if (normAct === ACTIONS.VIEW && (normMod === "dashboard" || normMod === "profile")) {
-    return true;
-  }
+
 
   // Administrators have full access
   if (hasRole("ADMIN", user)) return true;
@@ -367,8 +554,15 @@ export function can(moduleKey, actionKey = ACTIONS.VIEW, permissions, user = get
     return true;
   }
 
-  // Screen routes inherit their parent module grant. Legacy screen records are
-  // retained for compatibility, but do not override the module-level policy.
+  // If a specific screen is queried, check screen-level grant first
+  if (normScr) {
+    const scrActions = permissionMap[`${normMod}:${normScr}`] || permissionMap[normScr];
+    if (Array.isArray(scrActions)) {
+      return scrActions.includes(normAct);
+    }
+  }
+
+  // Screen routes inherit their parent module grant when screen-level grant is not defined
   const moduleActions = permissionMap[normMod];
   if (Array.isArray(moduleActions) && moduleActions.includes(normAct)) {
     return true;

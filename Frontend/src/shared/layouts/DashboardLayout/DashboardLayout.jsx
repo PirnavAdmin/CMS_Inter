@@ -196,7 +196,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
-      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
+      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon, moduleKey: "timetable" },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
       { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
     ],
@@ -278,27 +278,27 @@ export const parentMenu = [
   {
     section: "Main",
     items: [
-      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getParentNavigationItem("/parent-dashboard")?.id },
+      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getParentNavigationItem("/parent-dashboard")?.permissionKey || getParentNavigationItem("/parent-dashboard")?.id },
     ],
   },
   {
     section: "Student & Academics",
     items: [
-      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/children")?.id },
-      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: getParentNavigationItem("/parent-dashboard/attendance")?.id },
-      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/academics")?.id },
-      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/examinations")?.id },
-      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon, moduleKey: getParentNavigationItem("/parent-dashboard/fees")?.id },
-      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: getParentNavigationItem("/parent-dashboard/timetable")?.id },
-      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/communication")?.id },
-      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/announcements")?.id },
-      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon, moduleKey: getParentNavigationItem("/parent-dashboard/documents")?.id },
+      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/children")?.permissionKey || getParentNavigationItem("/parent-dashboard/children")?.id },
+      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: getParentNavigationItem("/parent-dashboard/attendance")?.permissionKey || getParentNavigationItem("/parent-dashboard/attendance")?.id },
+      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/academics")?.permissionKey || getParentNavigationItem("/parent-dashboard/academics")?.id },
+      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/examinations")?.permissionKey || getParentNavigationItem("/parent-dashboard/examinations")?.id },
+      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon, moduleKey: getParentNavigationItem("/parent-dashboard/fees")?.permissionKey || getParentNavigationItem("/parent-dashboard/fees")?.id },
+      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: getParentNavigationItem("/parent-dashboard/timetable")?.permissionKey || getParentNavigationItem("/parent-dashboard/timetable")?.id },
+      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/communication")?.permissionKey || getParentNavigationItem("/parent-dashboard/communication")?.id },
+      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/announcements")?.permissionKey || getParentNavigationItem("/parent-dashboard/announcements")?.id },
+      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon, moduleKey: getParentNavigationItem("/parent-dashboard/documents")?.permissionKey || getParentNavigationItem("/parent-dashboard/documents")?.id },
     ],
   },
   {
     section: "Settings",
     items: [
-      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.id },
+      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.permissionKey || getParentNavigationItem("/parent-dashboard/settings")?.id },
     ],
   },
 ];
@@ -307,27 +307,27 @@ export const wardenMenu = [
   {
     section: "Overview",
     items: [
-      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard")?.id },
+      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard")?.id },
     ],
   },
   {
     section: "Hostel Operations",
     items: [
-      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/rooms")?.id },
-      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/allocations")?.id },
-      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/attendance")?.id },
-      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.id },
-      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/students")?.id },
-      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/reports")?.id },
+      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/rooms")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/rooms")?.id },
+      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/allocations")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/allocations")?.id },
+      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/attendance")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/attendance")?.id },
+      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.id },
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/students")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/students")?.id },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/reports")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/reports")?.id },
     ],
   },
   {
     section: "My Workspace",
     items: [
-      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.id },
-      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
-      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
-      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
+      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.id },
+      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
+      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
+      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
     ],
   },
 ];
@@ -650,6 +650,7 @@ export default function DashboardLayout({
   showBoardSelector = true,
   showAcademicYearSelector = true,
   hidePageHeader = false,
+  contentClassName = "",
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -801,7 +802,7 @@ export default function DashboardLayout({
       else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && !isExamCell && (user.permissions || user.rolePermissions)) {
+    if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
       return base
         .map((group) => ({
           ...group,
@@ -1215,8 +1216,8 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Campus</span>
-                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No active campuses available"}>
-                      {selectedCampus?.name || selectedCampus?.code || "No active campuses available"}
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No Campus"}>
+                      {selectedCampus?.name || selectedCampus?.code || "No Campus"}
                     </span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1285,9 +1286,9 @@ export default function DashboardLayout({
                       <span className="cms-academic-btn-label">Board</span>
                       <span
                         className="cms-academic-btn-value"
-                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       >
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       </span>
                     </div>
                   </div>
@@ -1311,7 +1312,7 @@ export default function DashboardLayout({
                     <div className="cms-academic-btn-text">
                       <span className="cms-academic-btn-label">Board</span>
                       <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No Board")}
                       </span>
                     </div>
                     <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1377,7 +1378,7 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Academic Year</span>
-                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No active academic years")}</span>
+                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No Active Academic Year")}</span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
                 </button>
@@ -1516,15 +1517,15 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="cms-content">
-          {!hidePageHeader && <div className="cms-page-head">
+        <main className={`cms-content ${contentClassName}`.trim()}>
+          {!hidePageHeader && (title || actions || backLink) ? <div className="cms-page-head">
             {backLink ? (
               <div className="cms-page-heading-with-back">
                 {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
               </div>
             ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
-          </div>}
+          </div> : null}
 
           {children}
         </main>

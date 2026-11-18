@@ -132,6 +132,9 @@ namespace CollegeManagement.API.DTOs.Settings
         [JsonPropertyName("dashboardLogo")]
         public string? DashboardLogo { get; set; }
 
+        [JsonPropertyName("resetDashboardLogo")]
+        public bool? ResetDashboardLogo { get; set; }
+
         [MaxLength(500)]
         [JsonPropertyName("headerLogo")]
         public string? HeaderLogo { get; set; }

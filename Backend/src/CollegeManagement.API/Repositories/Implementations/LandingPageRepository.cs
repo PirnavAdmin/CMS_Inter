@@ -33,6 +33,24 @@ namespace CollegeManagement.API.Repositories.Implementations
             return conn;
         }
 
+        public async Task<int?> GetCollegeIdByCampusIdAsync(int campusId, CancellationToken ct = default)
+        {
+            try
+            {
+                var conn = await GetOpenConnectionAsync(ct);
+                return await conn.QueryFirstOrDefaultAsync<int?>(
+                    new CommandDefinition(
+                        "SELECT CollegeId FROM `Campuses` WHERE `CampusId` = @CampusId LIMIT 1;",
+                        new { CampusId = campusId },
+                        cancellationToken: ct));
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "Failed to resolve CollegeId for CampusId {CampusId}", campusId);
+                return null;
+            }
+        }
+
         public async Task<LandingPageConfigDto?> GetByCollegeIdAsync(int collegeId, CancellationToken ct = default)
         {
             try
@@ -93,6 +111,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 parameters.Add("p_ContactEmail", request.ContactEmail, DbType.String);
                 parameters.Add("p_ContactPhone", request.ContactPhone, DbType.String);
                 parameters.Add("p_DashboardLogo", request.DashboardLogo, DbType.String);
+                parameters.Add("p_ResetDashboardLogo", request.ResetDashboardLogo == true ? 1 : 0, DbType.Int32);
                 parameters.Add("p_HeaderLogo", request.HeaderLogo, DbType.String);
                 parameters.Add("p_FooterLogo", request.FooterLogo, DbType.String);
                 parameters.Add("p_HeroImage", request.HeroImage, DbType.String);

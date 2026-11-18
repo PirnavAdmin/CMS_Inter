@@ -29,7 +29,7 @@ namespace CollegeManagement.API.Controllers.V1
             _logger = logger;
         }
 
-        private int ResolveCollegeId(int? requestedCollegeId = null)
+        private async Task<int> ResolveCollegeIdAsync(int? requestedCollegeId = null, int? requestedCampusId = null, CancellationToken ct = default)
         {
             var user = HttpContext.User;
             var role = _jwtTokenHelper.GetRole(user);
@@ -41,10 +41,33 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     return requestedCollegeId.Value;
                 }
+
+                if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+                {
+                    var campusCollegeId = await _landingPageService.GetCollegeIdByCampusIdAsync(requestedCampusId.Value, ct);
+                    if (campusCollegeId.HasValue && campusCollegeId.Value > 0)
+                    {
+                        return campusCollegeId.Value;
+                    }
+                }
             }
 
             int? tokenCollegeId = _jwtTokenHelper.GetCollegeId(user);
-            return tokenCollegeId.HasValue && tokenCollegeId.Value > 0 ? tokenCollegeId.Value : 1;
+            if (tokenCollegeId.HasValue && tokenCollegeId.Value > 0)
+            {
+                return tokenCollegeId.Value;
+            }
+
+            if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+            {
+                var campusCollegeId = await _landingPageService.GetCollegeIdByCampusIdAsync(requestedCampusId.Value, ct);
+                if (campusCollegeId.HasValue && campusCollegeId.Value > 0)
+                {
+                    return campusCollegeId.Value;
+                }
+            }
+
+            return 1;
         }
 
         private int ResolveUserId()
@@ -58,11 +81,11 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("config")]
         [Authorize(Roles = "Admin,Super Admin,College Admin")]
         [ProducesResponseType(typeof(LandingPageConfigDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetConfig([FromQuery] int? collegeId = null, CancellationToken ct = default)
+        public async Task<IActionResult> GetConfig([FromQuery] int? collegeId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             try
             {
-                int effectiveCollegeId = ResolveCollegeId(collegeId);
+                int effectiveCollegeId = await ResolveCollegeIdAsync(collegeId, campusId, ct);
                 var config = await _landingPageService.GetConfigAsync(effectiveCollegeId, ct);
                 if (config == null)
                 {
@@ -93,7 +116,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
-                int effectiveCollegeId = ResolveCollegeId(request.CollegeId);
+                int effectiveCollegeId = await ResolveCollegeIdAsync(request.CollegeId, request.CampusId, ct);
                 int userId = ResolveUserId();
                 request.CollegeId = effectiveCollegeId;
 
@@ -113,11 +136,11 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("upload-image")]
         [Authorize(Roles = "Admin,Super Admin,College Admin")]
         [Consumes("multipart/form-data")]
-        public async Task<IActionResult> UploadImage(IFormFile file, [FromQuery] string slot = "asset", [FromQuery] int? collegeId = null, CancellationToken ct = default)
+        public async Task<IActionResult> UploadImage(IFormFile file, [FromQuery] string slot = "asset", [FromQuery] int? collegeId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             try
             {
-                int effectiveCollegeId = ResolveCollegeId(collegeId);
+                int effectiveCollegeId = await ResolveCollegeIdAsync(collegeId, campusId, ct);
                 string imageUrl = await _landingPageService.UploadImageAsync(file, slot, effectiveCollegeId, ct);
                 return Ok(new { success = true, message = "Image uploaded successfully.", url = imageUrl });
             }
@@ -153,8 +176,8 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Error loading public landing page configuration.");
-                return StatusCode(StatusCodes.Status500InternalServerError, new { success = false, message = "Internal error loading public landing page." });
+                _logger?.LogError(ex, "Error retrieving public landing page configuration.");
+                return StatusCode(StatusCodes.Status500InternalServerError, new { success = false, message = "Internal error retrieving configuration." });
             }
         }
     }

@@ -3,7 +3,7 @@ import { CheckCircle, Copy, CreditCard, QrCode, Upload } from "lucide-react";
 import { feePaymentGatewayApi, getPaymentGatewayConfigApi, loadRazorpayCheckout } from "@/api/feePaymentGatewayApi.js";
 import { getApiErrorMessage } from "@/api/axios.js";
 import { formatCurrency, todayISO, COLLEGE_NAME } from "@/data/feeManagementData.js";
-import { collectionPayload, directQrUtrPayload, isManualQrOrder, mobilePaymentLinkFor, UTR_SUBMITTED_EVENT, validatePaymentProof } from "../services/paymentGatewaySession.js";
+import { collectionPayload, directQrUtrPayload, isManualQrOrder, mobilePaymentLinkFor, numericUtrError, UTR_SUBMITTED_EVENT, validatePaymentProof } from "../services/paymentGatewaySession.js";
 import { usePaymentPolling } from "../hooks/usePaymentPolling.js";
 
 const allowGatewayAction = () => true;
@@ -34,6 +34,7 @@ export default function GatewayPaymentPanel({
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [verificationErrors, setVerificationErrors] = useState({});
   const [verificationDraft, setVerificationDraft] = useState({ utrNumber: "", bankName: "", paymentDate: todayISO(), amountPaid: "", remarks: "" });
+  const numericUtrInput = useRef(null);
   const submittedReferences = useRef(new Set());
   const [proofFile, setProofFile] = useState(null);
   const [proofPreview, setProofPreview] = useState("");
@@ -388,6 +389,15 @@ export default function GatewayPaymentPanel({
     setVerificationErrors(current => ({ ...current, attachment: "" }));
     if (proofInput.current) proofInput.current.value = "";
   };
+  const changeNumericUtr = (value) => {
+    const message = numericUtrError(value);
+    if (/[^0-9]/.test(value) || value.length > 16) {
+      setVerificationErrors(current => ({ ...current, utrNumber: message }));
+      return;
+    }
+    setVerificationDraft(current => ({ ...current, utrNumber: value }));
+    setVerificationErrors(current => ({ ...current, utrNumber: message }));
+  };
   const submitQrUtr = (event) => {
     event.preventDefault();
     if (guard.current || submitted || pendingSubmission.current || uncertain || completed.current || proofValidationBusy.current) return;
@@ -395,12 +405,15 @@ export default function GatewayPaymentPanel({
     try {
       if (!canReconcile) throw new Error("This QR order is no longer eligible for manual reconciliation.");
       if (Number(order.campusId) !== Number(campusId)) throw new Error("Select the campus used to generate this QR before submitting its payment reference.");
+      const utrError = numericUtrError(verificationDraft.utrNumber);
+      if (utrError) throw Object.assign(new Error(utrError), { field: "utrNumber" });
       payload = directQrUtrPayload(order, account, verificationDraft, todayISO());
       payload = { ...payload, orderId: order.orderId, ...(order.feeInstallmentIds?.length ? { feeInstallmentIds: order.feeInstallmentIds } : {}) };
       if (!selectedProof.current) throw Object.assign(new Error("Choose a payment screenshot or transaction proof before submitting."), { field: "attachment" });
       if (submittedReferences.current.has(payload.utrNumber)) throw Object.assign(new Error("This reference has already been submitted or settled. Review the pending queue and payment history."), { field: "utrNumber" });
     } catch (failure) {
       setVerificationErrors({ [failure.field || "order"]: failure.message });
+      if (failure.field === "utrNumber") numericUtrInput.current?.focus();
       return;
     }
     setVerificationErrors({});
@@ -519,18 +532,49 @@ export default function GatewayPaymentPanel({
           <fieldset className="cms-fee-gateway-fields" disabled={busy || submitted || uncertain || completed.current || !authorize()}>
             <div className="cms-form-grid cols-2">
               {[
-                ["utrNumber", "UTR / UPI Transaction Reference Number", "text", 100],
+                ["utrNumber", "UTR / UPI Transaction Reference Number", "text", 16],
                 ["bankName", "Bank Name / Payment App", "text", 200],
                 ["paymentDate", "Payment Date", "date"], ["amountPaid", "Amount Paid", "number"],
               ].map(([key, label, type, maxLength]) => <div className={`cms-field${key === "remarks" ? " full" : ""}`} key={key}>
                 <label htmlFor={`qr-verification-${key}`}>{label}{key !== "remarks" ? <span className="req" aria-hidden="true">*</span> : null}</label>
                 <input id={`qr-verification-${key}`} type={type} required={key !== "remarks"} maxLength={maxLength}
+                  ref={key === "utrNumber" ? numericUtrInput : undefined}
+                  inputMode={key === "utrNumber" ? "numeric" : undefined}
                   min={type === "date" ? "2000-01-01" : type === "number" ? "0.01" : undefined}
                   max={type === "date" ? todayISO() : undefined} step={type === "number" ? "0.01" : undefined}
                   value={verificationDraft[key]} aria-invalid={Boolean(verificationErrors[key])}
-                  aria-describedby={verificationErrors[key] ? `qr-verification-${key}-error` : undefined}
-                  onChange={event => { setVerificationDraft(current => ({ ...current, [key]: event.target.value })); setVerificationErrors(current => ({ ...current, [key]: "" })); }} />
+                  aria-describedby={[key === "utrNumber" ? "qr-verification-utr-counter" : "", verificationErrors[key] ? `qr-verification-${key}-error` : ""].filter(Boolean).join(" ") || undefined}
+                  onKeyDown={key === "utrNumber" ? event => {
+                    if (event.ctrlKey || event.metaKey || event.altKey || !/^[0-9]$/.test(event.key)) return;
+                    const input = event.currentTarget;
+                    if (input.value.length >= 16 && input.selectionStart === input.selectionEnd) {
+                      event.preventDefault();
+                      setVerificationErrors(current => ({ ...current, utrNumber: "Maximum 16 digits allowed." }));
+                    }
+                  } : undefined}
+                  onBeforeInput={key === "utrNumber" ? event => {
+                    const inserted = event.data ?? event.nativeEvent?.data;
+                    if (!inserted) return;
+                    const input = event.currentTarget;
+                    const next = input.value.slice(0, input.selectionStart) + inserted + input.value.slice(input.selectionEnd);
+                    if (/[^0-9]/.test(next) || next.length > 16) {
+                      event.preventDefault();
+                      setVerificationErrors(current => ({ ...current, utrNumber: numericUtrError(next) }));
+                    }
+                  } : undefined}
+                  onPaste={key === "utrNumber" ? event => {
+                    event.preventDefault();
+                    const input = event.currentTarget;
+                    changeNumericUtr(input.value.slice(0, input.selectionStart) + event.clipboardData.getData("text") + input.value.slice(input.selectionEnd));
+                  } : undefined}
+                  onChange={event => {
+                    if (key === "utrNumber") { changeNumericUtr(event.target.value); return; }
+                    setVerificationDraft(current => ({ ...current, [key]: event.target.value })); setVerificationErrors(current => ({ ...current, [key]: "" }));
+                  }} />
                 {verificationErrors[key] ? <span id={`qr-verification-${key}-error`} className="cms-error" role="alert">{verificationErrors[key]}</span> : null}
+                {key === "utrNumber" ? <small id="qr-verification-utr-counter" className="cms-fee-note" aria-live="polite">
+                  {verificationDraft.utrNumber.length}/12 or 16 digits{[12, 16].includes(verificationDraft.utrNumber.length) ? ` — Valid ${verificationDraft.utrNumber.length}-digit UTR` : ""}
+                </small> : null}
               </div>)}
               <div className="cms-field full">
                 <label htmlFor="qr-verification-proof">Payment Screenshot / Transaction Proof <span className="req" aria-hidden="true">*</span></label>

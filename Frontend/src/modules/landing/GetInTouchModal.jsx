@@ -180,7 +180,7 @@ export function GetInTouchCard({
         />
         <span className="get-in-touch-script">Get in Touch</span>
         <h2 id="get-in-touch-title">
-          We're Here to <em>Help You!</em>
+          We're Here to Help You!
         </h2>
         <p id="get-in-touch-description">
           Have questions about admissions, intermediate programmes, fees, or hostel facility?

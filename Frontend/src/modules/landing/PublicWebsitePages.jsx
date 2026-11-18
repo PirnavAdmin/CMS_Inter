@@ -174,7 +174,7 @@ function HomeSection({ content, onNavigate }) {
           </span>
           <h1>
             Your Gateway to<br />
-            <span>A Bright Intermediate</span><br />
+            A Bright Intermediate<br />
             Future
           </h1>
           <p>
@@ -200,6 +200,18 @@ function HomeSection({ content, onNavigate }) {
             >
               Explore College <ArrowRight size={17} />
             </motion.button>
+          </div>
+
+          <div className="landing-hero-highlights">
+            <span className="hero-highlight-item">
+              <CheckCircle2 size={16} /> Board of Intermediate Affiliated
+            </span>
+            <span className="hero-highlight-item">
+              <ShieldCheck size={16} /> Integrated Entrance Coaching
+            </span>
+            <span className="hero-highlight-item">
+              <Award size={16} /> 100% Digital Campus
+            </span>
           </div>
         </motion.div>
 
@@ -301,7 +313,7 @@ function AboutSection({ content, onNavigate }) {
       <AnimatedSectionHeader
         kicker="About Pirnav College"
         icon={Building2}
-        title={<>Our Intermediate College <em>Empowers</em> Your Future.</>}
+        title="Our Intermediate College Empowers Your Future."
         description="Committed to academic excellence, state-of-the-art campus learning, and holistic mentorship for intermediate scholars."
       />
 
@@ -359,7 +371,7 @@ function AboutSection({ content, onNavigate }) {
             <Building2 size={16} /> About {content.collegeName || "Pirnav College"}
           </span>
           <h2>
-            Excellence in <em>Intermediate</em> Education
+            Excellence in Intermediate Education
           </h2>
           <p>
             {content.collegeName || "Pirnav College"} is a premier Intermediate (10+2) institution committed to quality education, strong academic support, and student-centric holistic development. Our college management system keeps academic and administrative operations smooth and transparent.
@@ -433,7 +445,7 @@ function AcademicsSection({ onNavigate }) {
       <AnimatedSectionHeader
         kicker="Our Courses & Programmes"
         icon={BookOpen}
-        title={<>Let’s Explore Our <em>Programmes</em></>}
+        title="Let’s Explore Our Programmes"
         description="Affiliated with the State Board of Intermediate Education, our college offers structured 2-year programmes designed to secure top academic ranks and entrance test success."
       />
 

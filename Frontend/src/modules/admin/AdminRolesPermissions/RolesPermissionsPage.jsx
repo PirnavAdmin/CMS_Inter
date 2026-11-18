@@ -69,6 +69,7 @@ import {
   updateUserPermissions,
 } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
 import {
+  normalizeModuleKey,
   getPresetActions,
   normalizeActionKey,
   normalizePermissionPayload,
@@ -1686,8 +1687,9 @@ function PermissionMatrix({
   const permissionStructure = useMemo(() => {
     const map = new Map();
     (permissionRows || []).forEach((row) => {
-      const modKey = String(row.module || "").trim().toLowerCase();
-      if (!modKey) return;
+      const rawKey = String(row.module || "").trim().toLowerCase();
+      const normKey = normalizeModuleKey(rawKey);
+      if (!rawKey && !normKey) return;
       const modActions = new Set(row.actions || []);
       const screenMap = new Map();
 
@@ -1696,14 +1698,31 @@ function PermissionMatrix({
           const sId = String(s.screenId || s.id || "").trim().toLowerCase();
           if (sId) {
             screenMap.set(sId, new Set(s.actions || []));
+            screenMap.set(normalizeModuleKey(sId), new Set(s.actions || []));
           }
         });
       }
 
-      map.set(modKey, { actions: modActions, screens: screenMap });
+      const entry = { actions: modActions, screens: screenMap };
+      if (rawKey) map.set(rawKey, entry);
+      if (normKey) map.set(normKey, entry);
     });
     return map;
   }, [permissionRows]);
+
+  const getModData = useCallback((mod) => {
+    if (!mod) return null;
+    const permKey = String(mod.permissionKey || "").trim().toLowerCase();
+    const idKey = String(mod.id || "").trim().toLowerCase();
+    return (
+      (permKey && permissionStructure.get(permKey)) ||
+      (permKey && permissionStructure.get(normalizeModuleKey(permKey))) ||
+      permissionStructure.get(idKey) ||
+      permissionStructure.get(normalizeModuleKey(idKey)) ||
+      (mod.legacyPermissionKeys || []).map((k) => permissionStructure.get(k) || permissionStructure.get(normalizeModuleKey(k))).find(Boolean) ||
+      null
+    );
+  }, [permissionStructure]);
 
   const [expandedModules, setExpandedModules] = useState(() => new Set());
   const [sectionFilter, setSectionFilter] = useState("all");
@@ -1753,7 +1772,7 @@ function PermissionMatrix({
     return modules
       .filter((module) => sectionFilter === "all" || module.section === sectionFilter)
       .map((module) => {
-        const modData = permissionStructure.get(module.id);
+        const modData = getModData(module);
         const modActions = modData?.actions || new Set();
         const screens = module.screens || [];
 
@@ -1929,7 +1948,7 @@ function PermissionMatrix({
             const Icon = module.icon || ShieldCheck;
             const screens = module.screens || [];
             const isExpanded = expandedModules.has(module.id);
-            const modData = permissionStructure.get(module.id);
+            const modData = getModData(module);
             const restriction = getPermissionRestriction({ selectedRole, saving });
 
             return (
@@ -2006,7 +2025,7 @@ function PermissionMatrix({
                             if (!restriction.disabled && isSupported) {
                               onToggle({
                                 roleId: selectedRole?.id,
-                                moduleId: module.id,
+                                moduleId: module.permissionKey || module.id,
                                 screenId: null, // Master toggle
                                 action: action.key,
                                 checked: next,
@@ -2057,7 +2076,7 @@ function PermissionMatrix({
                                 if (!restriction.disabled && isActionSupported) {
                                   onToggle({
                                     roleId: selectedRole?.id,
-                                    moduleId: module.id,
+                                    moduleId: module.permissionKey || module.id,
                                     screenId: screen.id,
                                     action: action.key,
                                     checked: next,
@@ -2209,14 +2228,28 @@ function ModulePermissionMatrix({ modules, permissionRows, selectedRole, saving,
   useEffect(() => {
     setSectionFilter("all");
   }, [selectedRole?.id]);
-  const actionsByModule = useMemo(() => new Map((permissionRows || []).map((row) => [String(row.module || "").trim().toLowerCase(), new Set(row.actions || [])])), [permissionRows]);
+  const actionsByModule = useMemo(() => {
+    const map = new Map();
+    (permissionRows || []).forEach((row) => {
+      const rawKey = String(row.module || "").trim().toLowerCase();
+      const normKey = normalizeModuleKey(rawKey);
+      const actions = new Set(row.actions || []);
+      if (rawKey) map.set(rawKey, actions);
+      if (normKey) map.set(normKey, actions);
+    });
+    return map;
+  }, [permissionRows]);
   const actionsForModule = useCallback((module) => {
-    const moduleId = String(module.permissionKey || module.id).trim().toLowerCase();
-    // A direct row is an explicit role/member decision, including an empty
-    // action list created by switching a legacy-granted item off. Only fall
-    // back to legacy grants before that direct decision exists.
-    if (actionsByModule.has(moduleId)) return new Set(actionsByModule.get(moduleId));
-    return new Set((module.legacyPermissionKeys || []).flatMap((key) => [...(actionsByModule.get(String(key).trim().toLowerCase()) || [])]));
+    const rawId = String(module.permissionKey || module.id || "").trim().toLowerCase();
+    const normId = normalizeModuleKey(rawId);
+    if (actionsByModule.has(rawId)) return new Set(actionsByModule.get(rawId));
+    if (actionsByModule.has(normId)) return new Set(actionsByModule.get(normId));
+    const directId = String(module.id || "").trim().toLowerCase();
+    if (actionsByModule.has(directId)) return new Set(actionsByModule.get(directId));
+    return new Set((module.legacyPermissionKeys || []).flatMap((key) => [
+      ...(actionsByModule.get(String(key).trim().toLowerCase()) || []),
+      ...(actionsByModule.get(normalizeModuleKey(key)) || []),
+    ]));
   }, [actionsByModule]);
   const sections = useMemo(() => [...new Set(modules.map((module) => module.section).filter(Boolean))].sort(), [modules]);
   const filteredModules = useMemo(() => {
@@ -2274,14 +2307,34 @@ function RoleDetails({
 }) {
   const updateAction = useCallback(({ roleId, moduleId, screenId, action, checked }) => {
     if (!selectedRole || String(roleId) !== String(selectedRole.id) || selectedRole.isProtected || loading || saving) return;
-    const modConfig = modules.find((m) => (m.permissionKey || m.id) === moduleId);
+    const targetKey = String(moduleId || "").trim().toLowerCase();
+    const modConfig = modules.find((m) => {
+      const pKey = String(m.permissionKey || m.id || "").trim().toLowerCase();
+      const idKey = String(m.id || "").trim().toLowerCase();
+      return (
+        pKey === targetKey ||
+        idKey === targetKey ||
+        normalizeModuleKey(pKey) === normalizeModuleKey(targetKey) ||
+        normalizeModuleKey(idKey) === normalizeModuleKey(targetKey) ||
+        (m.legacyPermissionKeys || []).some((lk) => String(lk).trim().toLowerCase() === targetKey || normalizeModuleKey(lk) === normalizeModuleKey(targetKey))
+      );
+    });
     if (!modConfig || !MATRIX_ACTION_KEYS.includes(action)) return;
 
+    const canonicalModKey = modConfig.permissionKey || modConfig.id;
     const previousPermissions = [...permissions];
-    const moduleIndex = previousPermissions.findIndex((row) => row.module === moduleId);
+    const moduleIndex = previousPermissions.findIndex((row) => {
+      const rowKey = String(row.module || "").trim().toLowerCase();
+      return (
+        rowKey === canonicalModKey.toLowerCase() ||
+        normalizeModuleKey(rowKey) === normalizeModuleKey(canonicalModKey) ||
+        rowKey === String(modConfig.id || "").trim().toLowerCase() ||
+        normalizeModuleKey(rowKey) === normalizeModuleKey(modConfig.id)
+      );
+    });
     const moduleEntry = moduleIndex !== -1
       ? { ...previousPermissions[moduleIndex] }
-      : { module: moduleId, actions: [], screens: [] };
+      : { module: canonicalModKey, actions: [], screens: [] };
 
     const modScreens = modConfig.screens || [];
     const screenMap = new Map((moduleEntry.screens || []).map((s) => [s.screenId, [...(s.actions || [])]]));
@@ -2301,13 +2354,21 @@ function RoleDetails({
       screenMap.set(screenId, nextActions);
     } else {
       // Master toggle across all screens
-      modScreens.forEach((s) => {
-        if ((s.availableActions || MATRIX_ACTION_KEYS).includes(action)) {
-          const currentActions = screenMap.get(s.id) || [];
+      if (modScreens.length > 0) {
+        modScreens.forEach((s) => {
+          if ((s.availableActions || MATRIX_ACTION_KEYS).includes(action)) {
+            const currentActions = screenMap.get(s.id) || [];
+            const nextActions = togglePermissionAction(currentActions, action, Boolean(checked));
+            screenMap.set(s.id, nextActions);
+          }
+        });
+      } else if (screenMap.size > 0) {
+        // Module has screens in state (from backend) but modScreens is empty: update all screens
+        for (const [sId, currentActions] of screenMap.entries()) {
           const nextActions = togglePermissionAction(currentActions, action, Boolean(checked));
-          screenMap.set(s.id, nextActions);
+          screenMap.set(sId, nextActions);
         }
-      });
+      }
     }
 
     // Recompute module actions: an action is granted at module level if any screen has it
@@ -2317,15 +2378,17 @@ function RoleDetails({
     }));
 
     const aggregateActions = new Set();
-    if (updatedScreens.length > 0) {
+    if (modScreens.length > 0 || screenMap.size > 0) {
       updatedScreens.forEach((s) => s.actions.forEach((a) => aggregateActions.add(a)));
-    } else {
+    }
+    // Also include directly toggled module actions if modScreens is empty or if no screens were updated
+    if (modScreens.length === 0) {
       togglePermissionAction(moduleEntry.actions || [], action, Boolean(checked)).forEach((a) => aggregateActions.add(a));
     }
 
     const updatedModule = {
       ...moduleEntry,
-      module: moduleId,
+      module: canonicalModKey,
       actions: [...aggregateActions],
       screens: updatedScreens,
     };
@@ -2355,14 +2418,28 @@ function RoleDetails({
       const modActions = new Set(row.actions || []);
       const screenMap = new Map((row.screens || []).map((s) => [s.screenId, new Set(s.actions || [])]));
       permissionMap.set(modKey, { actions: modActions, screens: screenMap });
+      permissionMap.set(normalizeModuleKey(modKey), { actions: modActions, screens: screenMap });
     });
 
     let selectedCount = 0;
     editablePermissionTargets.forEach(({ moduleId, screenId, action }) => {
-      const configuredModule = modules.find((module) => module.id === moduleId);
-      const mod = permissionMap.get(moduleId) || (configuredModule?.legacyPermissionKeys || [])
-        .map((legacyKey) => permissionMap.get(legacyKey))
-        .find(Boolean);
+      const targetKey = String(moduleId || "").trim().toLowerCase();
+      const configuredModule = modules.find((module) => {
+        const pKey = String(module.permissionKey || module.id || "").trim().toLowerCase();
+        const idKey = String(module.id || "").trim().toLowerCase();
+        return (
+          pKey === targetKey ||
+          idKey === targetKey ||
+          normalizeModuleKey(pKey) === normalizeModuleKey(targetKey) ||
+          normalizeModuleKey(idKey) === normalizeModuleKey(targetKey)
+        );
+      });
+      const mod = permissionMap.get(moduleId) ||
+        permissionMap.get(normalizeModuleKey(moduleId)) ||
+        (configuredModule ? permissionMap.get(configuredModule.id) || permissionMap.get(normalizeModuleKey(configuredModule.id)) : null) ||
+        (configuredModule?.legacyPermissionKeys || [])
+          .map((legacyKey) => permissionMap.get(legacyKey) || permissionMap.get(normalizeModuleKey(legacyKey)))
+          .find(Boolean);
       if (!mod) return;
       if (screenId) {
         const scr = mod.screens.get(screenId);
@@ -2396,7 +2473,7 @@ function RoleDetails({
       });
       const actions = shouldEnable ? (module.availableActions || MATRIX_ACTION_KEYS).map(normalizeActionKey) : [];
       return {
-        module: module.id,
+        module: module.permissionKey || module.id,
         actions,
         screens,
       };
@@ -2421,7 +2498,7 @@ function RoleDetails({
       const moduleAvailable = module.availableActions || MATRIX_ACTION_KEYS;
       const actions = getPresetActions(presetKey, moduleAvailable);
       return {
-        module: module.id,
+        module: module.permissionKey || module.id,
         actions,
         screens,
       };

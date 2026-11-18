@@ -32,6 +32,7 @@ import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import { isValidSuperAdminEmail, isStrongSuperAdminPassword } from "../superAdminValidation.js";
 import profileIllustration from "@/assets/settings-3d/roles-permissions.png";
+import useProfilePhoto from "../useProfilePhoto.js";
 import "./MyProfilePage.css";
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -354,7 +355,7 @@ export default function MyProfilePage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [activeProfilePanel, setActiveProfilePanel] = useState(null);
   const [photoMode, setPhotoMode] = useState(null);
-  const [profilePhoto, setProfilePhoto] = useState(() => localStorage.getItem("sa-profile-photo") || "");
+  const [profilePhoto, setProfilePhoto] = useProfilePhoto();
   const [photoCandidate, setPhotoCandidate] = useState("");
   const [photoError, setPhotoError] = useState("");
   const photoInputRef = useRef(null);
@@ -474,7 +475,6 @@ export default function MyProfilePage() {
         canvas.height
       );
       const result = canvas.toDataURL("image/jpeg", 0.86);
-      localStorage.setItem("sa-profile-photo", result);
       setProfilePhoto(result);
       closePhotoModal();
       showToast("Profile photo saved in this browser.");
@@ -585,8 +585,9 @@ export default function MyProfilePage() {
           title="Super Admin Identity & Platform Management"
         >
           <img
-            src={profileIllustration}
-            alt="Platform Management & Roles"
+            src={profilePhoto || profileIllustration}
+            alt={profilePhoto ? "Super Admin profile" : "Platform Management & Roles"}
+            style={profilePhoto ? { width: 86, height: 86, objectFit: "cover", borderRadius: "50%" } : undefined}
             className="mpp-header-3d-img"
             onError={(e) => {
               e.target.style.display = "none";

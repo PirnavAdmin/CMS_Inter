@@ -6,7 +6,7 @@ namespace CollegeManagement.API.Services.Interfaces.Payroll
     {
         // Salary Structures
         Task<int> CreateSalaryStructureAsync(CreateSalaryStructureRequest request);
-        Task<IEnumerable<SalaryStructureDto>> GetSalaryStructuresAsync(string? staffType, string? search);
+        Task<IEnumerable<SalaryStructureDto>> GetSalaryStructuresAsync(string? staffType, string? search, int? campusId = null);
         Task<SalaryStructureDto?> GetSalaryStructureByIdAsync(int id);
         Task<bool> UpdateSalaryStructureAsync(int id, UpdateSalaryStructureRequest request);
         Task<bool> DeleteSalaryStructureAsync(int id);

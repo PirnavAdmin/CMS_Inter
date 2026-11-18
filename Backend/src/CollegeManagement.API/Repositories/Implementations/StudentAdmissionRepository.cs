@@ -42,6 +42,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         public async Task<IEnumerable<StudentAdmissionResponseDto>> GetAllAsync(int? campusId = null)
         {
+            if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<StudentAdmissionResponseDto>();
+            }
+
             var connection = await GetOpenConnectionAsync();
             var parameters = new DynamicParameters();
             parameters.Add("p_CampusId", (campusId.HasValue && campusId.Value > 0) ? campusId.Value : (int?)null, DbType.Int32);

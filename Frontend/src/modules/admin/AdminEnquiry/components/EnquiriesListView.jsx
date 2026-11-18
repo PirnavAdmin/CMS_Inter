@@ -119,6 +119,22 @@ export default function EnquiriesListView({ portalType = "admin" }) {
 
   const loadData = useCallback(
     async (signal) => {
+      const authUser = getAuthUser();
+      const isTenantCollege = Boolean(authUser?.collegeId && Number(authUser.collegeId) > 1);
+      if (isTenantCollege && !selectedCampusId) {
+        setItems([]);
+        setStats({
+          totalCount: 0,
+          newCount: 0,
+          inProgressCount: 0,
+          contactedCount: 0,
+          resolvedCount: 0,
+          todayCount: 0,
+        });
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError("");
       try {
