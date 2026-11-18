@@ -706,6 +706,18 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
     ],
   },
   {
+    id: "enquiry-management",
+    name: "Enquiry Management",
+    route: "/dashboard/enquiry-management",
+    section: "Enquiry Management",
+    icon: ClipboardList,
+    availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
+    legacyPermissionKeys: ["enquiries"],
+    screens: [
+      { id: "enquiries", name: "Enquiry Directory & Follow-ups", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT], description: "Track admission enquiries, counselor follow-ups, and conversions" },
+    ],
+  },
+  {
     id: "settings",
     name: "Settings",
     route: "/dashboard/settings",
@@ -719,6 +731,8 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
       { id: "campus-configuration", name: "Campus Configuration & Branches", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Multi-campus branch locations and board affiliations" },
       { id: "number-series", name: "Auto Number Series", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Prefixes and sequences for admissions, invoices, and roll nos" },
       { id: "templates", name: "Templates & Bulk Uploaders", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.DOWNLOAD], description: "Certificate templates, letterheads, and Excel upload templates" },
+      { id: "offer-letter-configuration", name: "Offer Letter Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Configure staff offer letter templates, signatories, and terms" },
+      { id: "payment-gateway", name: "Payment Gateway Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Configure online fee payment gateway credentials and webhooks" },
       { id: "leave-types", name: "Leave Types & Quotas", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Casual, sick, maternity, and earned leave quotas" },
       { id: "lop-configuration", name: "LOP (Loss of Pay) Configuration", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Loss of Pay deduction rules and leave impact configuration" },
       { id: "attendance-timing", name: "Attendance Timings & Shifts", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE], description: "Grace periods, late marks, and biometric sync rules" },

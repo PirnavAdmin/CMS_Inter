@@ -583,7 +583,8 @@ namespace CollegeManagement.API.Services.Implementations
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
             // Driver & Transport specific details: Use actual assigned role membership to identify drivers
-            bool isDriverRole = string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+            bool isDriverRole = string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(dto.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase);
             staff.IsDriver = isDriverRole;
             if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
             {
@@ -669,7 +670,8 @@ namespace CollegeManagement.API.Services.Implementations
                 }
 
                 // 2. Insert Staff domain record via EF Core inside this transaction
-                staff.IsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                staff.IsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase);
                 await _staffRepository.AddAsync(staff);
 
                 var initialPhoto = dto.PhotoPath ?? dto.Photo;
@@ -707,9 +709,11 @@ namespace CollegeManagement.API.Services.Implementations
                 // 4b. Transactionally provision transport driver profile if role is Driver
                 bool effectiveIsDriver = (dto.IsDriver.HasValue && dto.IsDriver.Value)
                     || string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dto.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase));
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && (string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase) || string.Equals(resolvedDesignationName.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)));
                 if (dto.IsDriver.HasValue && !dto.IsDriver.Value)
                 {
                     effectiveIsDriver = false;
@@ -1113,9 +1117,11 @@ namespace CollegeManagement.API.Services.Implementations
 
                 bool isDriver = (dto.IsDriver.HasValue && dto.IsDriver.Value)
                     || string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dto.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(effectiveRoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(effectiveRoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase));
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && (string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase) || string.Equals(resolvedDesignationName.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)));
 
                 if (dto.IsDriver.HasValue && !dto.IsDriver.Value)
                 {

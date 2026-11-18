@@ -28,6 +28,7 @@ const routePermissions = {
   timetable: "VIEW_TIMETABLE",
   classes: "VIEW_CLASSES",
   attendance: "MARK_ATTENDANCE",
+  "monthly-report": "VIEW_ATTENDANCE",
   marks: "ENTER_MARKS",
   "exam-duties": "VIEW_EXAM_DUTIES",
   "my-attendance": "VIEW_SELF_ATTENDANCE",
@@ -35,6 +36,7 @@ const routePermissions = {
   payslips: "VIEW_PAYSLIPS",
   holidays: "VIEW_HOLIDAYS",
   reimbursements: "VIEW_REIMBURSEMENTS",
+  settings: "VIEW_SETTINGS",
 };
 
 export function AccessDeniedNotice({ moduleName = "this screen" }) {

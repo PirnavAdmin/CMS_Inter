@@ -11,6 +11,8 @@ import navbarAcademicYearIcon from "@/assets/navbar-3d/academic-year.png";
 import ThemeToggle from "@/shared/components/ThemeToggle.jsx";
 import TransparentAvatar from "@/shared/components/TransparentAvatar.jsx";
 import { useFaculty } from "../FacultyContext.jsx";
+import { useFacultyPermissions } from "../PermissionContext.jsx";
+import { permissionByModule } from "./FacultySidebar.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { clearAuthSession, getAuthUser } from "@/modules/auth/authStorage.js";
@@ -52,6 +54,7 @@ const FALLBACK_BOARDS = [
 
 export default function FacultyNavbar() {
   const navigate = useNavigate();
+  const facultyPermissions = useFacultyPermissions();
 
   // Contexts
   const {
@@ -373,7 +376,14 @@ export default function FacultyNavbar() {
 
   // Search Index Filtering
   const searchSuggestions = useMemo(() => {
-    const searchIndex = [...STAFF_SEARCH_INDEX];
+    const searchIndex = STAFF_SEARCH_INDEX.filter((item) => {
+      if (item.moduleId === "dashboard") return true;
+      const permKey = permissionByModule[item.moduleId];
+      if (!permKey) return true;
+      return typeof facultyPermissions?.includes === "function"
+        ? facultyPermissions.includes(permKey)
+        : true;
+    });
     const q = searchQuery.trim().toLowerCase();
     if (!q) return searchIndex.slice(0, 8);
     return searchIndex
@@ -384,7 +394,7 @@ export default function FacultyNavbar() {
           (item.keywords && item.keywords.toLowerCase().includes(q))
       )
       .slice(0, 8);
-  }, [searchQuery]);
+  }, [searchQuery, facultyPermissions]);
 
   const handleSelectSearchResult = (item) => {
     setActiveModule(item.moduleId);
@@ -864,15 +874,17 @@ export default function FacultyNavbar() {
                   ID: {profileData.employeeId || profileData.id || "—"}
                 </div>
               </div>
-              <button
-                className="cms-dropdown-item"
-                onClick={() => {
-                  setActiveModule("profile");
-                  setProfileDropOpen(false);
-                }}
-              >
-                <User size={14} /> My Profile
-              </button>
+              {(!facultyPermissions?.includes || facultyPermissions.includes("VIEW_PROFILE")) && (
+                <button
+                  className="cms-dropdown-item"
+                  onClick={() => {
+                    setActiveModule("profile");
+                    setProfileDropOpen(false);
+                  }}
+                >
+                  <User size={14} /> My Profile
+                </button>
+              )}
               <button
                 type="button"
                 className="cms-dropdown-item"

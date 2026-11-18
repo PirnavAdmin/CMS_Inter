@@ -28,7 +28,7 @@ import { SHOW_HALL_TICKETS } from "@/modules/exam-cell/hallTicketsConfig.js";
 import { can, hasRole } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
-import { getCurrentUserPermissions } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -118,6 +118,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/warden-dashboard/attendance", icon: attendanceIcon },
   { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
   { path: "/warden-dashboard/profile", icon: staffIcon },
+  { path: "/warden-dashboard/settings", icon: settingsBoardAcademicYearIcon },
   { path: "/warden-dashboard", icon: dashboardIcon },
   { path: "/exam-cell-dashboard/exams", icon: examinationIcon },
   { path: "/exam-cell-dashboard/exam-timetable", icon: timetableIcon },
@@ -298,6 +299,7 @@ export const parentMenu = [
   {
     section: "Settings",
     items: [
+      { to: "/parent-dashboard/profile", label: "My Profile", icon: staffIcon, moduleKey: getParentNavigationItem("/parent-dashboard/profile")?.permissionKey || getParentNavigationItem("/parent-dashboard/profile")?.id || "profile" },
       { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.permissionKey || getParentNavigationItem("/parent-dashboard/settings")?.id },
     ],
   },
@@ -328,6 +330,13 @@ export const wardenMenu = [
       { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
       { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
       { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
+    ],
+  },
+  {
+    section: "Account",
+    items: [
+      { to: "/warden-dashboard/profile", label: "Profile", icon: staffIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/profile")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/profile")?.id || "profile" },
+      { to: "/warden-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/settings")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/settings")?.id || "settings" },
     ],
   },
 ];
@@ -439,8 +448,6 @@ const parentSearchIndex = [
   ),
   { to: "/parent-dashboard/academics", label: "Results & Marks Memo", section: "Student & Academics" },
   { to: "/parent-dashboard/notifications", label: "Notifications", section: "Student & Academics" },
-  { to: "/parent-dashboard/profile", label: "Profile", section: "Account" },
-  { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
 const wardenSearchIndex = [
@@ -451,7 +458,6 @@ const wardenSearchIndex = [
   ),
   { to: "/warden-dashboard/overview", label: "Overview", section: "Overview" },
   { to: "/warden-dashboard/beds", label: "Bed Allocation", section: "Hostel Operations" },
-  { to: "/warden-dashboard/profile", label: "My Profile", section: "Account" },
 ];
 
 const examCellSearchIndex = createSearchIndex(examCellMenu);
@@ -691,38 +697,7 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const [currentUser, setCurrentUser] = useState(() => readUser());
   const user = currentUser;
-
-  useEffect(() => {
-    if (!currentUser || hasRole("SUPER_ADMIN", currentUser)) return;
-
-    let isMounted = true;
-    const fetchPerms = () => {
-      getCurrentUserPermissions()
-        .then((res) => {
-          if (isMounted && res?.data && Array.isArray(res.data) && res.data.length > 0) {
-            const updated = { ...currentUser, permissions: res.data };
-            try {
-              for (const storage of [window.localStorage, window.sessionStorage]) {
-                if (storage.getItem("user")) storage.setItem("user", JSON.stringify(updated));
-              }
-            } catch { }
-            setCurrentUser(updated);
-          }
-        })
-        .catch((err) => {
-          console.warn("Could not load current user permissions:", err?.message);
-        });
-    };
-
-    fetchPerms();
-
-    const handleUpdate = () => fetchPerms();
-    window.addEventListener("roles-updated", handleUpdate);
-    return () => {
-      isMounted = false;
-      window.removeEventListener("roles-updated", handleUpdate);
-    };
-  }, []);
+  const { permissions: effectivePermissions, hasFetched: permsHasFetched } = useEffectivePermissions();
 
   // Live profile photo and storage synchronization across sessions and tabs
   useEffect(() => {
@@ -801,22 +776,33 @@ export default function DashboardLayout({
       else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && (user.permissions || user.rolePermissions)) {
-      return base
-        .map((group) => ({
-          ...group,
-          items: (group.items || []).filter((item) => {
-            if (!item.moduleKey || item.moduleKey === "dashboard" || item.moduleKey === "enquiry-management") return true;
-            return can(item.moduleKey, ACTIONS.VIEW, user?.permissions, user, item.screenKey);
-          }),
-        }))
-        .filter((group) => group.items.length > 0);
+    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user)) {
+      const resolvedPerms = permsHasFetched
+        ? effectivePermissions
+        : (effectivePermissions?.length ? effectivePermissions : (user.permissions ?? user.rolePermissions));
+      if (Array.isArray(resolvedPerms)) {
+        return base
+          .map((group) => ({
+            ...group,
+            items: (group.items || []).filter((item) => {
+              if (!item.moduleKey) return true;
+              return can(item.moduleKey, ACTIONS.VIEW, resolvedPerms, user, item.screenKey);
+            }),
+          }))
+          .filter((group) => group.items.length > 0);
+      }
     }
     return base;
-  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex);
+  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user, effectivePermissions, permsHasFetched]);
+  const currentSearchIndex = useMemo(() => {
+    if (searchIndexOverride) return searchIndexOverride;
+    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user)) {
+      return createSearchIndex(activeMenu);
+    }
+    return menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex;
+  }, [searchIndexOverride, user, menuOverride, activeMenu, isWarden, isParent, isPrincipal, isExamCell]);
   const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard/settings" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !isWarden && !isExamCell && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;

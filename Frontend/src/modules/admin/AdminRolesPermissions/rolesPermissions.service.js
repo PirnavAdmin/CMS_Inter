@@ -27,15 +27,28 @@ const apiResult = (data, source = "api") => ({ data: clone(data), meta: { source
 
 const notifyRolesUpdated = () => {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("roles-updated"));
     try {
       localStorage.setItem("cms_permissions_updated_at", String(Date.now()));
     } catch {
       // ignore
     }
+    window.dispatchEvent(new Event("roles-updated"));
   }
 };
 
+// Live role-code -> numeric roleId map populated from backend responses (getRoles / getRoleById).
+const dynamicRoleIdByCode = new Map();
+
+const cacheRoleIdMapping = (role) => {
+  if (!role || typeof role !== "object") return;
+  const numericId = Number(role.roleId ?? role.id);
+  const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
+  if (code && !Number.isNaN(numericId) && numericId > 0) {
+    dynamicRoleIdByCode.set(code, numericId);
+  }
+};
+
+// Non-colliding fallback IDs for core seeded roles; other roles resolve dynamically via dynamicRoleIdByCode.
 const ROLE_CODE_TO_ID = {
   SUPER_ADMIN: 1,
   ADMIN: 2,
@@ -52,22 +65,22 @@ const ROLE_CODE_TO_ID = {
   PLACEMENT_OFFICER: 11,
   BUS_DRIVER: 12,
   DRIVER: 12,
-  ATTENDANT: 13,
   OFFICE_STAFF: 13,
-  RECEPTIONIST: 13,
   DEAN: 14,
-  LAB_ASSISTANT: 14,
-  ADMISSION_STAFF: 14,
   PRINCIPAL: 15,
   INVENTORY_MANAGER: 16,
   INVENTORY: 16,
   UNASSIGNED: 17,
+  TRANSPORT_MANAGER: 18,
 };
 
 const resolveRoleIdParam = (roleId, roleCode) => {
   const parsed = Number(roleId);
   if (!Number.isNaN(parsed) && parsed > 0) return parsed;
   const norm = normalizeRoleCode(roleCode || roleId);
+  if (norm && dynamicRoleIdByCode.has(norm)) {
+    return dynamicRoleIdByCode.get(norm);
+  }
   return ROLE_CODE_TO_ID[norm] || roleId;
 };
 
@@ -81,7 +94,7 @@ const normalizeRole = (role = {}) => {
   return {
     ...role,
     id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-    roleId: Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
+    roleId: Number(role.roleId ?? role.id) || dynamicRoleIdByCode.get(code) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
     code,
     name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
     description: role.description || matchedSeed?.description || "",
@@ -189,7 +202,10 @@ export async function getRoles(filters = {}) {
     const response = await apiClient.get(apiEndpoints.roles.cards, { params: filters });
     const payload = response?.data?.data || response?.data || [];
     if (Array.isArray(payload) && payload.length > 0) {
-      return apiResult(sortRolesByPriority(payload.map(normalizeRole)), "api");
+      payload.forEach(cacheRoleIdMapping);
+      const normalizedRoles = payload.map(normalizeRole);
+      normalizedRoles.forEach(cacheRoleIdMapping);
+      return apiResult(sortRolesByPriority(normalizedRoles), "api");
     }
   } catch (err) {
     console.warn("Live getRoles failed, falling back to cached/seed data:", err?.message);
@@ -203,7 +219,12 @@ export async function getRoleById(roleId) {
   const targetId = resolveRoleIdParam(roleId);
   try {
     const response = await apiClient.get(apiEndpoints.roles.getById(targetId));
-    if (response?.data?.data) return apiResult(normalizeRole(response.data.data), "api");
+    if (response?.data?.data) {
+      cacheRoleIdMapping(response.data.data);
+      const normalized = normalizeRole(response.data.data);
+      cacheRoleIdMapping(normalized);
+      return apiResult(normalized, "api");
+    }
   } catch (err) {
     console.warn("Live getRoleById failed:", err?.message);
   }
@@ -224,7 +245,9 @@ export async function createRole(payload = {}) {
       newDesignationName: payload.newDesignationName || null,
     });
     notifyRolesUpdated();
-    return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
+    const created = normalizeRole(response?.data?.data || response?.data);
+    cacheRoleIdMapping(created);
+    return apiResult(created, "api");
   } catch (err) {
     console.error("createRole failed:", err);
     throw err;
@@ -244,7 +267,9 @@ export async function updateRole(roleId, payload = {}) {
       isActive: payload.isActive ?? true,
     });
     notifyRolesUpdated();
-    return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
+    const created = normalizeRole(response?.data?.data || response?.data);
+    cacheRoleIdMapping(created);
+    return apiResult(created, "api");
   } catch (err) {
     console.error("updateRole failed:", err);
     throw err;

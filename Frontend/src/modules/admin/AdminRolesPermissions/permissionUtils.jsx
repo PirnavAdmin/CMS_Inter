@@ -59,6 +59,7 @@ const MODULE_ALIASES = Object.freeze({
   "warden-reimbursements": "reimbursement",
   "warden-settings": "settings",
   // Driver aliases
+  "driver-dashboard": "dashboard",
   "driver-todays-trips": "transport",
   "driver-route-stops": "transport",
   "driver-live-navigation": "transport",
@@ -69,6 +70,12 @@ const MODULE_ALIASES = Object.freeze({
   "driver-trip-reports": "reports-analytics",
   "driver-holidays": "holiday-management",
   "driver-settings": "settings",
+  // Transport Manager aliases
+  "transport-manager-setup": "transport",
+  "transport-manager-operations": "transport",
+  // Enquiry aliases
+  "enquiry-management": "enquiry-management",
+  "enquiries": "enquiry-management",
   // Accountant aliases
   "accountant-dashboard": "dashboard",
   "accountant-fee-management": "fee-management",
@@ -89,6 +96,7 @@ const MODULE_ALIASES = Object.freeze({
   "exam-cell-attendance": "attendance",
   "exam-cell-my-attendance": "staff-attendance",
   "exam-cell-certificates": "certificates",
+  "exam-cell-holiday-management": "holiday-management",
   "exam-cell-settings": "settings",
   "exam-cell-promotions": "promotion",
   // Inventory Manager aliases
@@ -104,7 +112,6 @@ const MODULE_ALIASES = Object.freeze({
   "inventory-leave-management": "staff-leave-management",
   "inventory-my-payslips": "payroll",
   "inventory-notifications": "dashboard",
-  "inventory-profile": "profile",
   "inventory-settings": "settings",
 });
 
@@ -380,6 +387,7 @@ export const toPermissionMap = (permissions = []) => {
     map["warden-holidays"] = map["holiday-management"];
     map["driver-holidays"] = map["holiday-management"];
     map["accountant-holidays"] = map["holiday-management"];
+    map["exam-cell-holiday-management"] = map["holiday-management"];
   }
 
   // Reimbursements
@@ -415,13 +423,24 @@ export const toPermissionMap = (permissions = []) => {
     ["inventory-items", "inventory-stock-in", "inventory-stock-out", "inventory-suppliers", "inventory-categories", "inventory-purchase-orders", "inventory-returns", "inventory-reports"].forEach((k) => { map[k] = map["inventory-management"]; });
   }
   if (map["transport"]) {
-    ["driver-todays-trips", "driver-route-stops", "driver-live-navigation", "driver-student-manifest"].forEach((k) => { map[k] = map["transport"]; });
+    [
+      "driver-todays-trips",
+      "driver-route-stops",
+      "driver-live-navigation",
+      "driver-student-manifest",
+      "transport-manager-setup",
+      "transport-manager-operations",
+    ].forEach((k) => { map[k] = map["transport"]; });
+  }
+  if (map["enquiry-management"]) {
+    map["enquiries"] = map["enquiry-management"];
   }
 
   // Mirror settings screens so direct screen-name or module-screen lookups resolve seamlessly
   const settingsScreens = [
     "audit-logs", "lop-configuration", "campus-images", "campus-configuration",
     "leave-types", "attendance-timing", "number-series", "templates",
+    "offer-letter-configuration", "payment-gateway",
     "credentials", "credentials-generator", "landing-configuration", "login-configuration"
   ];
   settingsScreens.forEach((scr) => {
@@ -506,6 +525,7 @@ export function hasRole(roleCode, user = getAuthUser()) {
 const SETTINGS_SCREENS = Object.freeze([
   "audit-logs", "lop-configuration", "campus-images", "campus-configuration",
   "leave-types", "attendance-timing", "number-series", "templates",
+  "offer-letter-configuration", "payment-gateway",
   "credentials", "credentials-generator", "landing-configuration", "login-configuration"
 ]);
 

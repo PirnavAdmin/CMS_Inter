@@ -9,6 +9,11 @@ namespace CollegeManagement.API.DTOs.Roles
         {
             // Overview & Academic
             { "dashboard", "Dashboard" },
+            { "parent-dashboard", "Dashboard" },
+            { "accountant-dashboard", "Dashboard" },
+            { "exam-cell-dashboard", "Dashboard" },
+            { "driver-dashboard", "Dashboard" },
+            { "inventory-notifications", "Dashboard" },
             { "board-academic-year", "Board & Academic Year" },
             { "board-academic-years", "Board & Academic Year" },
             { "group-management", "Group Management" },
@@ -24,9 +29,12 @@ namespace CollegeManagement.API.DTOs.Roles
             { "warden-holidays", "Holiday Management" },
             { "driver-holidays", "Holiday Management" },
             { "accountant-holidays", "Holiday Management" },
+            { "exam-cell-holiday-management", "Holiday Management" },
 
             // Student & Admissions
             { "student-admission", "Student Admission" },
+            { "enquiry-management", "Enquiry Management" },
+            { "enquiries", "Enquiry Management" },
             { "student-management", "Student Management" },
             { "parent-children", "Student Management" },
             { "section-allocation", "Section Allocation" },
@@ -139,6 +147,7 @@ namespace CollegeManagement.API.DTOs.Roles
             { "accountant-settings", "Settings" },
             { "exam-cell-settings", "Settings" },
             { "inventory-settings", "Settings" },
+            { "warden-settings", "Settings" },
             { "roles-permissions", "Roles & Permissions" },
             { "profile", "My Profile" },
             { "my-profile", "My Profile" },

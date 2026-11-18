@@ -103,6 +103,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Configures/updates applicable modules for a specific role.
         /// </summary>
         [HttpPut("{roleId:int}/modules")]
+        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> SetRoleModules(int roleId, [FromBody] UpdateRoleModulesRequest request)
         {
             try

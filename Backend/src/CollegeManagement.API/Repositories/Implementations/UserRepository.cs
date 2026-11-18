@@ -310,7 +310,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             try
             {
                 var role = await GetRoleByIdAsync(roleId, conn, transaction);
-                bool isDriver = string.Equals(role?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                bool isDriver = string.Equals(role?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(role?.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase);
                 await conn.ExecuteAsync(
                     "sp_SyncTransportDriverFromStaff",
                     new { p_StaffId = staffId, p_IsDriverRole = isDriver ? (byte)1 : (byte)0 },

@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, Clock3, FilePlus2, IndianRupee, LogIn, LogOut, RefreshCw, Send, Upload, XCircle, List, Grid2X2, Eye } from "lucide-react";
+import { Building2, CalendarDays, CheckCircle2, Clock3, FilePlus2, IndianRupee, Lock, LogIn, LogOut, RefreshCw, Save, Send, ShieldCheck, Upload, UserRound, XCircle, List, Grid2X2, Eye } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
+import apiClient from "@/api/axios.js";
+import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { attendanceService } from "@/api/attendanceService.js";
 import reimbursementApi from "@/api/reimbursementApi.js";
 import { submitClaim } from "@/services/reimbursementService.js";
@@ -64,6 +67,165 @@ function HolidaysPage() {
   return <Workspace title="Holidays" subtitle="View college holidays, hostel operating arrangements, and your assigned holiday duties."><div className="warden-holiday-controls"><input aria-label="Search holidays" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search holiday name" /><input aria-label="Filter holidays by month" type="month" value={month} onChange={(event) => setMonth(event.target.value)} /><span className="warden-view-toggle"><button className={view === "list" ? "active" : ""} onClick={() => setView("list")} aria-label="List view"><List size={16} /></button><button className={view === "calendar" ? "active" : ""} onClick={() => setView("calendar")} aria-label="Calendar view"><Grid2X2 size={16} /></button></span></div>{error && <div className="warden-error">{error}</div>}<div className="warden-summary-grid"><Summary icon={CalendarDays} label="Total Published Holidays">{loading ? "Loading…" : holidays.length}</Summary><Summary icon={Clock3} label="Upcoming Holidays" tone="amber">{loading ? "—" : upcoming}</Summary><Summary icon={CheckCircle2} label="Hostel-Open Holidays" tone="green">{loading ? "—" : open}</Summary><Summary icon={CalendarDays} label="My Holiday Duties" tone="violet">{loading ? "—" : dutyRows.length}</Summary></div><section className="warden-panel"><div className="warden-panel-head"><div><h2>{view === "list" ? "Published Holidays" : "Holiday Calendar"}</h2><p>College closure and hostel operations are kept separate.</p></div><button className="warden-secondary" onClick={load}><RefreshCw size={15} /> Refresh</button></div>{loading ? <Empty text="Loading published holidays…" /> : view === "calendar" ? <div className="warden-calendar-list">{filtered.length ? filtered.map((holiday) => <button className="warden-calendar-entry" key={value(holiday, "id", "holidayId")} onClick={() => setSelected(holiday)}><strong>{prettyDate(holidayDate(holiday))}</strong><span>{holidayName(holiday)}</span><small>{value(holiday, "hostelStatus", "hostelOperationalStatus")}</small></button>) : <Empty text="No published holidays found for the selected context." />}</div> : <Records rows={filtered} headers={["Date", "Day", "Holiday Name", "Type", "College Status", "Hostel Status", "My Duty", "Actions"]} render={(holiday) => <tr key={value(holiday, "id", "holidayId")}><td>{prettyDate(holidayDate(holiday))}</td><td>{holidayDate(holiday) ? new Intl.DateTimeFormat("en-IN", { weekday: "short" }).format(new Date(`${holidayDate(holiday)}T00:00:00`)) : "—"}</td><td>{holidayName(holiday)}</td><td>{value(holiday, "holidayType", "type")}</td><td>{value(holiday, "collegeStatus", "status")}</td><td><Chip>{value(holiday, "hostelStatus", "hostelOperationalStatus")}</Chip></td><td>{holiday.myDuty || holiday.dutyAssignment || holiday.assignedDuty ? <Chip>Assigned</Chip> : "Not assigned"}</td><td><button className="warden-icon-button" onClick={() => setSelected(holiday)} aria-label={`View ${holidayName(holiday)}`}><Eye size={16} /></button></td></tr>} empty="No published holidays found for the selected context." />}</section><section className="warden-panel"><div className="warden-panel-head"><div><h2>My Holiday Duties</h2><p>Read-only assignments are shown only when the authorized holiday record includes them.</p></div></div><Records rows={dutyRows} headers={["Date", "Holiday", "Shift / location", "Status", "Instructions"]} render={(holiday) => { const duty = holiday.myDuty || holiday.dutyAssignment || holiday.assignedDuty || {}; return <tr key={`duty-${value(holiday, "id", "holidayId")}`}><td>{prettyDate(holidayDate(holiday))}</td><td>{holidayName(holiday)}</td><td>{value(duty, "shift", "dutyShift", "location")}</td><td><Chip>{value(duty, "status")}</Chip></td><td>{value(duty, "instructions", "notes")}</td></tr>; }} empty="No holiday duty assignments are available." /></section>{selected && <HolidayDetails holiday={selected} onClose={() => setSelected(null)} />}</Workspace>;
 }
 function HolidayDetails({ holiday, onClose }) { const duty = holiday.myDuty || holiday.dutyAssignment || holiday.assignedDuty; return <div className="warden-dialog-backdrop" onMouseDown={onClose}><section className="warden-dialog" role="dialog" aria-modal="true" aria-label="Holiday details" onMouseDown={(event) => event.stopPropagation()}><button className="warden-dialog-close" onClick={onClose} aria-label="Close holiday details">×</button><h2>{holidayName(holiday)}</h2><p>{prettyDate(holidayDate(holiday))}</p><dl><dt>Type</dt><dd>{value(holiday, "holidayType", "type")}</dd><dt>College status</dt><dd>{value(holiday, "collegeStatus", "status")}</dd><dt>Hostel status</dt><dd>{value(holiday, "hostelStatus", "hostelOperationalStatus")}</dd><dt>Hostel instructions</dt><dd>{value(holiday, "hostelInstructions", "instructions", "description")}</dd>{duty && <><dt>My duty</dt><dd>{value(duty, "shift", "dutyShift", "location")}</dd><dt>Duty instructions</dt><dd>{value(duty, "instructions", "notes")}</dd></>}</dl></section></div>; }
+function ProfilePage() {
+  const user = getAuthUser() || {};
+  const { selectedCampus } = useCampusContext();
+  const [pwdForm, setPwdForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const displayName = user.fullName || user.name || user.displayName || user.unique_name || "Hostel Warden";
+  const employeeId = user.employeeId || user.staffId || user.id || "—";
+  const email = user.email || "—";
+  const phone = user.phoneNumber || user.mobile || user.phone || "—";
+  const designation = user.designation || user.Designation || "Hostel Warden";
+  const department = user.department || user.Department || "Hostel Administration";
+  const campusName = selectedCampus?.name || selectedCampus?.campusName || user.campusName || "Main Campus";
+
+  const handlePasswordSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+    setSuccess("");
+    if (pwdForm.newPassword.length < 6) {
+      setError("New password must be at least 6 characters long.");
+      return;
+    }
+    if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+      setError("New password and confirm password do not match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      try {
+        await apiClient.post(apiEndpoints.faculty.changePassword, pwdForm);
+      } catch (innerErr) {
+        if (innerErr?.response?.status && innerErr.response.status !== 404) throw innerErr;
+        await apiClient.post(apiEndpoints.auth.changePassword, pwdForm);
+      }
+      setSuccess("Password updated successfully.");
+      setPwdForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || "Failed to update password. Please verify your current password.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Workspace title="My Profile" subtitle="View your hostel warden account details and manage security credentials." section="Account">
+      <div className="warden-summary-grid">
+        <Summary icon={UserRound} label="Warden Name">{displayName}</Summary>
+        <Summary icon={ShieldCheck} label="Employee ID" tone="violet">{employeeId}</Summary>
+        <Summary icon={CheckCircle2} label="Role" tone="green">{designation}</Summary>
+        <Summary icon={Building2} label="Campus" tone="amber">{campusName}</Summary>
+      </div>
+      <section className="warden-panel">
+        <div className="warden-panel-head">
+          <div>
+            <h2>Account Information</h2>
+            <p>Verified staff profile linked to your authenticated Hostel Warden account.</p>
+          </div>
+        </div>
+        <div className="warden-form">
+          <label>Full Name<input value={displayName} readOnly /></label>
+          <label>Employee / Staff ID<input value={String(employeeId)} readOnly /></label>
+          <label>Designation<input value={designation} readOnly /></label>
+          <label>Department<input value={department} readOnly /></label>
+          <label>Email Address<input value={email} readOnly /></label>
+          <label>Phone / Mobile<input value={phone} readOnly /></label>
+        </div>
+      </section>
+      <section className="warden-panel">
+        <div className="warden-panel-head">
+          <div>
+            <h2>Account Security</h2>
+            <p>Update your login password to keep your Hostel Warden account secure.</p>
+          </div>
+        </div>
+        {error && <div className="warden-error">{error}</div>}
+        {success && <p className="warden-note" role="status">{success}</p>}
+        <form className="warden-form" onSubmit={handlePasswordSubmit}>
+          <label>Current Password<input type="password" value={pwdForm.currentPassword} onChange={(e) => setPwdForm({ ...pwdForm, currentPassword: e.target.value })} required autoComplete="current-password" /></label>
+          <label>New Password<input type="password" value={pwdForm.newPassword} onChange={(e) => setPwdForm({ ...pwdForm, newPassword: e.target.value })} required autoComplete="new-password" /></label>
+          <label>Confirm New Password<input type="password" value={pwdForm.confirmPassword} onChange={(e) => setPwdForm({ ...pwdForm, confirmPassword: e.target.value })} required autoComplete="new-password" /></label>
+          <div className="wide"><button className="warden-primary" type="submit" disabled={busy}><Lock size={15} /> {busy ? "Updating…" : "Update Password"}</button></div>
+        </form>
+      </section>
+    </Workspace>
+  );
+}
+
+const WARDEN_SETTINGS_KEY = "warden-portal-settings";
+function SettingsPage() {
+  const [prefs, setPrefs] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(WARDEN_SETTINGS_KEY) || "null");
+      if (saved && typeof saved === "object") return { emailAlerts: true, outpassAlerts: true, attendanceReminders: true, defaultHolidayView: "list", ...saved };
+    } catch {}
+    return { emailAlerts: true, outpassAlerts: true, attendanceReminders: true, defaultHolidayView: "list" };
+  });
+  const [savedNotice, setSavedNotice] = useState("");
+
+  const handleSave = (event) => {
+    event.preventDefault();
+    try {
+      localStorage.setItem(WARDEN_SETTINGS_KEY, JSON.stringify(prefs));
+      sessionStorage.setItem("warden-holiday-view", prefs.defaultHolidayView);
+    } catch {}
+    setSavedNotice("Settings saved successfully.");
+    setTimeout(() => setSavedNotice(""), 3000);
+  };
+
+  return (
+    <Workspace title="Settings" subtitle="Customize your Hostel Warden portal appearance and operational preferences." section="Account">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "16px", alignItems: "start" }}>
+        <ThemeSettingsCard />
+        <section className="warden-panel" style={{ marginTop: 0 }}>
+          <div className="warden-panel-head">
+            <div>
+              <h2>Portal Preferences</h2>
+              <p>Configure notification alerts and workspace defaults for your hostel duties.</p>
+            </div>
+          </div>
+          {savedNotice && <p className="warden-note" role="status" style={{ marginBottom: "12px" }}>{savedNotice}</p>}
+          <form className="warden-form" onSubmit={handleSave} style={{ gridTemplateColumns: "1fr" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+              <input type="checkbox" checked={prefs.outpassAlerts} onChange={(e) => setPrefs({ ...prefs, outpassAlerts: e.target.checked })} />
+              <span>Notify on new student outpass &amp; leave requests</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+              <input type="checkbox" checked={prefs.attendanceReminders} onChange={(e) => setPrefs({ ...prefs, attendanceReminders: e.target.checked })} />
+              <span>Daily hostel night roll-call reminders</span>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+              <input type="checkbox" checked={prefs.emailAlerts} onChange={(e) => setPrefs({ ...prefs, emailAlerts: e.target.checked })} />
+              <span>Email summary for pending hostel complaints</span>
+            </label>
+            <label>
+              Default Holiday View
+              <select value={prefs.defaultHolidayView} onChange={(e) => setPrefs({ ...prefs, defaultHolidayView: e.target.value })}>
+                <option value="list">List View</option>
+                <option value="calendar">Calendar View</option>
+              </select>
+            </label>
+            <div>
+              <button className="warden-primary" type="submit"><Save size={15} /> Save Preferences</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </Workspace>
+  );
+}
+
 function Records({ rows, headers, render, empty }) { return <div className="warden-table-wrap"><table><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rows.length ? rows.map(render) : <tr><td colSpan={headers.length}><Empty text={empty} /></td></tr>}</tbody></table></div>; }
-function Workspace({ title, subtitle, children }) { return <DashboardLayout hidePageHeader><main className="warden-workspace"><nav className="warden-breadcrumb">Hostel Warden Portal <span>›</span> My Workspace <span>›</span> {title}</nav><header className="warden-heading"><div><h1>{title}</h1><p>{subtitle}</p></div></header>{children}</main></DashboardLayout>; }
-export default function WardenWorkspacePage({ page }) { return page === "leaves" ? <LeavesPage /> : page === "expenses" ? <ExpensesPage /> : page === "holidays" ? <HolidaysPage /> : <AttendancePage />; }
+function Workspace({ title, subtitle, section = "My Workspace", children }) { return <DashboardLayout hidePageHeader><main className="warden-workspace"><nav className="warden-breadcrumb">Hostel Warden Portal <span>›</span> {section} <span>›</span> {title}</nav><header className="warden-heading"><div><h1>{title}</h1><p>{subtitle}</p></div></header>{children}</main></DashboardLayout>; }
+export default function WardenWorkspacePage({ page }) {
+  if (page === "leaves") return <LeavesPage />;
+  if (page === "expenses") return <ExpensesPage />;
+  if (page === "holidays") return <HolidaysPage />;
+  if (page === "profile") return <ProfilePage />;
+  if (page === "settings") return <SettingsPage />;
+  return <AttendancePage />;
+}

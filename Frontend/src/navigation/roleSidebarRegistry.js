@@ -7,22 +7,19 @@ const STUDENT_PERMISSION_KEY_ALIASES = Object.freeze({
   examinations: "examination",
 });
 
-// The Student portal hides either Transport or Hostel according to a student's
-// active facility allocation. The role matrix uses the hostel branch as the
-// standard Student sidebar set; individual student visibility remains driven
-// by the StudentProfileContext facility check in StudentSidebar.
+// The Student portal shows either Transport or Hostel according to a student's
+// active facility allocation in StudentSidebar. Both modules remain configurable
+// in the Student role matrix so administrators can govern access to either.
 export const STUDENT_SIDEBAR_NAVIGATION = Object.freeze(
   studentMenuGroups.flatMap(([section, links]) =>
-    links
-      .filter(([, path]) => path !== "transport")
-      .map(([label, path, , moduleKey]) => ({
-        id: STUDENT_PERMISSION_KEY_ALIASES[moduleKey] || moduleKey,
-        sidebarModuleKey: moduleKey,
-        label,
-        route: `/student-dashboard${path ? `/${path}` : ""}`,
-        section,
-        availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE],
-      })),
+    links.map(([label, path, , moduleKey]) => ({
+      id: STUDENT_PERMISSION_KEY_ALIASES[moduleKey] || moduleKey,
+      sidebarModuleKey: moduleKey,
+      label,
+      route: `/student-dashboard${path ? `/${path}` : ""}`,
+      section,
+      availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE],
+    })),
   ),
 );
 
@@ -39,6 +36,7 @@ export const PARENT_SIDEBAR_NAVIGATION = Object.freeze([
   { id: "parent-communication", permissionKey: "reports-analytics", label: "Communication", route: "/parent-dashboard/communication", section: "Student & Academics", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
   { id: "parent-announcements-events", permissionKey: "reports-analytics", label: "Announcements & Events", route: "/parent-dashboard/announcements", section: "Student & Academics", legacyPermissionKeys: ["reports-analytics"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
   { id: "parent-documents", permissionKey: "certificates", label: "Documents", route: "/parent-dashboard/documents", section: "Student & Academics", legacyPermissionKeys: ["certificates"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "parent-profile", permissionKey: "profile", label: "My Profile", route: "/parent-dashboard/profile", section: "Settings", legacyPermissionKeys: ["profile", "my-profile"], availableActions: [ACTIONS.VIEW, ACTIONS.EDIT] },
   { id: "parent-settings", permissionKey: "settings", label: "Settings", route: "/parent-dashboard/settings", section: "Settings", legacyPermissionKeys: ["settings"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
 ]);
 
@@ -226,8 +224,8 @@ export const ROLE_SIDEBAR_MODULE_KEYS = Object.freeze({
   EXAMINATION_CELL: EXAMINATION_CELL_SIDEBAR_NAVIGATION.map((item) => item.id),
   HOSTEL_WARDEN: HOSTEL_WARDEN_NAVIGATION.map((item) => item.id),
   BUS_DRIVER: DRIVER_SIDEBAR_NAVIGATION.map((item) => item.id),
-  OFFICE_STAFF: ["dashboard", "student-management", "staff-management", "certificates", "reports-analytics", "profile", "settings"],
-  ADMISSION_STAFF: ["dashboard", "student-admission", "student-management", "certificates", "profile", "settings"],
+  OFFICE_STAFF: ["dashboard", "student-management", "staff-management", "enquiry-management", "certificates", "reports-analytics", "profile", "settings"],
+  ADMISSION_STAFF: ["dashboard", "student-admission", "student-management", "enquiry-management", "certificates", "profile", "settings"],
   TRANSPORT_MANAGER: TRANSPORT_MANAGER_SIDEBAR_NAVIGATION.map((item) => item.id),
   LAB_ASSISTANT: ["dashboard", "inventory-management", "profile", "staff-attendance", "staff-leave-management", "holiday-management", "settings"],
   INVENTORY_MANAGER: INVENTORY_MANAGER_SIDEBAR_NAVIGATION.map((item) => item.id),
