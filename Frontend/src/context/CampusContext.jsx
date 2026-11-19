@@ -36,7 +36,8 @@ export function CampusProvider({ children }) {
     } catch (e) {
       console.warn("Failed to load campuses from localStorage", e);
     }
-    if (u?.collegeId && Number(u.collegeId) > 1) return [];
+    const token = getAuthToken();
+    if (token || (u?.collegeId && Number(u.collegeId) > 0)) return [];
     return DEFAULT_CAMPUSES.map(campusApi.normalizeCampus);
   });
 
@@ -44,7 +45,8 @@ export function CampusProvider({ children }) {
   const [selectedCampusId, setSelectedCampusId] = useState(() => {
     const u = getAuthUser();
     const suffix = getTenantKeySuffix();
-    if (u?.collegeId && Number(u.collegeId) > 1 && campuses.length === 0) {
+    const token = getAuthToken();
+    if ((token || (u?.collegeId && Number(u.collegeId) > 0)) && campuses.length === 0) {
       return "";
     }
     try {
@@ -57,7 +59,7 @@ export function CampusProvider({ children }) {
     } catch (e) {
       console.warn("Failed to load selected campus id", e);
     }
-    if (u?.collegeId && Number(u.collegeId) > 1) return "";
+    if (token || (u?.collegeId && Number(u.collegeId) > 0)) return "";
     return DEFAULT_CAMPUSES[0]?.id || "";
   });
 
@@ -126,6 +128,7 @@ export function CampusProvider({ children }) {
       if (Array.isArray(data)) {
         setCampuses(data);
         setSelectedCampusId((prev) => {
+          if (!data.length) return "";
           const exists = data.some(
             (c) => String(c.id) === String(prev) || String(c.campusId) === String(prev)
           );
@@ -185,9 +188,18 @@ export function CampusProvider({ children }) {
 
     const u = getAuthUser();
     const roleStr = String(u?.role || "").trim().toLowerCase();
-    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
+    const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
+    const isAdmin = roleStr === "admin" || roleStr === "administrator";
+
+    if (isSuperAdmin) {
+      return allActive;
+    }
 
     if (isAdmin) {
+      if (u?.collegeId && Number(u.collegeId) > 0) {
+        const cId = Number(u.collegeId);
+        return allActive.filter((c) => !c.collegeId || Number(c.collegeId) === cId);
+      }
       return allActive;
     }
 
@@ -220,6 +232,7 @@ export function CampusProvider({ children }) {
   const selectedCampus = useMemo(() => {
     const list = activeCampuses.length > 0 ? activeCampuses : campuses;
     if (!list?.length) return null;
+    if (!selectedCampusId) return null;
     const strId = String(selectedCampusId);
     return (
       list.find((c) => String(c.id) === strId || String(c.campusId) === strId) ||

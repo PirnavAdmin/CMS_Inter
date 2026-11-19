@@ -527,13 +527,18 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
   const seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
   const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
 
+  // Strict Rule: If no campus is assigned or selected, NEVER auto-generate an ID
+  if (!campusId) {
+    return "";
+  }
+
   try {
     // 1. Fetch live preview directly from official Settings -> ID & Number Series API
     const response = await apiClient.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
-      params: campusId != null ? { campusId } : undefined,
+      params: { campusId },
     });
     const data = response?.data?.data ?? response?.data?.Data ?? response?.data ?? {};
-    if (data?.livePreview && typeof data.livePreview === "string") {
+    if (data?.livePreview && typeof data.livePreview === "string" && !data.livePreview.includes("Select campus") && !data.livePreview.includes("Campus Required")) {
       return data.livePreview;
     }
   } catch (err) {
@@ -549,8 +554,7 @@ export const resolveNextStaffEmployeeId = async (staffType = "Teaching", existin
     console.warn("Staff getNextEmployeeId endpoint error:", err);
   }
 
-  // 3. Fallback default
-  return isTeaching ? "MTCH0001" : "MNT0001";
+  return "";
 };
 
 export const resolveBoardCode = (staffRecord, boardsList = []) => {
@@ -5514,9 +5518,10 @@ function TeachingForm({ records, setRecords, existing }) {
   useEffect(() => {
     let isMounted = true;
     async function fetchNextId() {
-      const nextId = await resolveNextStaffEmployeeId("Teaching", records, selectedCampus);
-      if (isMounted && nextId) {
-        setValues((v) => ({ ...v, employeeId: nextId }));
+      const targetCampus = values.campusId ? campuses.find(c => String(c.id || c.campusId) === String(values.campusId)) : selectedCampus;
+      const nextId = await resolveNextStaffEmployeeId("Teaching", records, targetCampus);
+      if (isMounted) {
+        setValues((v) => ({ ...v, employeeId: nextId || "" }));
       }
     }
     if (!existing) fetchNextId();
@@ -5920,9 +5925,10 @@ function NonTeachingForm({ records, setRecords, existing }) {
   useEffect(() => {
     let isMounted = true;
     async function fetchNextId() {
-      const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records, selectedCampus);
-      if (isMounted && nextId) {
-        setValues((v) => ({ ...v, employeeId: nextId }));
+      const targetCampus = values.campusId ? campuses.find(c => String(c.id || c.campusId) === String(values.campusId)) : selectedCampus;
+      const nextId = await resolveNextStaffEmployeeId("Non-Teaching", records, targetCampus);
+      if (isMounted) {
+        setValues((v) => ({ ...v, employeeId: nextId || "" }));
       }
     }
     if (!existing) fetchNextId();

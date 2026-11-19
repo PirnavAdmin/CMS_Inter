@@ -116,7 +116,7 @@ namespace CollegeManagement.API.Services.Implementations
             // ── ROLL_NO BRANCH: Campus + Group scoped ──────────────────────────────
             if (code == "ROLL_NO")
             {
-                if (!campusId.HasValue || campusId <= 0)
+                if (!campusId.HasValue || campusId <= 0 || campusId.Value == 999999999)
                     throw new System.ArgumentException("campusId is required for Roll Number generation.");
 
                 var boardId = context?.BoardId ?? 0;
@@ -166,6 +166,9 @@ namespace CollegeManagement.API.Services.Implementations
             var config = await _repository.GetByCodeAsync(actualCode, campusId) ?? await _repository.GetByCodeAsync(code, campusId);
             if (config != null && !config.IsActive) {
                 throw new System.InvalidOperationException($"Generation stopped: The series {code} is currently inactive.");
+            }
+            if ((!campusId.HasValue || campusId.Value <= 0 || campusId.Value == 999999999) && (actualCode == "ROLL_NO" || (config != null && config.FormatPattern.Contains("{CAMPUS}", StringComparison.OrdinalIgnoreCase)))) {
+                throw new System.ArgumentException($"A campus branch must be selected to generate sequence numbers for {code}.");
             }
 
             var entity = await _repository.GenerateNextSequenceAsync(actualCode, campusId, baseSeriesCode: code);
@@ -222,6 +225,11 @@ namespace CollegeManagement.API.Services.Implementations
                 curSeq = Math.Max(curSeq, maxSeq);
             }
 
+            if ((!campusId.HasValue || campusId.Value <= 0 || campusId.Value == 999999999) && (activePattern.Contains("{CAMPUS}", StringComparison.OrdinalIgnoreCase) || code == "ROLL_NO"))
+            {
+                return "Select campus to generate";
+            }
+
             var startNum = baseEntity?.StartNumber ?? 1;
 
             var nextSeq = curSeq < startNum ? startNum : curSeq + 1;
@@ -266,14 +274,22 @@ namespace CollegeManagement.API.Services.Implementations
                 ? entity.StartNumber
                 : curSeq + 1;
 
-            var livePreview = NumberSeriesPatternEvaluator.Evaluate(
-                pattern: entity.FormatPattern,
-                sequenceNumber: nextSeq,
-                numberLength: entity.NumberLength,
-                prefix: entity.Prefix,
-                context: context,
-                referenceDate: DateTime.Now,
-                isPreview: true);
+            string livePreview;
+            if ((!campusId.HasValue || campusId.Value <= 0) && (entity.FormatPattern.Contains("{CAMPUS}", StringComparison.OrdinalIgnoreCase) || entity.SeriesCode == "ROLL_NO"))
+            {
+                livePreview = "Select campus to generate";
+            }
+            else
+            {
+                livePreview = NumberSeriesPatternEvaluator.Evaluate(
+                    pattern: entity.FormatPattern,
+                    sequenceNumber: nextSeq,
+                    numberLength: entity.NumberLength,
+                    prefix: entity.Prefix,
+                    context: context,
+                    referenceDate: DateTime.Now,
+                    isPreview: true);
+            }
 
             var curSeqToUse = curSeq > 0 ? curSeq : entity.StartNumber;
             var currentExample = NumberSeriesPatternEvaluator.Evaluate(

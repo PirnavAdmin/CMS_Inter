@@ -81,10 +81,10 @@ namespace CollegeManagement.API.Helpers
             var cert = !string.IsNullOrWhiteSpace(context?.Cert) ? context.Cert : "CND";
             result = Regex.Replace(result, @"\{CERT\}", cert, RegexOptions.IgnoreCase);
 
-            var campusStr = !string.IsNullOrWhiteSpace(context?.CampusCode) ? context.CampusCode : "M";
+            var campusStr = !string.IsNullOrWhiteSpace(context?.CampusCode) ? context.CampusCode : (isPreview ? "[CAMPUS]" : "M");
             var campus = campusStr.ToUpperInvariant();
             result = System.Text.RegularExpressions.Regex.Replace(result, @"\{CAMPUS\}", campus, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{CAMPUS:2\}", campus.Length >= 2 ? campus.Substring(0, 2) : campus, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{CAMPUS:2\}", campus.StartsWith("[") ? campus : (campus.Length >= 2 ? campus.Substring(0, 2) : campus), System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
             var type = !string.IsNullOrWhiteSpace(context?.Type) ? context.Type : "GEN";
             result = Regex.Replace(result, @"\{TYPE\}", type, RegexOptions.IgnoreCase);

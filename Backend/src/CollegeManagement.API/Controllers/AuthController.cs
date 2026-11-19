@@ -101,6 +101,9 @@ namespace CollegeManagement.API.Controllers
                 StaffId = result.StaffId,
                 StudentId = result.StudentId,
                 AdminId = result.AdminId,
+                CollegeId = result.CollegeId,
+                CollegeName = result.CollegeName,
+                CollegeLogo = result.CollegeLogo,
                 Role = result.Role,
                 Roles = new[] { result.Role },
                 StaffType = result.StaffType,
@@ -115,6 +118,9 @@ namespace CollegeManagement.API.Controllers
                     id = result.StaffId ?? result.UserId,
                     staffId = result.StaffId,
                     userId = result.UserId,
+                    collegeId = result.CollegeId,
+                    collegeName = result.CollegeName,
+                    collegeLogo = result.CollegeLogo,
                     role = result.Role,
                     roles = new[] { result.Role },
                     staffType = result.StaffType,
@@ -137,7 +143,7 @@ namespace CollegeManagement.API.Controllers
                     profileStatus = result.ProfileStatus,
                     profileCompletionPercentage = result.ProfileCompletionPercentage,
                     isOnboarded = result.IsOnboarded,
-                    isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                    isAdmin = (result.AdminId.HasValue && result.AdminId.Value > 0) || string.Equals(result.Role, "Admin", System.StringComparison.OrdinalIgnoreCase) || string.Equals(result.Role, "Super Admin", System.StringComparison.OrdinalIgnoreCase)
                 },
                 Data = new
                 {
@@ -147,6 +153,9 @@ namespace CollegeManagement.API.Controllers
                         id = result.StaffId ?? result.UserId,
                         userId = result.UserId,
                         staffId = result.StaffId,
+                        collegeId = result.CollegeId,
+                        collegeName = result.CollegeName,
+                        collegeLogo = result.CollegeLogo,
                         employeeId = result.EmployeeId,
                         name = result.Name,
                         email = result.Email,
@@ -168,7 +177,7 @@ namespace CollegeManagement.API.Controllers
                         profileStatus = result.ProfileStatus,
                         profileCompletionPercentage = result.ProfileCompletionPercentage,
                         isOnboarded = result.IsOnboarded,
-                        isAdmin = result.AdminId.HasValue && result.AdminId.Value > 0
+                        isAdmin = (result.AdminId.HasValue && result.AdminId.Value > 0) || string.Equals(result.Role, "Admin", System.StringComparison.OrdinalIgnoreCase) || string.Equals(result.Role, "Super Admin", System.StringComparison.OrdinalIgnoreCase)
                     }
                 },
                 ProfileStatus = result.ProfileStatus,

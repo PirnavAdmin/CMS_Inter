@@ -164,6 +164,31 @@ export const getAuthUser = () => {
       };
     }
 
+    if (cleaned.collegeId == null) {
+      const rawToken = getAuthItem("token");
+      if (rawToken && typeof rawToken === "string") {
+        try {
+          const parts = rawToken.split(".");
+          if (parts.length >= 2) {
+            const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+            const decoded = decodeURIComponent(
+              atob(base64)
+                .split("")
+                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                .join("")
+            );
+            const claims = JSON.parse(decoded);
+            const cid = claims.CollegeId || claims.collegeId;
+            if (cid != null) {
+              cleaned.collegeId = Number(cid) || cid;
+            }
+          }
+        } catch (_e) {
+          // ignore
+        }
+      }
+    }
+
     return cleaned;
   } catch {
     return null;

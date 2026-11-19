@@ -877,7 +877,7 @@ function normalizeLoginResponse(payload = {}, enteredEmail, expectedAccountType 
     subjects: Array.isArray(data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) ? (data.AllocatedSubjects || data.allocatedSubjects || payload.AllocatedSubjects || payload.allocatedSubjects) : [],
     campusId: data.CampusId || data.campusId || payload.CampusId || payload.campusId || (assignedCampusIds[0] || (isTransportManager ? 1 : null)),
     boardId: data.BoardId || data.boardId || payload.BoardId || payload.boardId || (assignedBoardIds[0] || (isTransportManager ? 1 : null)),
-    collegeId: data.CollegeId || data.collegeId || payload.CollegeId || payload.collegeId || data.user?.collegeId || payload.user?.collegeId || null,
+    collegeId: data.CollegeId || data.collegeId || payload.CollegeId || payload.collegeId || data.user?.collegeId || payload.user?.collegeId || (jwtClaims.CollegeId != null ? Number(jwtClaims.CollegeId) : null) || (jwtClaims.collegeId != null ? Number(jwtClaims.collegeId) : null) || null,
     collegeName: data.CollegeName || data.collegeName || payload.CollegeName || payload.collegeName || data.user?.collegeName || payload.user?.collegeName || "",
     collegeLogo: data.CollegeLogo || data.collegeLogo || payload.CollegeLogo || payload.collegeLogo || data.user?.collegeLogo || payload.user?.collegeLogo || "",
     isAdmin,
