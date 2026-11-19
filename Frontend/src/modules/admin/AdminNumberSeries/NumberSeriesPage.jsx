@@ -109,7 +109,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         activeBoardId,
         activeAYId,
         false, // includeSubCounters
-        selectedCampus?.campusCode || "MC"
+        selectedCampus?.campusCode || "[CAMPUS]"
       );
       
       const subCounters = Array.isArray(serverData) 
@@ -352,6 +352,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   return (
     <>
       <NumberSeriesDashboardView availableGroups={availableGroups}
+          activeCampusId={activeCampusId}
           forceSyncLocal={forceSyncLocal}
           seriesList={seriesList}
           loading={loading}
@@ -433,11 +434,12 @@ function AddCustomSeriesModal({ onClose, onSave, campus, toast }) {
 // ======================================================================
 // 1. DASHBOARD VIEW (MAIN CARD GRID)
 // ======================================================================
-function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [] }) {
+function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [], activeCampusId: propCampusId }) {
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingCustom, setSavingCustom] = useState(false);
   const { selectedCampus, selectedCampusId } = useCampusContext();
+  const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
 
   const handleCreateCustom = async (data) => {
     setShowAddModal(false); // Close instantly for snappy UI
@@ -723,8 +725,8 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
 
   const isRollNo = currentSeries.id === "student-roll-no" || currentSeries.id === "ROLL_NO" || currentSeries.seriesCode === "ROLL_NO";
   const customPreviewTokens = isRollNo 
-    ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-    : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+    ? { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+    : { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
   const hasCampusToken = (currentSeries.format || currentSeries.formatPattern || "").includes("{CAMPUS}");
   const nextNumberVal = (isRollNo || hasCampusToken) 
     ? getNextNumberPreview(currentSeries, null, customPreviewTokens) 
@@ -1199,8 +1201,8 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
     const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
     const isRollNo = series.id === "student-roll-no" || series.id === "ROLL_NO" || series.seriesCode === "ROLL_NO";
     const customPreviewTokens = isRollNo 
-      ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-      : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+      ? { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+      : { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
     return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength, customPreviewTokens);
   }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation, series.id, series.seriesCode, selectedCampus, availableGroups]);
 
@@ -1594,7 +1596,7 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
         program: selectedProgram !== "[PRG]" ? selectedProgram : "Intermediate",
         group: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
         groupCode: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
-        campusCode: selectedCampus?.campusCode || "MC",
+        campusCode: selectedCampus?.campusCode || "[CAMPUS]",
       }, activeCampusId, selectedCampus?.campusCode);
       if (res?.generatedNumber) {
         nextGenerated = res.generatedNumber;
