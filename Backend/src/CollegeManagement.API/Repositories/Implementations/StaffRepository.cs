@@ -19,10 +19,12 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class StaffRepository : IStaffRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public StaffRepository(AppDbContext context)
+        public StaffRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
@@ -422,6 +424,16 @@ namespace CollegeManagement.API.Repositories.Implementations
                     s.CampusId == cid ||
                     s.TransferredFromCampusId == cid ||
                     s.StaffCampusAssignments.Any(a => a.CampusId == cid));
+            }
+            else
+            {
+                var collegeIdClaim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value 
+                                  ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+                if (int.TryParse(collegeIdClaim, out int cid) && cid > 0)
+                {
+                    var collegeCampuses = _context.Campuses.Where(c => c.CollegeId == cid).Select(c => c.CampusId).ToList();
+                    query = query.Where(s => s.CampusId.HasValue && collegeCampuses.Contains(s.CampusId.Value));
+                }
             }
 
             // 4.2 IsDriver filter

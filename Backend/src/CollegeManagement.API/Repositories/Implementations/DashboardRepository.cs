@@ -21,11 +21,13 @@ namespace CollegeManagement.API.Repositories.Implementations;
 public class DashboardRepository : IDashboardRepository
 {
     private readonly AppDbContext _db;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private readonly ILogger<DashboardRepository>? _logger;
 
-    public DashboardRepository(AppDbContext db, ILogger<DashboardRepository>? logger = null)
+    public DashboardRepository(AppDbContext db, IHttpContextAccessor? httpContextAccessor = null, ILogger<DashboardRepository>? logger = null)
     {
         _db = db;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -153,7 +155,24 @@ public class DashboardRepository : IDashboardRepository
     {
         var dateVal = targetDate?.Date ?? DateTime.UtcNow.Date;
         var conn = await GetOpenConnectionAsync();
+
+        int resolvedCollegeId = 1;
+        if (campusId.HasValue && campusId.Value > 0 && campusId.Value != 999999999)
+        {
+            resolvedCollegeId = await conn.ExecuteScalarAsync<int>("SELECT COALESCE((SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId), 1);", new { CampusId = campusId.Value });
+        }
+        else if (_httpContextAccessor?.HttpContext?.User != null)
+        {
+            var claim = _httpContextAccessor.HttpContext.User.FindFirst("CollegeId")?.Value 
+                     ?? _httpContextAccessor.HttpContext.User.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0)
+            {
+                resolvedCollegeId = cid;
+            }
+        }
+
         var parameters = new DynamicParameters();
+        parameters.Add("p_CollegeId", resolvedCollegeId, DbType.Int32);
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
         parameters.Add("p_TargetDate", dateVal, DbType.Date);
@@ -162,7 +181,7 @@ public class DashboardRepository : IDashboardRepository
         try
         {
             var summary = await conn.QueryFirstOrDefaultAsync<DashboardSummaryResponseDto>(
-                "sp_GetDashboardKPIs",
+                "sp_GetDashboardKPIs_V2",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
@@ -174,12 +193,14 @@ public class DashboardRepository : IDashboardRepository
                     var studentManagementCount = await conn.ExecuteScalarAsync<int?>(@"
                         SELECT COUNT(*)
                         FROM `Students` s
-                        WHERE (s.IsActive = 1 OR s.IsActive IS NULL)
+                        JOIN `Campuses` c ON s.CampusId = c.CampusId
+                        WHERE c.CollegeId = @p_CollegeId
+                          AND (s.IsActive = 1 OR s.IsActive IS NULL)
                           AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR s.CampusId = @p_CampusId)
                           AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR s.AcademicYearId = @p_AcademicYearId)
                           AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR s.BoardId = @p_BoardId)
                           ;",
-                        new { p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
+                        new { p_CollegeId = resolvedCollegeId, p_CampusId = campusId, p_AcademicYearId = academicYearId, p_BoardId = boardId });
 
                     if (studentManagementCount.HasValue)
                     {
@@ -199,11 +220,13 @@ public class DashboardRepository : IDashboardRepository
                             COUNT(CASE WHEN (st.StaffType = 'Teaching' OR (LOWER(st.StaffType) LIKE '%teach%' AND LOWER(st.StaffType) NOT LIKE '%non%') OR st.StaffType IS NULL OR st.StaffType = '') THEN 1 END) AS TeachingCount,
                             COUNT(CASE WHEN (LOWER(st.StaffType) LIKE '%non%' OR (st.StaffType IS NOT NULL AND st.StaffType != '' AND LOWER(st.StaffType) NOT LIKE '%teach%')) THEN 1 END) AS NonTeachingCount
                         FROM `Staff` st
-                        WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
+                        JOIN `Campuses` c ON st.CampusId = c.CampusId
+                        WHERE c.CollegeId = @p_CollegeId
+                          AND (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
                           AND (st.Status = 'Active' OR st.Status IS NULL)
                           AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR st.CampusId = @p_CampusId)
                           AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR st.BoardId = @p_BoardId OR st.BoardId IS NULL);",
-                        new { p_CampusId = campusId, p_BoardId = boardId });
+                        new { p_CollegeId = resolvedCollegeId, p_CampusId = campusId, p_BoardId = boardId });
 
                     if (staffCounts != null)
                     {

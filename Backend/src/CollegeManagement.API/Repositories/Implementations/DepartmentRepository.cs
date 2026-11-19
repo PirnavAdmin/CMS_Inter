@@ -115,6 +115,11 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
+            int resolvedCollegeId = department.CollegeId.HasValue && department.CollegeId.Value > 0 
+                ? department.CollegeId.Value 
+                : (department.CampusId.HasValue ? await conn.ExecuteScalarAsync<int>("SELECT COALESCE((SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId), 1);", new { CampusId = department.CampusId }) : 1);
+            department.CollegeId = resolvedCollegeId;
+
             var id = await conn.ExecuteScalarAsync<int>(
                 "sp_CreateDepartment",
                 new
@@ -124,7 +129,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StaffType = department.StaffType ?? "Both",
                     p_Description = department.Description,
                     p_IsActive = department.IsActive ? 1 : 0,
-                    p_CampusId = department.CampusId
+                    p_CampusId = department.CampusId,
+                    p_CollegeId = resolvedCollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 

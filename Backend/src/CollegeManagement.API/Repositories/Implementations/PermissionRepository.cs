@@ -9,6 +9,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Roles;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -20,10 +21,12 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class PermissionRepository : IPermissionRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public PermissionRepository(AppDbContext context)
+        public PermissionRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -105,6 +108,29 @@ namespace CollegeManagement.API.Repositories.Implementations
             int pageSize = request.PageSize <= 0 ? 10 : request.PageSize;
 
             var conn = await GetOpenConnectionAsync();
+
+            int? collegeId = null;
+            if (_httpContextAccessor?.HttpContext?.User != null)
+            {
+                var user = _httpContextAccessor.HttpContext.User;
+                if (!user.IsInRole("Super Admin"))
+                {
+                    var claim = user.FindFirst("CollegeId")?.Value 
+                             ?? user.FindFirst("collegeId")?.Value;
+                    if (int.TryParse(claim, out int cid) && cid > 0)
+                    {
+                        collegeId = cid;
+                    }
+                }
+            }
+
+            if (!collegeId.HasValue && request.CampusId.HasValue && request.CampusId.Value > 0 && request.CampusId.Value != 999999999)
+            {
+                collegeId = await conn.ExecuteScalarAsync<int?>(
+                    "SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId;",
+                    new { CampusId = request.CampusId.Value });
+            }
+
             var parameters = new DynamicParameters();
             parameters.Add("p_Search", request.Search ?? "");
             parameters.Add("p_RoleId", request.RoleId ?? 0);
@@ -114,6 +140,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_AcademicYearId", request.AcademicYearId);
             parameters.Add("p_PageNumber", pageNumber);
             parameters.Add("p_PageSize", pageSize);
+            parameters.Add("p_CollegeId", collegeId);
 
             using var multi = await conn.QueryMultipleAsync(
                 "sp_GetUserRoleAssignments",

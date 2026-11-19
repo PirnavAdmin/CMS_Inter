@@ -172,6 +172,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Designation> AddAsync(Designation designation)
         {
             var conn = await GetOpenConnectionAsync();
+            int resolvedCollegeId = designation.CollegeId.HasValue && designation.CollegeId.Value > 0 
+                ? designation.CollegeId.Value 
+                : (designation.CampusId.HasValue ? await conn.ExecuteScalarAsync<int>("SELECT COALESCE((SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId), 1);", new { CampusId = designation.CampusId }) : 1);
+            designation.CollegeId = resolvedCollegeId;
+
             var id = await conn.ExecuteScalarAsync<int>(
                 "sp_CreateDesignation",
                 new
@@ -180,7 +185,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
                     p_StaffType = designation.StaffType ?? "Both",
                     p_IsActive = designation.IsActive ? 1 : 0,
-                    p_CampusId = designation.CampusId
+                    p_CampusId = designation.CampusId,
+                    p_CollegeId = resolvedCollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
