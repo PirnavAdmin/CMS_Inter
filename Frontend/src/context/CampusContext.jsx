@@ -58,7 +58,7 @@ export function CampusProvider({ children }) {
       console.warn("Failed to load selected campus id", e);
     }
     if (u?.collegeId && Number(u.collegeId) > 1) return "";
-    return u?.campusId ? String(u.campusId) : (DEFAULT_CAMPUSES[0]?.id ? String(DEFAULT_CAMPUSES[0].id) : "1");
+    return DEFAULT_CAMPUSES[0]?.id || "";
   });
 
   // For Principal or assigned staff role, track their assigned campus IDs
@@ -126,21 +126,11 @@ export function CampusProvider({ children }) {
       if (Array.isArray(data)) {
         setCampuses(data);
         setSelectedCampusId((prev) => {
-          if (!data.length) return "";
           const exists = data.some(
             (c) => String(c.id) === String(prev) || String(c.campusId) === String(prev)
           );
-          if (exists && prev !== "10") return prev;
-
-          const u = getAuthUser();
-          const preferred = 
-            data.find((c) => String(c.id ?? c.campusId) === String(u?.campusId)) ||
-            data.find((c) => c.isHQ || c.IsHQ || c.code === "MAIN" || c.campusCode === "MAIN") ||
-            data.find((c) => String(c.name || "").toLowerCase().includes("main")) ||
-            data.find((c) => String(c.id ?? c.campusId) === "1") ||
-            data[0];
-
-          return preferred?.id ? String(preferred.id) : (preferred?.campusId ? String(preferred.campusId) : "");
+          if (exists) return prev;
+          return data[0]?.id ? String(data[0].id) : (data[0]?.campusId ? String(data[0].campusId) : "");
         });
       }
     } catch (err) {
@@ -195,18 +185,9 @@ export function CampusProvider({ children }) {
 
     const u = getAuthUser();
     const roleStr = String(u?.role || "").trim().toLowerCase();
-    const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
-    const isAdmin = roleStr === "admin" || roleStr === "administrator";
-
-    if (isSuperAdmin) {
-      return allActive;
-    }
+    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
 
     if (isAdmin) {
-      if (u?.collegeId && Number(u.collegeId) > 0) {
-        const cId = Number(u.collegeId);
-        return allActive.filter((c) => !c.collegeId || Number(c.collegeId) === cId);
-      }
       return allActive;
     }
 
@@ -239,7 +220,6 @@ export function CampusProvider({ children }) {
   const selectedCampus = useMemo(() => {
     const list = activeCampuses.length > 0 ? activeCampuses : campuses;
     if (!list?.length) return null;
-    if (!selectedCampusId) return null;
     const strId = String(selectedCampusId);
     return (
       list.find((c) => String(c.id) === strId || String(c.campusId) === strId) ||

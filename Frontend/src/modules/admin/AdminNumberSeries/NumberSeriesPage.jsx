@@ -109,7 +109,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         activeBoardId,
         activeAYId,
         false, // includeSubCounters
-        selectedCampus?.campusCode || "[CAMPUS]"
+        selectedCampus?.campusCode || "MC"
       );
       
       const subCounters = Array.isArray(serverData) 
@@ -352,7 +352,6 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   return (
     <>
       <NumberSeriesDashboardView availableGroups={availableGroups}
-          activeCampusId={activeCampusId}
           forceSyncLocal={forceSyncLocal}
           seriesList={seriesList}
           loading={loading}
@@ -434,12 +433,11 @@ function AddCustomSeriesModal({ onClose, onSave, campus, toast }) {
 // ======================================================================
 // 1. DASHBOARD VIEW (MAIN CARD GRID)
 // ======================================================================
-function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [], activeCampusId: propCampusId }) {
+function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [] }) {
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingCustom, setSavingCustom] = useState(false);
   const { selectedCampus, selectedCampusId } = useCampusContext();
-  const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
 
   const handleCreateCustom = async (data) => {
     setShowAddModal(false); // Close instantly for snappy UI
@@ -567,21 +565,14 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
             return cleanList.map((series) => {
               const IconComponent = SERIES_ICONS[series.id] || SERIES_ICONS[series.seriesCode] || SERIES_ICONS[series.key] || Hash;
             const isRollNo = series.id === "student-roll-no" || series.id === "ROLL_NO" || series.seriesCode === "ROLL_NO";
-            const hasCampus = Boolean(activeCampusId || selectedCampus);
-            const campusCodeVal = selectedCampus?.campusCode || selectedCampus?.code || "";
-            
-            let nextVal;
-            if (!hasCampus) {
-              nextVal = "Select campus to generate";
-            } else {
-              const customPreviewTokens = isRollNo 
-                ? { CAMPUS: campusCodeVal, GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-                : { CAMPUS: campusCodeVal, GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
-              const hasCampusToken = (series.format || series.formatPattern || "").includes("{CAMPUS}");
-              nextVal = (isRollNo || hasCampusToken) 
-                ? getNextNumberPreview(series, null, customPreviewTokens) 
-                : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens));
-            }
+            const campusCodeVal = selectedCampus?.campusCode || "PC";
+            const customPreviewTokens = isRollNo 
+              ? { CAMPUS: campusCodeVal, GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+              : { CAMPUS: campusCodeVal, GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+            const hasCampusToken = (series.format || series.formatPattern || "").includes("{CAMPUS}");
+            const nextVal = (isRollNo || hasCampusToken) 
+              ? getNextNumberPreview(series, null, customPreviewTokens) 
+              : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens));
 
             return (
                 <div key={series.id} className="ns-card">
@@ -625,11 +616,11 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                     <span className="ns-card-example-lbl" style={{ margin: 0 }}>Last Issued:</span>
                     <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#475569', background: 'rgba(0,0,0,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
-                      {hasCampus && series.currentSequence > 0 ? `#${series.currentSequence}` : '0 (None)'}
+                      {series.currentSequence > 0 ? `#${series.currentSequence}` : '0 (None)'}
                     </span>
                   </div>
                   <span className="ns-card-example-lbl" style={{ marginTop: '4px', display: 'block' }}>Next to Allocate (Preview):</span>
-                                      <div className="ns-card-example-val" style={!hasCampus ? { color: 'var(--cms-muted, #64748b)', fontSize: '12px', fontStyle: 'italic', fontWeight: 500 } : {}}>
+                                      <div className="ns-card-example-val">
                       {loading ? (
                         <Skeleton style={{ height: '20px', width: '70%', borderRadius: '6px' }} />
                       ) : (
@@ -725,8 +716,8 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
 
   const isRollNo = currentSeries.id === "student-roll-no" || currentSeries.id === "ROLL_NO" || currentSeries.seriesCode === "ROLL_NO";
   const customPreviewTokens = isRollNo 
-    ? { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-    : { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+    ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+    : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
   const hasCampusToken = (currentSeries.format || currentSeries.formatPattern || "").includes("{CAMPUS}");
   const nextNumberVal = (isRollNo || hasCampusToken) 
     ? getNextNumberPreview(currentSeries, null, customPreviewTokens) 
@@ -1201,8 +1192,8 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
     const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
     const isRollNo = series.id === "student-roll-no" || series.id === "ROLL_NO" || series.seriesCode === "ROLL_NO";
     const customPreviewTokens = isRollNo 
-      ? { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-      : { CAMPUS: selectedCampus?.campusCode || "[CAMPUS]", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+      ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+      : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
     return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength, customPreviewTokens);
   }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation, series.id, series.seriesCode, selectedCampus, availableGroups]);
 
@@ -1553,25 +1544,16 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
   const isInactive = series?.isActive === false;
 
   const isRollNo = series?.id === "roll-no" || series?.id === "student-roll-no" || series?.id === "ROLL_NO" || series?.seriesCode === "ROLL_NO";
-  const hasCampus = Boolean(activeCampusId || selectedCampus);
-  const campusCodeVal = selectedCampus?.campusCode || selectedCampus?.code || "";
   const [selectedGroup, setSelectedGroup] = useState(isRollNo ? "[GRP]" : "");
   const [selectedProgram, setSelectedProgram] = useState(isRollNo ? "[PRG]" : "");
   const [selectedBoard, setSelectedBoard] = useState(isRollNo ? "[BRD]" : "");
 
   const customPreviewTokens = isRollNo 
-    ? { CAMPUS: campusCodeVal || "[CAMPUS]", GROUP: selectedGroup, PROGRAM: selectedProgram, BOARD: selectedBoard }
-    : { CAMPUS: campusCodeVal || "[CAMPUS]", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+    ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: selectedGroup, PROGRAM: selectedProgram, BOARD: selectedBoard }
+    : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
 
   const hasCampusToken = (series.format || series.formatPattern || "").includes("{CAMPUS}");
-  let nextVal = liveGeneratedNumber;
-  if (!nextVal) {
-    if (!hasCampus) {
-      nextVal = "Campus Required";
-    } else {
-      nextVal = (isRollNo || hasCampusToken) ? getNextNumberPreview(series, null, customPreviewTokens) : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens));
-    }
-  }
+  const nextVal = liveGeneratedNumber || ((isRollNo || hasCampusToken) ? getNextNumberPreview(series, null, customPreviewTokens) : (series.livePreview || getNextNumberPreview(series, null, customPreviewTokens)));
   const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
 
   const handleCopy = () => {
@@ -1581,10 +1563,6 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
   };
 
   const handleTestGenerate = async () => {
-    if (!hasCampus) {
-      if (setToast) setToast({ message: "A campus branch must be selected to generate sequence numbers.", type: "error" });
-      return;
-    }
     const code = series.seriesCode || series.slug || series.id;
     setGenerating(true);
     let nextGenerated = null;
@@ -1596,7 +1574,7 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
         program: selectedProgram !== "[PRG]" ? selectedProgram : "Intermediate",
         group: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
         groupCode: selectedGroup !== "[GRP]" ? selectedGroup : "MPC",
-        campusCode: selectedCampus?.campusCode || "[CAMPUS]",
+        campusCode: selectedCampus?.campusCode || "MC",
       }, activeCampusId, selectedCampus?.campusCode);
       if (res?.generatedNumber) {
         nextGenerated = res.generatedNumber;
@@ -1635,9 +1613,9 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
             type="button"
             className="cms-btn cms-btn-ghost"
             onClick={handleTestGenerate}
-            disabled={generating || isInactive || !hasCampus}
-            style={isInactive || !hasCampus ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-            title={!hasCampus ? "A campus branch must be selected to generate sequence numbers" : isInactive ? "Series is inactive" : "Atomically increments the counter and generates the real next ID"}
+            disabled={generating || isInactive}
+            style={isInactive ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+            title={isInactive ? "Series is inactive" : "Atomically increments the counter and generates the real next ID"}
           >
             <Play size={15} />
             <span>{generating ? "Generating..." : "Generate Next (Live)"}</span>
@@ -1649,11 +1627,6 @@ function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, avai
       }
     >
       <div className="ns-modal-body">
-        {!hasCampus && (
-          <div style={{ marginTop: '10px', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309', borderRadius: '6px', fontSize: '12.5px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Info size={16} /> <span>No campus is assigned or selected. Sequence numbers require an assigned campus branch.</span>
-          </div>
-        )}
         <p className="ns-modal-sub">
           Preview how the next {series.name.toLowerCase()} will be generated by the system.
         </p>
