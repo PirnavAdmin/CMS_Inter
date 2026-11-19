@@ -225,7 +225,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (campusId.HasValue && campusId.Value > 0)
             {
-                whereClauses.Add("e.`CampusId` = @CampusId");
+                whereClauses.Add("(e.`CampusId` = @CampusId OR e.`CampusId` IS NULL)");
                 p.Add("@CampusId", campusId.Value);
             }
 
