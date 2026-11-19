@@ -68,6 +68,20 @@ public class Certificate
     [MaxLength(150)]
     public string? IssuedBy { get; set; }
 
+    [MaxLength(500)]
+    public string? FilePath { get; set; }
+
+    [MaxLength(255)]
+    public string? FileName { get; set; }
+
+    [MaxLength(100)]
+    public string? FileType { get; set; } = "application/pdf";
+
+    public long? FileSize { get; set; }
+
+    [MaxLength(150)]
+    public string? GeneratedBy { get; set; }
+
     public bool IsActive { get; set; } = true;
 
     public int? CampusId { get; set; }

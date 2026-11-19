@@ -1391,6 +1391,45 @@ public class CertificateRepository : ICertificateRepository
         else if (dict.ContainsKey("S_CampusName") && dict["S_CampusName"] != null)
             campusName = dict["S_CampusName"].ToString()!.Trim();
 
+        string feeClearanceStatus = "Pending Clearance";
+        if (dict.ContainsKey("FeeClearanceStatus") && dict["FeeClearanceStatus"] != null && !string.IsNullOrWhiteSpace(dict["FeeClearanceStatus"].ToString()))
+            feeClearanceStatus = dict["FeeClearanceStatus"].ToString()!.Trim();
+
+        decimal feeDueAmount = 0m;
+        if (dict.ContainsKey("FeeDueAmount") && dict["FeeDueAmount"] != null && decimal.TryParse(dict["FeeDueAmount"].ToString(), out var parsedDue))
+            feeDueAmount = parsedDue;
+
+        string? feeExemptionReason = null;
+        if (dict.ContainsKey("FeeExemptionReason") && dict["FeeExemptionReason"] != null)
+            feeExemptionReason = dict["FeeExemptionReason"].ToString()!.Trim();
+
+        string? filePath = null;
+        if (dict.ContainsKey("FilePath") && dict["FilePath"] != null && !string.IsNullOrWhiteSpace(dict["FilePath"].ToString()))
+            filePath = dict["FilePath"].ToString()!.Trim();
+
+        string? fileName = null;
+        if (dict.ContainsKey("FileName") && dict["FileName"] != null && !string.IsNullOrWhiteSpace(dict["FileName"].ToString()))
+            fileName = dict["FileName"].ToString()!.Trim();
+
+        string fileType = "application/pdf";
+        if (dict.ContainsKey("FileType") && dict["FileType"] != null && !string.IsNullOrWhiteSpace(dict["FileType"].ToString()))
+            fileType = dict["FileType"].ToString()!.Trim();
+
+        long fileSize = 0;
+        if (dict.ContainsKey("FileSize") && dict["FileSize"] != null && long.TryParse(dict["FileSize"].ToString(), out var parsedSize))
+            fileSize = parsedSize;
+
+        string? generatedBy = null;
+        if (dict.ContainsKey("GeneratedBy") && dict["GeneratedBy"] != null && !string.IsNullOrWhiteSpace(dict["GeneratedBy"].ToString()))
+            generatedBy = dict["GeneratedBy"].ToString()!.Trim();
+
+        if (!string.IsNullOrWhiteSpace(feeExemptionReason))
+            feeClearanceStatus = "Principal Permitted";
+        else if (feeDueAmount > 0)
+            feeClearanceStatus = "Dues Pending";
+        else if (string.IsNullOrWhiteSpace(feeClearanceStatus) || feeClearanceStatus.Equals("Pending Clearance", StringComparison.OrdinalIgnoreCase))
+            feeClearanceStatus = feeDueAmount == 0 ? "Cleared" : "Dues Pending";
+
         return new CertificateResponseDto
         {
             CertificateId = id,
@@ -1416,6 +1455,14 @@ public class CertificateRepository : ICertificateRepository
             DateOfBirth = dob,
             CampusId = campusId,
             CampusName = campusName,
+            FeeClearanceStatus = feeClearanceStatus,
+            FeeDueAmount = feeDueAmount,
+            FeeExemptionReason = feeExemptionReason,
+            FilePath = filePath,
+            FileName = fileName,
+            FileType = fileType,
+            FileSize = fileSize,
+            GeneratedBy = generatedBy,
             IsActive = !status.Equals("Cancelled", StringComparison.OrdinalIgnoreCase) && !status.Equals("Deleted", StringComparison.OrdinalIgnoreCase)
         };
     }
@@ -1484,5 +1531,44 @@ public class CertificateRepository : ICertificateRepository
         joined = Regex.Replace(joined, @"\s+([,.:;])", "$1");
         joined = Regex.Replace(joined, @"([,.:;])(?=[^\s\d])", "$1 ");
         return joined.Trim();
+    }
+
+    // =========================================================
+    // UPDATE CERTIFICATE FILE (Permanent Server-Side Storage)
+    // =========================================================
+    public async Task<bool> UpdateCertificateFileAsync(
+        int certificateId,
+        string filePath,
+        string fileName,
+        string fileType,
+        long fileSize,
+        string generatedBy,
+        CancellationToken ct = default)
+    {
+        if (certificateId <= 0) return false;
+
+        using var connection = _database.CreateConnection();
+        var parameters = new DynamicParameters();
+        parameters.Add("p_CertificateId", certificateId, DbType.Int32);
+        parameters.Add("p_FilePath", filePath?.Trim(), DbType.String);
+        parameters.Add("p_FileName", fileName?.Trim(), DbType.String);
+        parameters.Add("p_FileType", fileType?.Trim() ?? "application/pdf", DbType.String);
+        parameters.Add("p_FileSize", fileSize, DbType.Int64);
+        parameters.Add("p_GeneratedBy", generatedBy?.Trim() ?? "Admin", DbType.String);
+
+        try
+        {
+            var rows = await connection.ExecuteAsync(new CommandDefinition(
+                "sp_UpdateCertificateFile",
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct));
+            return rows > 0;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[CertificateRepository.UpdateCertificateFileAsync] Error for {CertificateId}: {Message}", certificateId, ex.Message);
+            return false;
+        }
     }
 }

@@ -139,6 +139,93 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
+        /// Atomically takes exclusive charge of an inquiry. Enforces that only one staff member can hold ownership.
+        /// Returns 409 Conflict if another user has already taken charge.
+        /// </summary>
+        [HttpPost("{id:int}/take-charge")]
+        [Authorize]
+        public async Task<IActionResult> TakeCharge(int id, [FromBody] TakeChargeRequest? request)
+        {
+            try
+            {
+                int? userId = request?.UserId;
+                if (!userId.HasValue)
+                {
+                    var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (int.TryParse(idClaim, out int uid)) userId = uid;
+                }
+
+                string staffName = request?.StaffName 
+                    ?? User.FindFirstValue(ClaimTypes.Name) 
+                    ?? User.FindFirstValue("fullName") 
+                    ?? User.FindFirstValue(ClaimTypes.Email) 
+                    ?? "Staff Member";
+
+                string rawRole = request?.Role 
+                    ?? User.FindFirstValue(ClaimTypes.Role) 
+                    ?? User.FindFirstValue("role") 
+                    ?? User.FindFirstValue("roleName") 
+                    ?? "Staff";
+
+                string role = rawRole;
+                var norm = rawRole.Trim().ToLowerInvariant();
+                if (norm.Contains("admin")) role = "Admin";
+                else if (norm.Contains("principal")) role = "Principal";
+                else if (norm.Contains("reception")) role = "Receptionist";
+
+                var result = await _enquiryService.TakeChargeAsync(id, userId, request?.StaffId, staffName, role);
+
+                if (result.AlreadyClaimedByOther)
+                {
+                    return StatusCode(409, new
+                    {
+                        success = false,
+                        conflict = true,
+                        message = result.Message,
+                        claimedBy = result.ClaimedBy,
+                        data = result.Enquiry
+                    });
+                }
+
+                if (!result.Success)
+                {
+                    return BadRequest(new { success = false, message = result.Message });
+                }
+
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = result.Enquiry
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error taking charge of enquiry {Id}: {Message}", id, ex.Message);
+                return StatusCode(500, new { success = false, message = "Failed to take charge of enquiry." });
+            }
+        }
+
+        /// <summary>
+        /// Retrieves the complete historical audit trail of an inquiry.
+        /// </summary>
+        [HttpGet("{id:int}/history")]
+        [Authorize]
+        public async Task<IActionResult> GetEnquiryHistory(int id)
+        {
+            try
+            {
+                var history = await _enquiryService.GetActivitiesAsync(id);
+                return Ok(new { success = true, data = history });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving history for enquiry {Id}: {Message}", id, ex.Message);
+                return StatusCode(500, new { success = false, message = "Failed to load enquiry history." });
+            }
+        }
+
+        /// <summary>
         /// Updates the enquiry status, logs notes, and records contact action.
         /// </summary>
         [HttpPut("{id:int}/status")]
@@ -152,6 +239,13 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                int? userId = request.HandledByUserId;
+                if (!userId.HasValue)
+                {
+                    var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                    if (int.TryParse(idClaim, out int uid)) userId = uid;
+                }
+
                 // Auto-fill staff name and role from claims if not provided
                 if (string.IsNullOrWhiteSpace(request.HandledByStaffName))
                 {
@@ -175,11 +269,15 @@ namespace CollegeManagement.API.Controllers.V1
                     else request.HandledByRole = rawRole;
                 }
 
-                bool updated = await _enquiryService.UpdateStatusAsync(id, request);
+                bool updated = await _enquiryService.UpdateStatusAsync(id, request, userId, request.HandledByStaffName, request.HandledByRole);
                 if (!updated) return NotFound(new { success = false, message = "Enquiry not found or could not be updated." });
 
                 var refreshed = await _enquiryService.GetEnquiryByIdAsync(id);
                 return Ok(new { success = true, message = "Enquiry status updated successfully.", data = refreshed });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {

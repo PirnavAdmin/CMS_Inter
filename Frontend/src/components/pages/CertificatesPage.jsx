@@ -1838,7 +1838,7 @@ export default function CertificatesPage() {
       return true;
     } catch (error) {
       if (requestId !== listRequestRef.current) return false;
-      const fallbackList = mockCertificates.map(normalizeCertificate);
+      const fallbackList = [];
       let filtered = fallbackList;
       if (query.trim()) {
         const q = query.trim().toLowerCase();
@@ -1881,7 +1881,7 @@ export default function CertificatesPage() {
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : mockCertificates.map(normalizeCertificate);
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : [];
       setWorkflowStats({
         totalCount: list.length,
         requestedCount: list.filter((r) => r.status === "Requested").length,
@@ -2017,7 +2017,7 @@ export default function CertificatesPage() {
           const sRes = await apiClient.get(CERTIFICATE_API.studentsDropdown, { skipGlobalLoader: true });
           raw = sRes?.data;
         } catch {
-          raw = studentRows.length ? studentRows : mockStudents;
+          raw = studentRows.length ? studentRows : [];
         }
       }
       const rawBulkList = unwrapStudentPayload(raw).map(normalizeStudentRecord).filter((student) => student.admissionNo);
@@ -2029,11 +2029,11 @@ export default function CertificatesPage() {
         return true;
       });
       if (requestId === bulkStudentRequestRef.current) {
-        setBulkStudentRows(mapped.length ? mapped : (studentRows.length ? studentRows : mockStudents.map(normalizeStudentRecord)));
+        setBulkStudentRows(mapped.length ? mapped : (studentRows.length ? studentRows : []));
       }
     } catch (error) {
       if (requestId === bulkStudentRequestRef.current) {
-        setBulkStudentRows(studentRows.length ? studentRows : mockStudents.map(normalizeStudentRecord));
+        setBulkStudentRows(studentRows.length ? studentRows : []);
       }
     } finally {
       if (requestId === bulkStudentRequestRef.current) setLoadingBulkStudents(false);
@@ -2484,14 +2484,7 @@ export default function CertificatesPage() {
         return next;
       });
 
-      try {
-        const storedMock = localStorage.getItem("cms_mock_store_certificates");
-        const list = storedMock ? JSON.parse(storedMock) : [];
-        list.unshift(createdCertificate);
-        localStorage.setItem("cms_mock_store_certificates", JSON.stringify(list));
-      } catch {
-        // Ignore mock storage error
-      }
+      // Live certificate created and tracked
 
       setWorkflowStats((prev) => ({
         ...prev,

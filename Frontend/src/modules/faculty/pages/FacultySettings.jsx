@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { ArrowRight, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff } from "lucide-react";
+import { ArrowRight, Lock, Bell, CheckCircle2, AlertCircle, X, ShieldCheck, Eye, EyeOff, Palette, Sun, Moon, Check } from "lucide-react";
+import { useTheme, VALID_PALETTES } from "@/hooks/useTheme.js";
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { useFaculty } from "../FacultyContext.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
@@ -8,6 +9,16 @@ import "../styles/FacultySettings.css";
 
 export default function FacultySettings() {
   const { profileData, setProfileData, notify } = useFaculty();
+  const {
+    theme,
+    setTheme,
+    toggle: toggleTheme,
+    palette,
+    setPalette,
+    customColor,
+    setCustomColor,
+    isThemeLocked
+  } = useTheme();
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("password"); // "password" | "preferences"
 
@@ -257,6 +268,41 @@ export default function FacultySettings() {
             </button>
           </div>
         </article>
+
+        {/* Themes & Workspace Appearance Card */}
+        <article className="faculty-settings-card is-featured">
+          <div>
+            <div className="faculty-settings-card-header">
+              <div
+                className="faculty-settings-card-icon"
+                style={{
+                  background: "var(--cms-primary-soft, rgba(53, 94, 59, 0.12))",
+                  color: "var(--cms-primary, #355e3b)",
+                  borderRadius: "10px",
+                  display: "grid",
+                  placeItems: "center",
+                  width: 44,
+                  height: 44
+                }}
+              >
+                <Palette size={22} />
+              </div>
+              <h3>Themes &amp; Appearance</h3>
+            </div>
+            <p>
+              Customize your Staff Portal display mode (Light / Dark) and select your preferred institutional accent color palette.
+            </p>
+          </div>
+          <div className="faculty-settings-card-footer">
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={() => handleOpenModal("themes")}
+            >
+              Customize Themes <ArrowRight size={14} />
+            </button>
+          </div>
+        </article>
       </div>
 
       {/* Interactive Management Modal */}
@@ -306,6 +352,20 @@ export default function FacultySettings() {
                 }}
               >
                 <Bell size={15} /> General Preferences
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "themes"}
+                className={`faculty-settings-tab-btn ${activeTab === "themes" ? "is-active" : ""}`}
+                onClick={() => {
+                  setActiveTab("themes");
+                  setShowCurrentPassword(false);
+                  setShowNewPassword(false);
+                  setShowConfirmPassword(false);
+                }}
+              >
+                <Palette size={15} /> Themes &amp; Appearance
               </button>
             </div>
 

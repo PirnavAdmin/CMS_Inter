@@ -15,4 +15,6 @@ public class StudentCertificateDropdownDto
     public int? GroupId { get; set; }
     public int? SectionId { get; set; }
     public int? CampusId { get; set; }
+    public decimal? FeeDueAmount { get; set; } = 0;
+    public string? FeeClearanceStatus { get; set; } = "Cleared";
 }

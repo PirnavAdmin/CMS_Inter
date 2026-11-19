@@ -115,6 +115,10 @@ public interface ICertificateService
         int id,
         CancellationToken ct = default);
 
+    Task<(byte[] content, string fileName, string contentType)> GetOrGenerateDocumentAsync(
+        int id,
+        CancellationToken ct = default);
+
     Task<bool> DeleteAsync(
         int id,
         CancellationToken ct = default);

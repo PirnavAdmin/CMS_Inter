@@ -22,6 +22,7 @@ import {
   Filter,
   Eye,
   Lock,
+  History,
 } from "lucide-react";
 import enquiryApi from "@/api/enquiryApi.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
@@ -52,32 +53,29 @@ function getActiveHandler(portalType = "admin") {
   const norm = `${storedRole} ${user.designation || ""} ${portalType}`.trim().toLowerCase();
   let role = "Staff";
   if (norm.includes("admin")) role = "Admin";
-  else if (norm.includes("principal")) role = "Principal";
+  else if (norm.includes("principal") || portalType === "principal") role = "Principal";
   else if (norm.includes("reception") || portalType === "receptionist") role = "Receptionist";
 
-  return { name, role, rawRole: storedRole, email: user.email, id: user.id || user.userId };
+  const userId = user.id || user.userId || user.staffId || null;
+  return { name, role, rawRole: storedRole, email: user.email, id: userId };
 }
 
 // Determines if this enquiry is already handled by the current user
 function checkIsHandledByMe(row, currentHandler) {
-  if (!row.handledByStaffName && !row.handledByRole) return false;
+  if (!row.handledByStaffName && !row.handledByRole && !row.handledByUserId) return false;
+
+  // 1. Exact user ID match
+  if (row.handledByUserId && currentHandler.id && Number(row.handledByUserId) === Number(currentHandler.id)) {
+    return true;
+  }
+
+  // 2. Exact or normalized staff name match
   const rName = String(row.handledByStaffName || "").trim().toLowerCase();
   const cName = String(currentHandler.name || "").trim().toLowerCase();
-  const rRole = String(row.handledByRole || "").trim().toLowerCase();
-  const cRole = String(currentHandler.role || "").trim().toLowerCase();
-
   if (rName && cName && (rName === cName || cName.includes(rName) || rName.includes(cName))) {
     return true;
   }
-  if (rRole.includes("reception") && cRole.includes("reception")) {
-    return true;
-  }
-  if (rRole.includes("principal") && cRole.includes("principal")) {
-    return true;
-  }
-  if (rRole.includes("admin") && cRole.includes("admin")) {
-    return true;
-  }
+
   return false;
 }
 
@@ -111,11 +109,18 @@ export default function EnquiriesListView({ portalType = "admin" }) {
   const [modalMethod, setModalMethod] = useState("Phone");
   const [modalNotes, setModalNotes] = useState("");
   const [savingStatus, setSavingStatus] = useState(false);
+  const [takingChargeId, setTakingChargeId] = useState(null);
   const [toastMessage, setToastMessage] = useState("");
 
   // Modals for read-only tracking view and message preview
   const [viewMessageEnquiry, setViewMessageEnquiry] = useState(null);
   const [viewTrackEnquiry, setViewTrackEnquiry] = useState(null);
+
+  // History / Audit trail modal state
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyEnquiry, setHistoryEnquiry] = useState(null);
+  const [historyList, setHistoryList] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadData = useCallback(
     async (signal) => {
@@ -248,10 +253,76 @@ export default function EnquiriesListView({ portalType = "admin" }) {
 
   const openChargeModal = (enquiry) => {
     setActiveEnquiry(enquiry);
-    setModalStatus(enquiry.status === "New" ? "Contacted" : enquiry.status);
+    setModalStatus(enquiry.status === "New" ? "In Progress" : enquiry.status);
     setModalMethod(enquiry.contactMethodUsed || "Phone");
     setModalNotes(enquiry.responseNotes || "");
     setModalOpen(true);
+  };
+
+  // Atomically claim exclusive charge of this inquiry
+  const handleTakeCharge = async (enquiry) => {
+    if (!enquiry) return;
+    setTakingChargeId(enquiry.id);
+    try {
+      const res = await enquiryApi.takeCharge(enquiry.id, {
+        userId: currentHandler.id ? Number(currentHandler.id) : undefined,
+        staffName: currentHandler.name,
+        role: currentHandler.role,
+      });
+
+      setToastMessage(`✓ You took exclusive charge of this enquiry as ${currentHandler.role}.`);
+      setTimeout(() => setToastMessage(""), 5000);
+
+      // Broadcast update across portals
+      try {
+        const channel = new BroadcastChannel("cms-enquiries-channel");
+        channel.postMessage({ type: "enquiry-updated", enquiryId: enquiry.id });
+        channel.close();
+      } catch (_) {}
+      window.dispatchEvent(new CustomEvent("cms-enquiry-updated", { detail: { enquiryId: enquiry.id } }));
+
+      // Automatically open follow-up interaction modal
+      const updated = res?.data || {
+        ...enquiry,
+        handledByUserId: currentHandler.id,
+        handledByStaffName: currentHandler.name,
+        handledByRole: currentHandler.role,
+        status: enquiry.status === "New" ? "In Progress" : enquiry.status,
+      };
+      setActiveEnquiry(updated);
+      setModalStatus(updated.status === "New" ? "In Progress" : updated.status);
+      setModalMethod(updated.contactMethodUsed || "Phone");
+      setModalNotes(updated.responseNotes || "");
+      setModalOpen(true);
+
+      await loadData();
+    } catch (err) {
+      if (err?.response?.status === 409) {
+        const claimedRole = err.response?.data?.claimedBy?.role || "another staff member";
+        const claimedName = err.response?.data?.claimedBy?.staffName ? ` (${err.response.data.claimedBy.staffName})` : "";
+        alert(`Exclusive Ownership: This inquiry was already claimed by ${claimedRole}${claimedName}. Only one person can take charge of an enquiry.`);
+        await loadData();
+      } else {
+        alert(getApiErrorMessage(err) || "Failed to take charge of enquiry.");
+      }
+    } finally {
+      setTakingChargeId(null);
+    }
+  };
+
+  // Open the visual historical audit trail for this inquiry
+  const openHistoryModal = async (enquiry) => {
+    setHistoryEnquiry(enquiry);
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    try {
+      const activities = await enquiryApi.getHistory(enquiry.id);
+      setHistoryList(activities || enquiry.activities || []);
+    } catch (_) {
+      setHistoryList(enquiry.activities || []);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const handleSaveCharge = async (e) => {
@@ -264,12 +335,13 @@ export default function EnquiriesListView({ portalType = "admin" }) {
         status: modalStatus,
         contactMethodUsed: modalMethod,
         responseNotes: modalNotes.trim(),
+        handledByUserId: currentHandler.id ? Number(currentHandler.id) : undefined,
         handledByStaffName: currentHandler.name,
         handledByRole: currentHandler.role,
       });
 
       setModalOpen(false);
-      setToastMessage(`✓ Tracked successfully: ${currentHandler.role} (${currentHandler.name}) took charge.`);
+      setToastMessage(`✓ Tracked successfully: ${currentHandler.role} (${currentHandler.name}) updated status to "${modalStatus}".`);
       setTimeout(() => setToastMessage(""), 5000);
 
       // Broadcast update to all other tabs and screens
@@ -282,7 +354,11 @@ export default function EnquiriesListView({ portalType = "admin" }) {
 
       await loadData();
     } catch (err) {
-      alert(getApiErrorMessage(err) || "Failed to update enquiry status.");
+      if (err?.response?.status === 403) {
+        alert(err.response?.data?.message || "Forbidden: Only the assigned owner or an administrator can update this enquiry.");
+      } else {
+        alert(getApiErrorMessage(err) || "Failed to update enquiry status.");
+      }
     } finally {
       setSavingStatus(false);
     }
@@ -681,22 +757,23 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                       {/* Actions Cell */}
                       <td>
                         <div className="enq-actions-cell">
-                          {isNew ? (
+                          {!hasHandler ? (
                             <button
                               type="button"
                               className="enq-charge-btn is-primary"
-                              onClick={() => openChargeModal(row)}
-                              title="Take charge of this lead"
+                              disabled={takingChargeId === row.id}
+                              onClick={() => handleTakeCharge(row)}
+                              title="Take exclusive charge of this inquiry"
                             >
-                              <UserCheck size={14} />
-                              <span>Take Charge &amp; Contact</span>
+                              <UserCheck size={14} className={takingChargeId === row.id ? "enq-spin" : ""} />
+                              <span>{takingChargeId === row.id ? "Taking Charge..." : "Take Charge & Contact"}</span>
                             </button>
                           ) : isHandledByMe ? (
                             <button
                               type="button"
                               className="enq-charge-btn is-active-handler"
                               onClick={() => openChargeModal(row)}
-                              title="Update your conversation track"
+                              title="Update your conversation notes & status"
                             >
                               <UserCheck size={14} />
                               <span>Update My Track</span>
@@ -708,25 +785,49 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                                 className={`enq-other-handler-badge is-${(row.handledByRole || "staff").toLowerCase()}`}
                                 title={`Already taken charge by ${row.handledByRole}: ${row.handledByStaffName || ""}`}
                               >
-                                <UserCheck size={12} />
+                                <Lock size={12} />
                                 <span>Taken by {row.handledByRole}</span>
                               </span>
                               <span className="enq-other-handler-staff" title={row.handledByStaffName || ""}>
                                 {row.handledByStaffName || "Follow-up ongoing"}
                               </span>
-                              <button
-                                type="button"
-                                className="enq-view-details-btn"
-                                onClick={() => setViewTrackEnquiry(row)}
-                                title="View conversation and follow-up notes recorded by handler"
-                              >
-                                <Eye size={12} />
-                                <span>View Notes</span>
-                              </button>
+                              <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
+                                <button
+                                  type="button"
+                                  className="enq-view-details-btn"
+                                  onClick={() => setViewTrackEnquiry(row)}
+                                  title="View conversation and follow-up notes recorded by handler"
+                                >
+                                  <Eye size={12} />
+                                  <span>View Notes</span>
+                                </button>
+                                {currentHandler.role === "Admin" && (
+                                  <button
+                                    type="button"
+                                    className="enq-view-details-btn"
+                                    style={{ color: "#6366f1", borderColor: "#c7d2fe" }}
+                                    onClick={() => openChargeModal(row)}
+                                    title="Admin Override: Update notes or reassign"
+                                  >
+                                    <Shield size={12} />
+                                    <span>Override</span>
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )}
 
                           <div className="enq-quick-dials">
+                            <button
+                              type="button"
+                              className="enq-dial-btn"
+                              style={{ background: "#f8fafc", color: "#475569", border: "1px solid #e2e8f0" }}
+                              onClick={() => openHistoryModal(row)}
+                              title="View complete audit timeline & history"
+                            >
+                              <History size={13} />
+                            </button>
+
                             <a
                               href={`tel:${row.mobile.replace(/[^+\d]/g, "")}`}
                               className="enq-dial-btn is-call"
@@ -1161,6 +1262,215 @@ export default function EnquiriesListView({ portalType = "admin" }) {
                 onClick={() => setViewMessageEnquiry(null)}
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Modal: Full Chronological Audit & Activity Timeline */}
+      {historyModalOpen && historyEnquiry && typeof document !== "undefined" && createPortal(
+        <div className="enq-modal-backdrop" onClick={() => setHistoryModalOpen(false)}>
+          <div
+            className="enq-modal-dialog is-view"
+            style={{ maxWidth: "680px" }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-history-title"
+          >
+            <div className="enq-modal-header">
+              <div>
+                <h3 id="modal-history-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <History size={18} style={{ color: "#6366f1" }} />
+                  <span>Enquiry Audit Trail &amp; History</span>
+                </h3>
+                <p>
+                  Lifecycle timeline for inquiry #{historyEnquiry.id} &bull; {historyEnquiry.fullName} ({historyEnquiry.mobile})
+                </p>
+              </div>
+              <button
+                type="button"
+                className="enq-modal-close"
+                onClick={() => setHistoryModalOpen(false)}
+                aria-label="Close history dialog"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="enq-modal-body" style={{ maxHeight: "60vh", overflowY: "auto", padding: "16px 20px" }}>
+              {historyLoading ? (
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "40px", color: "#64748b" }}>
+                  <RefreshCw size={24} className="enq-spin" />
+                  <span style={{ marginLeft: "12px", fontSize: "14px" }}>Loading audit history...</span>
+                </div>
+              ) : historyList.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px", color: "#64748b" }}>
+                  <p>No activity records logged for this inquiry yet.</p>
+                </div>
+              ) : (
+                <div className="enq-history-timeline" style={{ position: "relative", paddingLeft: "24px" }}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: "8px",
+                      top: "8px",
+                      bottom: "8px",
+                      width: "2px",
+                      background: "#e2e8f0",
+                    }}
+                  />
+                  {historyList.map((act, index) => {
+                    const isSubmit = act.action?.toLowerCase().includes("submit");
+                    const isClaim = act.action?.toLowerCase().includes("charge");
+                    const isContact = act.action?.toLowerCase().includes("contact");
+                    const isResolved = act.action?.toLowerCase().includes("resolv");
+
+                    let dotColor = "#6366f1";
+                    if (isSubmit) dotColor = "#3b82f6";
+                    else if (isClaim) dotColor = "#f59e0b";
+                    else if (isContact) dotColor = "#8b5cf6";
+                    else if (isResolved) dotColor = "#10b981";
+
+                    return (
+                      <div
+                        key={act.id || index}
+                        style={{
+                          position: "relative",
+                          marginBottom: "20px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            left: "-20px",
+                            top: "4px",
+                            width: "10px",
+                            height: "10px",
+                            borderRadius: "50%",
+                            background: dotColor,
+                            boxShadow: `0 0 0 3px ${dotColor}22`,
+                          }}
+                        />
+                        <div
+                          style={{
+                            background: "#f8fafc",
+                            border: "1px solid #e2e8f0",
+                            borderRadius: "8px",
+                            padding: "12px 14px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                              flexWrap: "wrap",
+                              gap: "6px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                fontSize: "13px",
+                                color: "#1e293b",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "inline-block",
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  background: `${dotColor}18`,
+                                  color: dotColor,
+                                }}
+                              >
+                                {act.action}
+                              </span>
+                              {act.previousStatus && act.newStatus && act.previousStatus !== act.newStatus && (
+                                <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 400 }}>
+                                  ({act.previousStatus} &rarr; <strong>{act.newStatus}</strong>)
+                                </span>
+                              )}
+                            </span>
+                            <span style={{ fontSize: "11px", color: "#64748b" }}>
+                              {new Date(act.createdAt).toLocaleString("en-IN", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })}
+                            </span>
+                          </div>
+
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              fontSize: "12px",
+                              color: "#475569",
+                              marginBottom: act.notes ? "6px" : "0",
+                            }}
+                          >
+                            <span>Performed by:</span>
+                            <strong style={{ color: "#0f172a" }}>{act.performedByName}</strong>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "1px 6px",
+                                borderRadius: "3px",
+                                fontSize: "11px",
+                                background: "#e2e8f0",
+                                color: "#334155",
+                              }}
+                            >
+                              {act.performedByRole}
+                            </span>
+                            {act.contactMethod && (
+                              <span style={{ color: "#64748b" }}>
+                                &bull; Via: <strong>{act.contactMethod}</strong>
+                              </span>
+                            )}
+                          </div>
+
+                          {act.notes && (
+                            <p
+                              style={{
+                                margin: "4px 0 0 0",
+                                fontSize: "13px",
+                                color: "#334155",
+                                fontStyle: "italic",
+                                background: "#ffffff",
+                                padding: "8px 10px",
+                                borderRadius: "4px",
+                                border: "1px solid #f1f5f9",
+                              }}
+                            >
+                              "{act.notes}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="enq-modal-footer">
+              <button
+                type="button"
+                className="enq-btn-secondary"
+                onClick={() => setHistoryModalOpen(false)}
+              >
+                Close Timeline
               </button>
             </div>
           </div>

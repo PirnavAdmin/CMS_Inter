@@ -4,12 +4,11 @@ import { X, LogOut } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useDriverData } from "../DriverDataContext.jsx";
-import { getAuthUser } from "@/modules/auth/authStorage.js";
-import { can, ACTIONS } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, onClose }) {
   const { driverProfile } = useDriverData();
-  const authUser = getAuthUser();
+  const { canView, loading, permissions } = useEffectivePermissions();
 
   const menuSections = [
     {
@@ -61,10 +60,8 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
         {menuSections.map((section) => {
           const visibleItems = section.items.filter((item) => {
             if (!item.moduleKey || item.moduleKey === "dashboard") return true;
-            if (authUser?.permissions || authUser?.rolePermissions) {
-              return can(item.moduleKey, ACTIONS.VIEW, authUser?.permissions, authUser);
-            }
-            return true;
+            if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+            return canView(item.moduleKey, item.screenKey || null);
           });
           if (!visibleItems.length) return null;
           return (

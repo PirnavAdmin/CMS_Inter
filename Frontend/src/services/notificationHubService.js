@@ -1,5 +1,6 @@
 import { HttpTransportType, HubConnectionBuilder, LogLevel, HubConnectionState } from "@microsoft/signalr";
 import { getAuthToken } from "@/features/authStorage.js";
+import { clearAuthSession } from "@/modules/auth/authStorage.js";
 import { env } from "@/config/env.js";
 import { applyRemotePreferences } from "@/services/userPreferencesService.js";
 
@@ -244,6 +245,18 @@ class NotificationHubService {
             try {
               applyRemotePreferences(payload);
             } catch {}
+          });
+
+          this.connection.on("AccountDeactivated", (payload) => {
+            try {
+              const msg = payload?.message || "Your account has been deactivated by an administrator.";
+              window.sessionStorage.setItem("cms_account_deactivated_msg", msg);
+              window.localStorage.setItem("cms_account_deactivated_msg", msg);
+            } catch {}
+            clearAuthSession();
+            if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+              window.location.replace("/login?reason=deactivated");
+            }
           });
 
           this.connection.onclose(() => {

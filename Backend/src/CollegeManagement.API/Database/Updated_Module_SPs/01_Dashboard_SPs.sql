@@ -102,12 +102,25 @@ BEGIN
           AND (p_BoardId IS NULL OR p_BoardId = 0 OR sa.BoardId = p_BoardId);
     END IF;
 
-    -- 2. Teaching Staff Count
+    -- 2. Teaching Staff Count (supporting direct campus, transferred campus, and multi-campus assignments)
     SELECT COUNT(*) INTO v_TeachingStaff
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+      AND (
+          p_CampusId IS NULL 
+          OR p_CampusId = 0 
+          OR (st.CampusId = p_CampusId AND NOT EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca_out 
+              WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = p_CampusId AND sca_out.Status = 'TransferredOut'
+          ))
+          OR EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = st.Id AND sca.CampusId = p_CampusId 
+                AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                AND (sca.Status = 'Active' OR sca.Status IS NULL)
+          )
+      )
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
       AND (
           st.StaffType = 'Teaching' 
@@ -117,21 +130,34 @@ BEGIN
           OR LOWER(st.StaffType) NOT LIKE '%non%'
       );
 
-    -- 3. Non-Teaching Staff Count
+    -- 3. Non-Teaching Staff Count (supporting direct campus, transferred campus, and multi-campus assignments)
     SELECT COUNT(*) INTO v_NonTeachingStaff
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+      AND (
+          p_CampusId IS NULL 
+          OR p_CampusId = 0 
+          OR (st.CampusId = p_CampusId AND NOT EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca_out 
+              WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = p_CampusId AND sca_out.Status = 'TransferredOut'
+          ))
+          OR EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = st.Id AND sca.CampusId = p_CampusId 
+                AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                AND (sca.Status = 'Active' OR sca.Status IS NULL)
+          )
+      )
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
       AND (LOWER(st.StaffType) LIKE '%non%');
 
-    -- 4. Total Groups Count
+    -- 4. Total Groups Count (matching Group Management module: all active master groups for board)
     SELECT COUNT(*) INTO v_TotalGroups
     FROM `Groups` g
     WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR g.BoardId = p_BoardId)
-      AND (v_EffectiveAcademicYearId IS NULL OR g.AcademicYearId = v_EffectiveAcademicYearId);
+      AND (v_EffectiveAcademicYearId IS NULL OR g.AcademicYearId = v_EffectiveAcademicYearId OR g.AcademicYearId IS NULL);
 
     -- 5. Total Sections Count
     SELECT COUNT(*) INTO v_TotalSections
@@ -214,7 +240,20 @@ BEGIN
             FROM `Staff` st
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
-              AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+              AND (
+          p_CampusId IS NULL 
+          OR p_CampusId = 0 
+          OR (st.CampusId = p_CampusId AND NOT EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca_out 
+              WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = p_CampusId AND sca_out.Status = 'TransferredOut'
+          ))
+          OR EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = st.Id AND sca.CampusId = p_CampusId 
+                AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                AND (sca.Status = 'Active' OR sca.Status IS NULL)
+          )
+      )
               AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
               AND st.JoiningDate <= v_PriorYearEndDate
               AND (
@@ -229,13 +268,35 @@ BEGIN
             FROM `Staff` st
             WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
               AND (st.Status = 'Active' OR st.Status IS NULL)
-              AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+              AND (
+          p_CampusId IS NULL 
+          OR p_CampusId = 0 
+          OR (st.CampusId = p_CampusId AND NOT EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca_out 
+              WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = p_CampusId AND sca_out.Status = 'TransferredOut'
+          ))
+          OR EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = st.Id AND sca.CampusId = p_CampusId 
+                AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                AND (sca.Status = 'Active' OR sca.Status IS NULL)
+          )
+      )
               AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL)
               AND st.JoiningDate <= v_PriorYearEndDate
               AND (LOWER(st.StaffType) LIKE '%non%');
         ELSE
             SET v_LastYearTeaching = 0;
             SET v_LastYearNonTeaching = 0;
+        END IF;
+
+        -- If the prior academic year had no active student enrollment (first recorded operational year),
+        -- reset all prior year comparison baselines to 0 so all metrics consistently show NEW.
+        IF v_LastYearStudents = 0 THEN
+            SET v_LastYearTeaching = 0;
+            SET v_LastYearNonTeaching = 0;
+            SET v_LastYearGroups = 0;
+            SET v_LastYearSections = 0;
         END IF;
     END IF;
 
@@ -671,7 +732,20 @@ BEGIN
     FROM `Staff` st
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+      AND (
+          p_CampusId IS NULL 
+          OR p_CampusId = 0 
+          OR (st.CampusId = p_CampusId AND NOT EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca_out 
+              WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = p_CampusId AND sca_out.Status = 'TransferredOut'
+          ))
+          OR EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = st.Id AND sca.CampusId = p_CampusId 
+                AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                AND (sca.Status = 'Active' OR sca.Status IS NULL)
+          )
+      )
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
     SET v_TotalStaff = v_TeachingCount + v_NonTeachingCount;
@@ -711,7 +785,20 @@ BEGIN
     )
     WHERE (st.IsDeleted = 0 OR st.IsDeleted IS NULL)
       AND (st.Status = 'Active' OR st.Status IS NULL)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId)
+      AND (
+          p_CampusId IS NULL 
+          OR p_CampusId = 0 
+          OR (st.CampusId = p_CampusId AND NOT EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca_out 
+              WHERE sca_out.StaffId = st.Id AND sca_out.CampusId = p_CampusId AND sca_out.Status = 'TransferredOut'
+          ))
+          OR EXISTS (
+              SELECT 1 FROM StaffCampusAssignments sca 
+              WHERE sca.StaffId = st.Id AND sca.CampusId = p_CampusId 
+                AND (sca.IsActive = 1 OR sca.IsActive IS NULL) 
+                AND (sca.Status = 'Active' OR sca.Status IS NULL)
+          )
+      )
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR st.BoardId IS NULL OR st.BoardId = 0);
 
     IF v_TotalStaff > 0 AND v_MarkedStaff > 0 THEN

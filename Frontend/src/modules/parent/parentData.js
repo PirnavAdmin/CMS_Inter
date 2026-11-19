@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAcademicContext } from "../../context/AcademicContext.jsx";
 import { getAuthUser } from "../auth/authStorage.js";
-import { holidayRecords } from "@/data/mockData.js";
 
 // ==========================================================================
 // PIRNAV COLLEGE ERP — PARENT MODULE DATA & IN-MEMORY STATE (NO STORAGE)
@@ -277,7 +276,7 @@ export const useParentPortal = () => {
     rawTimetable: [],
     childAttendance: null,
     attendanceOverview: null,
-    holidays: holidayRecords || [],
+    holidays: [],
     announcements: collegeAnnouncements || [],
     events: upcomingEvents || [],
     refreshHolidays: () => {},

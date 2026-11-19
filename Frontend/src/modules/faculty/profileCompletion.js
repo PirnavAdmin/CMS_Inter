@@ -1,4 +1,4 @@
-const hasFieldVal = (val) => {
+export const hasFieldVal = (val) => {
   if (val === null || val === undefined) return false;
   if (typeof val === "string") return val.trim().length > 0;
   if (typeof val === "number") return !Number.isNaN(val);
@@ -8,106 +8,162 @@ const hasFieldVal = (val) => {
 };
 
 /**
+ * Institutional Mandatory Profile Checklist definition across all sections.
+ * Every mandatory field must be complete before final submission is allowed.
+ */
+export const MANDATORY_PROFILE_FIELDS = [
+  { key: "firstName", label: "First Name", step: 1, stepId: "personal", check: (d) => hasFieldVal(d.firstName) },
+  { key: "lastName", label: "Last Name", step: 1, stepId: "personal", check: (d) => hasFieldVal(d.lastName) },
+  { key: "gender", label: "Gender", step: 1, stepId: "personal", check: (d) => hasFieldVal(d.gender) },
+  {
+    key: "dob",
+    label: "Date of Birth",
+    step: 1,
+    stepId: "personal",
+    check: (d) => {
+      const v = d.dob || d.dateOfBirth;
+      return hasFieldVal(v) && !String(v).startsWith("0001-01-01");
+    },
+  },
+  { key: "mobile", label: "Mobile Number", step: 1, stepId: "personal", check: (d) => hasFieldVal(d.mobile || d.phone) },
+  { key: "email", label: "Email Address", step: 1, stepId: "personal", check: (d) => hasFieldVal(d.email) },
+  {
+    key: "aadhaar",
+    label: "Aadhaar / National ID",
+    step: 1,
+    stepId: "personal",
+    check: (d) => hasFieldVal(d.aadhaar) || hasFieldVal(d.pan || d.panNumber),
+  },
+  {
+    key: "address",
+    label: "Address (House/Street)",
+    step: 2,
+    stepId: "address",
+    check: (d) => hasFieldVal(d.currentAddress) || hasFieldVal(d.permanentAddress) || hasFieldVal(d.houseNumber || d.address) || hasFieldVal(d.street),
+  },
+  { key: "city", label: "City / Town", step: 2, stepId: "address", check: (d) => hasFieldVal(d.city || d.cityVillage) },
+  { key: "state", label: "State", step: 2, stepId: "address", check: (d) => hasFieldVal(d.state) },
+  { key: "pincode", label: "Pincode", step: 2, stepId: "address", check: (d) => hasFieldVal(d.pin || d.pincode) },
+  {
+    key: "education",
+    label: "Educational Qualification",
+    step: 3,
+    stepId: "education",
+    check: (d) => {
+      const eduList = Array.isArray(d.educationList) ? d.educationList : Array.isArray(d.education) ? d.education : [];
+      return eduList.length > 0 || hasFieldVal(d.qualification || d.highestQualification);
+    },
+  },
+  {
+    key: "bankName",
+    label: "Bank Name",
+    step: 4,
+    stepId: "bank",
+    check: (d) => hasFieldVal(d.bankName || d.bankDetails?.bankName),
+  },
+  {
+    key: "accountNumber",
+    label: "Bank Account Number",
+    step: 4,
+    stepId: "bank",
+    check: (d) => hasFieldVal(d.accountNumber || d.bankDetails?.accountNumber),
+  },
+  {
+    key: "ifscCode",
+    label: "Bank IFSC Code",
+    step: 4,
+    stepId: "bank",
+    check: (d) => hasFieldVal(d.ifsc || d.ifscCode || d.bankDetails?.ifscCode),
+  },
+  {
+    key: "emergencyContactName",
+    label: "Emergency Contact Person",
+    step: 6,
+    stepId: "emergency",
+    check: (d) => hasFieldVal(d.contactName || d.emergencyName || d.emergencyContactName || d.emergencyContact?.contactName),
+  },
+  {
+    key: "emergencyContactMobile",
+    label: "Emergency Contact Mobile",
+    step: 6,
+    stepId: "emergency",
+    check: (d) => hasFieldVal(d.emergencyMobile || d.emergencyContactPhone || d.emergencyContact?.mobile),
+  },
+  {
+    key: "documents",
+    label: "Document / Certificate Upload",
+    step: 5,
+    stepId: "documents",
+    check: (d) => {
+      const rawDocs = Array.isArray(d.documents) ? d.documents : Array.isArray(d.documentsList) ? d.documentsList : [];
+      const valid = rawDocs.filter((doc) => doc && (hasFieldVal(doc.type) || hasFieldVal(doc.name) || hasFieldVal(doc.url)));
+      return valid.length >= 1 || hasFieldVal(d.photoUrl || d.profilePhoto || d.photoPath);
+    },
+  },
+];
+
+/**
+ * Returns a list of all missing mandatory profile fields for the staff member.
+ */
+export function getMissingMandatoryFields(data) {
+  if (!data || typeof data !== "object") {
+    return MANDATORY_PROFILE_FIELDS.map((f) => ({ key: f.key, label: f.label, step: f.step, stepId: f.stepId }));
+  }
+
+  const missing = [];
+  for (const field of MANDATORY_PROFILE_FIELDS) {
+    if (!field.check(data)) {
+      missing.push({ key: field.key, label: field.label, step: field.step, stepId: field.stepId });
+    }
+  }
+
+  // Conditional: Driving license required ONLY if staff is driver
+  const isDriver = data.isDriver === true ||
+    String(data.designation || "").toLowerCase().includes("driver") ||
+    String(data.role || "").toLowerCase().includes("driver");
+  if (isDriver) {
+    if (!hasFieldVal(data.drivingLicenseNumber)) {
+      missing.push({
+        key: "drivingLicenseNumber",
+        label: "Driving License Number",
+        step: 1,
+        stepId: "personal",
+      });
+    }
+  }
+
+  return missing;
+}
+
+/**
+ * Checks if every single mandatory profile field is completed.
+ */
+export function isAllMandatoryFieldsComplete(data) {
+  return getMissingMandatoryFields(data).length === 0;
+}
+
+/**
  * Exact 1:1 mirror of Backend StaffService.CalculateCompletionPercentage(Staff)
- * so Sidebar "Profile Progress %", Header "% Profile Completed", Modal progress bar,
- * and Backend 50% submission gate always agree.
+ * Reaches 100% when all mandatory profile fields and onboarding sections are completed.
  */
 export function calculateStaffProfileCompletion(data) {
-  if (!data || typeof data !== "object") return 30;
+  if (!data || typeof data !== "object") return 0;
 
   if (data._isDetailedLoaded === false || (!hasFieldVal(data.firstName) && !hasFieldVal(data.lastName))) {
     const serverPct = Number(data.profileCompletionPercentage ?? data.profileCompletion ?? 0);
-    if (serverPct > 0) return Math.min(100, Math.max(30, serverPct));
+    if (serverPct > 0) return Math.min(100, Math.max(0, serverPct));
   }
 
-  let score = 0;
+  const totalMandatory = MANDATORY_PROFILE_FIELDS.length;
+  const missing = getMissingMandatoryFields(data);
+  const completedCount = totalMandatory - missing.length;
 
-  // 1. Basic & Personal Details (20%)
-  const dobVal = data.dob || data.dateOfBirth;
-  if (
-    hasFieldVal(data.firstName) &&
-    hasFieldVal(data.lastName) &&
-    hasFieldVal(data.gender) &&
-    hasFieldVal(dobVal) &&
-    !String(dobVal).startsWith("0001-01-01")
-  ) {
-    score += 15;
-  }
-  if (
-    hasFieldVal(data.aadhaar) ||
-    hasFieldVal(data.pan || data.panNumber) ||
-    hasFieldVal(data.fatherOrHusbandName || data.guardianName)
-  ) {
-    score += 5;
+  if (missing.length === 0) {
+    return 100;
   }
 
-  // 2. Contact & Address (15%)
-  if (
-    hasFieldVal(data.currentAddress) ||
-    hasFieldVal(data.permanentAddress) ||
-    hasFieldVal(data.houseNumber || data.address) ||
-    hasFieldVal(data.street || data.streetArea)
-  ) {
-    score += 8;
-  }
-  if (
-    hasFieldVal(data.city || data.cityVillage) &&
-    hasFieldVal(data.state) &&
-    hasFieldVal(data.pin || data.pincode)
-  ) {
-    score += 7;
-  }
-
-  // 3. Educational Qualifications (15%)
-  const eduList = Array.isArray(data.educationList)
-    ? data.educationList
-    : Array.isArray(data.education)
-      ? data.education
-      : [];
-  if (eduList.length > 0 || hasFieldVal(data.qualification || data.highestQualification)) {
-    score += 15;
-  }
-
-  // 4. Experience (10% — matches backend fresher rule)
-  score += 10;
-
-  // 5. Documents Upload (15%)
-  const rawDocs = Array.isArray(data.documents)
-    ? data.documents
-    : Array.isArray(data.documentsList)
-      ? data.documentsList
-      : [];
-  const validDocs = rawDocs.filter(
-    (d) => d && (hasFieldVal(d.type) || hasFieldVal(d.name) || hasFieldVal(d.url)),
-  );
-  if (validDocs.length >= 2) {
-    score += 15;
-  } else if (validDocs.length === 1) {
-    score += 8;
-  }
-
-  // 6. Bank Details (15%)
-  const acctNo = data.accountNumber || data.bankDetails?.accountNumber;
-  const ifscCode = data.ifsc || data.ifscCode || data.bankDetails?.ifscCode;
-  if (hasFieldVal(acctNo) && hasFieldVal(ifscCode)) {
-    score += 15;
-  }
-
-  // 7. Emergency Contact (10%)
-  const emName =
-    data.contactName ||
-    data.emergencyName ||
-    data.emergencyContactName ||
-    data.emergencyContact?.contactName;
-  const emMobile =
-    data.emergencyMobile ||
-    data.emergencyContactPhone ||
-    data.emergencyContact?.mobile;
-  if (hasFieldVal(emName) && hasFieldVal(emMobile)) {
-    score += 10;
-  }
-
-  return Math.min(100, Math.max(30, score));
+  const pct = Math.round((completedCount / totalMandatory) * 100);
+  return Math.min(95, Math.max(10, pct));
 }
 
 export const LOCKED_ONBOARDING_STATUSES = new Set([
@@ -118,25 +174,26 @@ export const LOCKED_ONBOARDING_STATUSES = new Set([
   "needscorrection",
   "changes required",
   "onboarding discontinued",
-]);
-
-export const UNLOCKED_ONBOARDING_STATUSES = new Set([
-  "completed",
-  "approved",
   "submitted",
   "pendingapproval",
   "underverification",
 ]);
 
+export const UNLOCKED_ONBOARDING_STATUSES = new Set([
+  "completed",
+  "approved",
+  "active",
+]);
+
 /**
- * Unlocks portal modules once staff has submitted their >=50% profile
- * (Completed, Approved, Submitted, PendingApproval, UnderVerification).
+ * Unlocks portal modules once staff has reached approved/completed status.
+ * Modules remain strictly locked during pending approval, verification, or draft stages.
  */
 export function isStaffPortalUnlocked(profileStatus, isOnboardedFlag = false) {
   const statusClean = String(profileStatus || "").trim().toLowerCase();
   if (UNLOCKED_ONBOARDING_STATUSES.has(statusClean)) return true;
-  if (!statusClean) return isOnboardedFlag === true;
   if (LOCKED_ONBOARDING_STATUSES.has(statusClean)) return false;
+  if (!statusClean) return isOnboardedFlag === true;
   return isOnboardedFlag === true;
 }
 

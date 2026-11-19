@@ -288,11 +288,21 @@ function CustomBarTooltip({ active, payload }) {
   if (active && payload && payload.length) {
     const data = payload[0];
     const dotColor = data.payload?.fill || data.color || "#2563eb";
+    const boys = data.payload?.boys;
+    const girls = data.payload?.girls;
+    const hasGender = boys !== undefined && girls !== undefined;
     return (
-      <div className="dashboard-custom-donut-tooltip">
-        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
-        <span className="tooltip-name">{data.payload?.name || data.name}:</span>
-        <span className="tooltip-val">{formatNumber(data.value)} Students</span>
+      <div className="dashboard-custom-donut-tooltip" style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+          <span className="tooltip-name">{data.payload?.name || data.name}:</span>
+          <span className="tooltip-val">{formatNumber(data.value)} Students</span>
+        </div>
+        {hasGender && (
+          <div style={{ fontSize: "10px", color: "var(--cms-muted, #64748b)", paddingLeft: 14 }}>
+            Boys: <strong style={{ color: "var(--cms-text, #1e293b)" }}>{boys}</strong> • Girls: <strong style={{ color: "var(--cms-text, #1e293b)" }}>{girls}</strong>
+          </div>
+        )}
       </div>
     );
   }
@@ -307,13 +317,10 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
   let rawGrowth = cardObj?.growthPercentage ?? cardObj?.GrowthPercentage ?? cardObj?.percentageChange ?? cardObj?.PercentageChange ?? metric(summaryData, rawPctKeys);
   let status = String(cardObj?.growthStatus ?? cardObj?.GrowthStatus ?? cardObj?.status ?? cardObj?.Status ?? "").toUpperCase();
 
-  // If there is no prior academic year baseline recorded (initial academic year), all cards must show NEW
-  const noPriorAcademicYear = 
-    Number(summaryData?.lastYearTotalStudents ?? 0) === 0 &&
-    Number(summaryData?.lastYearTotalGroups ?? 0) === 0 &&
-    Number(summaryData?.lastYearTotalSections ?? 0) === 0;
+  // If there is no prior academic year student enrollment baseline recorded (initial academic year), all cards must show NEW
+  const noPriorAcademicYear = Number(summaryData?.lastYearTotalStudents ?? 0) === 0;
 
-  if (noPriorAcademicYear) {
+  if (noPriorAcademicYear || Number(previous) === 0) {
     previous = 0;
     rawGrowth = null;
     status = "NEW";
@@ -323,18 +330,10 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
   const numCurrent = Number(current ?? 0);
   const numPrevious = Number(previous ?? 0);
 
-  if (!status) {
-    if (numPrevious === 0) {
-      status = numCurrent > 0 ? "NEW" : "NO DATA";
-    } else {
-      status = numCurrent > numPrevious ? "GROWTH" : (numCurrent < numPrevious ? "DECLINE" : "NEUTRAL");
-    }
-  }
-
   let badge = "—";
   let label = "vs last year";
 
-  if (status === "NEW" || numPrevious === 0) {
+  if (status === "NEW" || numPrevious === 0 || noPriorAcademicYear) {
     if (numCurrent === 0) {
       badge = "No Data";
       label = "No records";
@@ -343,7 +342,7 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
       label = "First recorded year";
     }
   } else {
-    // When prior academic year exists, calculate percentage difference between this year and last year
+    // When prior academic year exists and had operational enrollment (> 0), calculate percentage difference
     let numPct = rawGrowth !== undefined && rawGrowth !== null 
       ? Number(rawGrowth) 
       : (((numCurrent - numPrevious) * 100) / numPrevious);
@@ -1201,7 +1200,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
+  // 6. GET /api/v1/dashboard/upcoming-holidays (with direct sync to Holiday Management /api/v1/holidays)
   const fetchUpcomingHolidays = useCallback(async () => {
     const seq = ++holidaySeq.current;
     setHolidayState((prev) => ({ ...prev, loading: true, error: null }));
@@ -1212,14 +1211,27 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
         limit: 20,
       };
-      let res;
+      let holidays = [];
       try {
-        res = await apiClient.get(DASHBOARD_API.upcomingHolidays, { params });
+        const res = await apiClient.get(DASHBOARD_API.upcomingHolidays, { params });
+        const raw = unwrap(res.data);
+        holidays = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.holidays || []);
       } catch {
-        res = await apiClient.get(DASHBOARD_API.holidaysList, { params: { ...params, pageSize: 20, status: "Active" } });
+        // Fallback directly to Holiday Management dependency API
       }
+
+      if (!holidays || holidays.length === 0) {
+        try {
+          const res = await apiClient.get(apiEndpoints.holidays.list, { params: { ...params, pageSize: 20, status: "Active" } });
+          const raw = unwrap(res.data);
+          holidays = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.holidays || []);
+        } catch {
+          // ignore
+        }
+      }
+
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: null, data: unwrap(res.data) });
+        setHolidayState({ loading: false, error: null, data: holidays });
       }
     } catch (err) {
       if (holidaySeq.current === seq) {
@@ -1228,7 +1240,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId]);
 
-  // 7. GET /api/v1/dashboard/upcoming-examinations
+  // 7. GET /api/v1/dashboard/upcoming-examinations (with direct sync to Examination module /api/v1/examinations)
   const fetchUpcomingExaminations = useCallback(async () => {
     const seq = ++examSeq.current;
     setExamState((prev) => ({ ...prev, loading: true, error: null }));
@@ -1238,9 +1250,27 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const res = await apiClient.get(DASHBOARD_API.upcomingExaminations, { params });
+      let exams = [];
+      try {
+        const res = await apiClient.get(DASHBOARD_API.upcomingExaminations, { params });
+        const raw = unwrap(res.data);
+        exams = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.examinations || []);
+      } catch {
+        // Fallback directly to Examination module dependency API
+      }
+
+      if (!exams || exams.length === 0) {
+        try {
+          const res = await apiClient.get(apiEndpoints.examinations.list, { params });
+          const raw = unwrap(res.data);
+          exams = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.examinations || []);
+        } catch {
+          // ignore
+        }
+      }
+
       if (examSeq.current === seq) {
-        setExamState({ loading: false, error: null, data: unwrap(res.data) });
+        setExamState({ loading: false, error: null, data: exams });
       }
     } catch (err) {
       if (examSeq.current === seq) {
@@ -1638,6 +1668,8 @@ export default function DashboardPage() {
       name: item.name || item.groupName || item.code || "Group",
       value: Number(item.value ?? item.studentCount ?? item.count ?? 0),
       students: Number(item.value ?? item.studentCount ?? item.count ?? 0),
+      boys: Number(item.boys ?? item.boysCount ?? 0),
+      girls: Number(item.girls ?? item.girlsCount ?? 0),
       fill: GROUP_COLORS[index % GROUP_COLORS.length],
     }));
   }, [groupState.data]);
@@ -1723,11 +1755,11 @@ export default function DashboardPage() {
 
     const chartData = hasMarkedRecords
       ? [
-          { name: "Present", value: present, color: "#22a447" },
+          { name: "Present", value: present, color: "#16a34a" },
           { name: "Absent", value: absent, color: "#ef4444" },
           { name: "Half-day", value: halfDay, color: "#f59e0b" },
         ]
-      : [{ name: "Not marked today", value: total || 1, color: "#cbd5e1" }];
+      : [{ name: "Not marked today", value: total || 1, color: "#e2e8f0" }];
 
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
@@ -1772,12 +1804,12 @@ export default function DashboardPage() {
 
     const chartData = hasMarkedRecords
       ? [
-          { name: "Present", value: present, color: "#22a447" },
+          { name: "Present", value: present, color: "#16a34a" },
           { name: "Absent", value: absent, color: "#ef4444" },
           { name: "Late", value: late, color: "#f59e0b" },
           { name: "On Leave", value: onLeave, color: "#7c3aed" },
         ]
-      : [{ name: "Not marked today", value: total || 1, color: "#cbd5e1" }];
+      : [{ name: "Not marked today", value: total || 1, color: "#e2e8f0" }];
 
     return { total, marked, present, absent, late, onLeave, percentage, teachingCount, nonTeachingCount, hasMarkedRecords, chartData };
   }, [staffAttState.data, staffStatsState.data]);
@@ -2214,19 +2246,21 @@ export default function DashboardPage() {
                                 data={
                                   studentAttData.chartData.some((d) => d.value > 0)
                                     ? studentAttData.chartData.filter((d) => d.value > 0)
-                                    : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                                    : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                                 }
                                 dataKey="value"
                                 nameKey="name"
-                                innerRadius="68%"
-                                outerRadius="94%"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={38}
+                                outerRadius={51}
                                 paddingAngle={studentAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                                 stroke="var(--cms-surface)"
                                 strokeWidth={2}
                               >
                                 {(studentAttData.chartData.some((d) => d.value > 0)
                                   ? studentAttData.chartData.filter((d) => d.value > 0)
-                                  : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                                  : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                                 ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
@@ -2326,19 +2360,21 @@ export default function DashboardPage() {
                           data={
                             staffAttData.chartData.some((d) => d.value > 0)
                               ? staffAttData.chartData.filter((d) => d.value > 0)
-                              : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                              : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                           }
                           dataKey="value"
                           nameKey="name"
-                          innerRadius="68%"
-                          outerRadius="94%"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={38}
+                          outerRadius={51}
                           paddingAngle={staffAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                           stroke="var(--cms-surface)"
                           strokeWidth={2}
                         >
                           {(staffAttData.chartData.some((d) => d.value > 0)
                             ? staffAttData.chartData.filter((d) => d.value > 0)
-                            : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                            : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                           ).map((entry) => (
                             <Cell key={entry.name} fill={entry.color} />
                           ))}

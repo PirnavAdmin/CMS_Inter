@@ -46,7 +46,7 @@ public class FeeController : ControllerBase
     private bool IsPrivilegedStaff()
     {
         return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("SuperAdmin") ||
-               User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance") ||
+               User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Accounts") || User.IsInRole("Finance") ||
                User.IsInRole("Teacher") || User.IsInRole("Staff");
     }
 
@@ -271,7 +271,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Get the complete student fee details, breakdown, schedules and payment history.</summary>
     [HttpGet("student-fees/{id:int}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     public async Task<IActionResult> GetStudentFee(int id)
     {
@@ -294,7 +294,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Get student fee details by student ID.</summary>
     [HttpGet("students/{studentId:int}/fee-details")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     [ParentStudentAuthorization("studentId")]
     public async Task<IActionResult> GetStudentFeeDetails(int studentId)
@@ -322,7 +322,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Compatibility route for student-specific fee ledger.</summary>
     [HttpGet("students/{studentId:int}/fee-ledger")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     [ParentStudentAuthorization("studentId")]
     public async Task<IActionResult> GetStudentLedger(int studentId) => Ok(await _service.GetStudentFeeDetailsByStudentAsync(studentId));
@@ -364,7 +364,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Collect full or partial cash/manual payment against a selected fee schedule with atomic receipt &amp; outbox email queuing.</summary>
     [HttpPost("collect")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> Collect(CreateFeePaymentRequest request)
     {
         var (ok, err) = await EnsureAuthorizedForStudentFeeCampusAsync(request.StudentFeeId);
@@ -420,7 +420,7 @@ public class FeeController : ControllerBase
     // ---------------- Payment History / Receipt ----------------
     /// <summary>View payment history for one student. Enforces caller ID check to prevent IDOR.</summary>
     [HttpGet("history/{studentId:int}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     [ParentStudentAuthorization("studentId")]
     public async Task<IActionResult> GetHistory(int studentId)
@@ -461,7 +461,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Fetch one payment transaction by payment ID with enriched status, receipt &amp; email delivery fields.</summary>
     [HttpGet("payments/{id:int}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     public async Task<IActionResult> GetPayment(int id)
     {
@@ -484,7 +484,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Fetch one payment receipt by receipt number. Enforces ownership/campus &amp; rejects reversed/unsettled receipts.</summary>
     [HttpGet("receipt/{receiptNumber}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Teacher,Staff,Student,Parent")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Teacher,Staff,Student,Parent")]
     [BypassPermission]
     public async Task<IActionResult> GetReceipt(string receiptNumber)
     {
@@ -550,7 +550,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Send fee payment reminder to student and parents.</summary>
     [HttpPost("students/{studentId:int}/send-reminder")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> SendFeeReminder(
         int studentId,
         [FromQuery] decimal? amount = null,
@@ -595,7 +595,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Send fee overdue alert to student and parents.</summary>
     [HttpPost("students/{studentId:int}/send-overdue-alert")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> SendFeeOverdueAlert(
         int studentId,
         [FromQuery] decimal? amount = null,
@@ -640,7 +640,7 @@ public class FeeController : ControllerBase
 
     /// <summary>Send bulk fee payment reminders to multiple students.</summary>
     [HttpPost("send-bulk-due-reminders")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> SendBulkFeeReminders([FromBody] List<int> studentIds)
     {
         if (studentIds == null || !studentIds.Any())

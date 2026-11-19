@@ -1,10 +1,9 @@
-import * as data from "@/data/mockData.js";
 import ListPage from "@/components/pages/ListPage.jsx";
 import apiClient from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import "./AcademicYearPage.css";
 
-const o = data.options;
+const STATUS_OPTIONS = ["Active", "Inactive"];
 const MODULE_SLUG = "academic-years";
 
 const unwrapList = (d) => (Array.isArray(d) ? d : d?.data || d?.items || []);
@@ -24,7 +23,7 @@ export const pageConfig = {
   subtitle: "Define academic sessions and admission windows.",
   breadcrumb: ["Academics"],
   addLabel: "Add Academic Year",
-  rows: data.academicYears,
+  rows: [],
   columns: [
     { key: "name", label: "Academic Year", strong: true },
     { key: "start", label: "Start Date" },
@@ -39,7 +38,7 @@ export const pageConfig = {
     { name: "end", label: "End Date", type: "date", required: true },
     { name: "admissionStart", label: "Admission Start Date", type: "date", required: true },
     { name: "admissionEnd", label: "Admission End Date", type: "date", required: true },
-    { name: "status", label: "Active", type: "select", options: o.status, required: true },
+    { name: "status", label: "Active", type: "select", options: STATUS_OPTIONS, required: true },
   ],
   api: {
     fetchRows: async () => {

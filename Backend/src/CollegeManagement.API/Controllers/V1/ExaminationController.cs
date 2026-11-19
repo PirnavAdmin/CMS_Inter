@@ -635,10 +635,8 @@ namespace CollegeManagement.API.Controllers.V1
             }
             else
             {
-                if (!staffId.HasValue || staffId.Value <= 0)
-                {
-                    staffId = callerStaffId ?? 0;
-                }
+                // Strict Faculty Isolation: Non-managers can ONLY query their own exam duties
+                staffId = callerStaffId ?? 0;
             }
 
             var resolvedCampusId = ResolveCampusId(campusId);

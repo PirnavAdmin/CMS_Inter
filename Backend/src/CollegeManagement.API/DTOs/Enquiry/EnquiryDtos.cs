@@ -48,14 +48,17 @@ namespace CollegeManagement.API.DTOs.Enquiry
         public int? AssignedToStaffId { get; set; }
         public string? AssignedToStaffName { get; set; }
         public int? HandledByStaffId { get; set; }
+        public int? HandledByUserId { get; set; }
         public string? HandledByStaffName { get; set; }
         public string? HandledByRole { get; set; }
+        public DateTime? ClaimedAt { get; set; }
         public string? ResponseNotes { get; set; }
         public string? ContactMethodUsed { get; set; }
         public DateTime? ContactedAt { get; set; }
         public DateTime? ResolvedAt { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
+        public System.Collections.Generic.List<EnquiryActivityDto> Activities { get; set; } = new();
     }
 
     public class UpdateEnquiryStatusRequest
@@ -65,11 +68,52 @@ namespace CollegeManagement.API.DTOs.Enquiry
 
         public string? ResponseNotes { get; set; }
         public string? ContactMethodUsed { get; set; } // 'Phone', 'Email', 'In-Person', 'WhatsApp'
+        public int? HandledByUserId { get; set; }
         public int? HandledByStaffId { get; set; }
         public string? HandledByStaffName { get; set; }
         public string? HandledByRole { get; set; }
         public int? AssignedToStaffId { get; set; }
         public string? AssignedToStaffName { get; set; }
+    }
+
+    public class TakeChargeRequest
+    {
+        public int? UserId { get; set; }
+        public int? StaffId { get; set; }
+        public string? StaffName { get; set; }
+        public string? Role { get; set; }
+    }
+
+    public class ClaimedByInfoDto
+    {
+        public int? UserId { get; set; }
+        public string? StaffName { get; set; }
+        public string? Role { get; set; }
+        public DateTime? ClaimedAt { get; set; }
+    }
+
+    public class TakeChargeResultDto
+    {
+        public bool Success { get; set; }
+        public bool AlreadyClaimedByOther { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public EnquiryDto? Enquiry { get; set; }
+        public ClaimedByInfoDto? ClaimedBy { get; set; }
+    }
+
+    public class EnquiryActivityDto
+    {
+        public int Id { get; set; }
+        public int EnquiryId { get; set; }
+        public string Action { get; set; } = string.Empty;
+        public string? PreviousStatus { get; set; }
+        public string? NewStatus { get; set; }
+        public int? PerformedByUserId { get; set; }
+        public string PerformedByName { get; set; } = string.Empty;
+        public string PerformedByRole { get; set; } = string.Empty;
+        public string? ContactMethod { get; set; }
+        public string? Notes { get; set; }
+        public DateTime CreatedAt { get; set; }
     }
 
     public class EnquiryStatsDto

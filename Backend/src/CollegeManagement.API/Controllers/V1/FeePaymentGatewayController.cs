@@ -94,7 +94,7 @@ public class FeePaymentGatewayController : ControllerBase
     private bool IsPrivilegedStaff()
     {
         return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("SuperAdmin") ||
-               User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance") ||
+               User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Accounts") || User.IsInRole("Finance") ||
                User.IsInRole("Teacher") || User.IsInRole("Staff");
     }
 
@@ -231,7 +231,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Enforces Student/Parent ownership to prevent IDOR.
     /// </summary>
     [HttpPost("create-order")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> CreateOrder([FromBody] CreateGatewayOrderRequest request)
     {
@@ -277,7 +277,7 @@ public class FeePaymentGatewayController : ControllerBase
                 return Forbid();
 
             if (!IsGlobalAdmin() && IsPrivilegedStaff() &&
-                (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Finance")))
+                (User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Accounts") || User.IsInRole("Finance")))
             {
                 var studentCampusId = await _gatewayService.GetStudentCampusIdAsync(request.StudentId);
                 var targetCampusId = request.CampusId ?? studentCampusId;
@@ -302,7 +302,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Enforces Student/Parent ownership.
     /// </summary>
     [HttpPost("verify")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> VerifyPayment([FromBody] VerifyPaymentRequest request)
     {
@@ -356,7 +356,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Performs throttled active Razorpay sync and enforces Student/Parent ownership &amp; campus authorization.
     /// </summary>
     [HttpGet("status/{studentFeeId:int}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> GetStatus(int studentFeeId, [FromQuery] string orderId)
     {
@@ -491,7 +491,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// and legacy application/json requests.
     /// </summary>
     [HttpPost("submit-utr")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     [RequestSizeLimit(6 * 1024 * 1024)]
     [RequestFormLimits(MultipartBodyLengthLimit = 6 * 1024 * 1024)]
@@ -633,7 +633,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>List all pending offline bank transfer and direct UPI QR UTR submissions for admin review.</summary>
     [HttpGet("pending-utrs")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> GetPendingUtrs(
         [FromQuery] int? campusId, [FromQuery] int? academicYearId)
     {
@@ -662,7 +662,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// </summary>
     [HttpGet("attachments/{attachmentId:int}")]
     [HttpGet("attachments/{attachmentId:int}/download")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> DownloadPaymentProofAttachment(
         int attachmentId,
         [FromQuery] bool download = false,
@@ -1094,7 +1094,7 @@ public class FeePaymentGatewayController : ControllerBase
 
     /// <summary>Approve or reject a pending UTR submission.</summary>
     [HttpPost("approve-utr")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> ApproveUtr([FromBody] ApproveUtrRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -1142,7 +1142,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Strictly restricted to Accounting &amp; Administrative roles within their authorized campus.
     /// </summary>
     [HttpPost("reverse")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> ReversePayment([FromBody] ReversePaymentRequest request)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -1174,7 +1174,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Enforces Student/Parent ownership and campus isolation, and rejects unsettled/reversed payments.
     /// </summary>
     [HttpGet("receipt/{feePaymentId:int}/pdf")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> GetReceiptPdf(int feePaymentId)
     {
@@ -1233,7 +1233,7 @@ public class FeePaymentGatewayController : ControllerBase
     // ========================= PAYMENT STATUS, EMAIL RETRY & COMMUNICATION TEMPLATES =========================
 
     [HttpGet("payments/{feePaymentId:int}/status")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> GetPaymentNotificationStatus(int feePaymentId, CancellationToken cancellationToken)
     {
@@ -1261,7 +1261,7 @@ public class FeePaymentGatewayController : ControllerBase
     }
 
     [HttpPost("payments/{feePaymentId:int}/retry-email")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> RetryPaymentEmail(int feePaymentId, CancellationToken cancellationToken)
     {
         var ownerStudentId = await _gatewayService.GetStudentIdForPaymentAsync(feePaymentId);
@@ -1291,7 +1291,7 @@ public class FeePaymentGatewayController : ControllerBase
     }
 
     [HttpGet("communication-settings")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     [BypassPermission]
     public async Task<IActionResult> GetCommunicationSettings([FromQuery] int? campusId, CancellationToken cancellationToken)
     {
@@ -1376,7 +1376,7 @@ public class FeePaymentGatewayController : ControllerBase
     }
 
     [HttpPost("communication-settings/send-test-email")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> SendTestCommunicationEmail(
         [FromBody] SendTestPaymentEmailRequest request,
         CancellationToken cancellationToken)
@@ -1499,7 +1499,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Privileged staff roles receive full administrative configuration.
     /// </summary>
     [HttpGet("config")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance,Staff,Teacher,Parent,Student")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance,Staff,Teacher,Parent,Student")]
     [BypassPermission]
     public async Task<IActionResult> GetConfig([FromQuery] int? campusId)
     {
@@ -1621,7 +1621,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Validates active fields and stored secret preservation before any database write occurs.
     /// </summary>
     [HttpPost("config")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> UpdateConfig([FromBody] UpdatePaymentGatewayConfigRequest request)
     {
         if (request == null)
@@ -1679,7 +1679,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Gets all receiving bank accounts configured for the specified campus.
     /// </summary>
     [HttpGet("bank-accounts")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> GetBankAccounts([FromQuery] int campusId)
     {
         var (ok, effectiveCampusId, errorResult) = await ResolveConfigCampusAccessAsync(
@@ -1695,7 +1695,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Creates a new receiving bank account for the specified campus.
     /// </summary>
     [HttpPost("bank-accounts")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> CreateBankAccount([FromBody] CreateCampusBankAccountRequest request)
     {
         if (request == null)
@@ -1718,7 +1718,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Updates details of an existing campus bank account.
     /// </summary>
     [HttpPut("bank-accounts/{id:int}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> UpdateBankAccount(int id, [FromBody] UpdateCampusBankAccountRequest request)
     {
         if (request == null)
@@ -1744,7 +1744,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Deletes a campus bank account.
     /// </summary>
     [HttpDelete("bank-accounts/{id:int}")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> DeleteBankAccount(int id)
     {
         var existing = await _gatewayService.GetBankAccountByIdAsync(id);
@@ -1767,7 +1767,7 @@ public class FeePaymentGatewayController : ControllerBase
     /// Designates a specific bank account as the active receiving account for a campus.
     /// </summary>
     [HttpPost("bank-accounts/{id:int}/activate")]
-    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Finance")]
+    [Authorize(Roles = "Admin,Super Admin,SuperAdmin,Principal,Accountant,Accounts,Finance")]
     public async Task<IActionResult> ActivateBankAccount(int id)
     {
         var existing = await _gatewayService.GetBankAccountByIdAsync(id);

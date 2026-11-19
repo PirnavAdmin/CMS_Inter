@@ -113,4 +113,13 @@ public interface ICertificateRepository
     Task<StudentGenerationLookupDto?> GetStudentForGenerationAsync(
         string admissionNo,
         CancellationToken ct = default);
+
+    Task<bool> UpdateCertificateFileAsync(
+        int certificateId,
+        string filePath,
+        string fileName,
+        string fileType,
+        long fileSize,
+        string generatedBy,
+        CancellationToken ct = default);
 }

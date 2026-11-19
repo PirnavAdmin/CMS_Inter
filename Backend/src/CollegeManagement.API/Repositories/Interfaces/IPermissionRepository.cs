@@ -22,5 +22,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> SetRoleModulesAsync(int roleId, List<string> moduleIdentifiers);
         Task<bool> HasModulePermissionAsync(int userId, string moduleIdentifier, string action);
         Task<List<string>> GetApplicableSubModulesForRoleAsync(int roleId);
+        Task<UserStatusInfoDto?> GetUserStatusInfoAsync(int userId);
+        Task<int> CountOtherActiveAdminsAsync(int excludeUserId);
+        Task<bool> UpdateUserActiveStatusAsync(int userId, bool isActive);
     }
 }

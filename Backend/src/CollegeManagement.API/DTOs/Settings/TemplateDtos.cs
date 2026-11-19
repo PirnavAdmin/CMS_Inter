@@ -10,10 +10,15 @@ namespace CollegeManagement.API.DTOs.Settings
         public string TemplateCode { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public string Category { get; set; } = string.Empty;
+        public string? CertificateType { get; set; }
         public string ContentBody { get; set; } = string.Empty;
         public List<string> Placeholders { get; set; } = new();
+        public string? LogoPath { get; set; }
+        public string? DocumentFilePath { get; set; }
+        public bool IsDefault { get; set; }
         public bool IsActive { get; set; }
         public int Version { get; set; }
+        public int? CampusId { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -32,10 +37,19 @@ namespace CollegeManagement.API.DTOs.Settings
         [MaxLength(50, ErrorMessage = "Category cannot exceed 50 characters.")]
         public string Category { get; set; } = "Certificate";
 
+        [MaxLength(100)]
+        public string? CertificateType { get; set; }
+
         [Required(ErrorMessage = "Content body is required.")]
         public string ContentBody { get; set; } = string.Empty;
 
         public List<string>? Placeholders { get; set; }
+
+        public string? LogoPath { get; set; }
+
+        public string? DocumentFilePath { get; set; }
+
+        public bool? IsDefault { get; set; } = false;
 
         public bool IsActive { get; set; } = true;
     }
@@ -50,10 +64,19 @@ namespace CollegeManagement.API.DTOs.Settings
         [MaxLength(50, ErrorMessage = "Category cannot exceed 50 characters.")]
         public string Category { get; set; } = "Certificate";
 
+        [MaxLength(100)]
+        public string? CertificateType { get; set; }
+
         [Required(ErrorMessage = "Content body is required.")]
         public string ContentBody { get; set; } = string.Empty;
 
         public List<string>? Placeholders { get; set; }
+
+        public string? LogoPath { get; set; }
+
+        public string? DocumentFilePath { get; set; }
+
+        public bool? IsDefault { get; set; } = false;
 
         public bool IsActive { get; set; } = true;
     }
@@ -100,13 +123,15 @@ namespace CollegeManagement.API.DTOs.Settings
         public string? MotherName { get; set; }
         public string? AdmissionNo { get; set; }
         public string? RollNo { get; set; }
+        public string? CourseName { get; set; }
+        public string? AcademicYear { get; set; }
+        public string? AcademicYearName { get; set; }
+        public string? AcademicLevel { get; set; }
+        public string? GroupName { get; set; }
+        public string? SectionName { get; set; }
+        public string? BoardName { get; set; }
         public DateTime? DateOfBirth { get; set; }
         public string? BloodGroup { get; set; }
         public string? MobileNumber { get; set; }
-        public string? GroupName { get; set; }
-        public string? AcademicLevel { get; set; }
-        public string? SectionName { get; set; }
-        public string? AcademicYearName { get; set; }
-        public string? BoardName { get; set; }
     }
 }

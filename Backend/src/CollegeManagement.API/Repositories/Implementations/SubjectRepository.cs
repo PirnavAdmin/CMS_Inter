@@ -60,7 +60,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_GroupId = groupId,
                     p_AcademicLevelId = academicLevelId,
                     p_IsActive = isActive,
-                    p_CollegeId = collegeId
+p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken

@@ -89,6 +89,15 @@ export const getAuthToken = () => {
     return token;
   }
 
+  const isWarden =
+    role.includes("warden") ||
+    token.startsWith("mock-warden-") ||
+    (typeof window !== "undefined" && window.location?.pathname?.startsWith("/warden"));
+
+  if (isWarden) {
+    return token;
+  }
+
   // Admin and ERP modules: automatically upgrade mock/demo tokens to live verified backend JWT only if token exists
   if (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("exam-cell-")) {
     updateAuthToken(BACKEND_ADMIN_JWT);
@@ -190,6 +199,9 @@ export const clearAuthSession = () => {
       }
     });
   } catch { /* Storage unavailable */ }
+  try {
+    window.dispatchEvent(new Event("cms-auth-logout"));
+  } catch { /* Event dispatch unavailable */ }
 };
 
 export const saveAuthSession = ({ token, user, role }, persistent) => {

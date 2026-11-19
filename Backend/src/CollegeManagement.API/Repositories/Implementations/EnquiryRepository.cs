@@ -68,8 +68,10 @@ namespace CollegeManagement.API.Repositories.Implementations
                         `AssignedToStaffId` INT NULL,
                         `AssignedToStaffName` VARCHAR(150) NULL,
                         `HandledByStaffId` INT NULL,
+                        `HandledByUserId` INT NULL,
                         `HandledByStaffName` VARCHAR(150) NULL,
                         `HandledByRole` VARCHAR(50) NULL,
+                        `ClaimedAt` DATETIME NULL,
                         `ResponseNotes` TEXT NULL,
                         `ContactMethodUsed` VARCHAR(50) NULL,
                         `ContactedAt` DATETIME NULL,
@@ -79,7 +81,25 @@ namespace CollegeManagement.API.Repositories.Implementations
                         PRIMARY KEY (`Id`),
                         KEY `IX_Enquiries_CampusId` (`CampusId`),
                         KEY `IX_Enquiries_Status` (`Status`),
+                        KEY `IX_Enquiries_HandledByUserId` (`HandledByUserId`),
                         KEY `IX_Enquiries_CreatedAt` (`CreatedAt`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+                    CREATE TABLE IF NOT EXISTS `EnquiryActivities` (
+                        `Id` INT NOT NULL AUTO_INCREMENT,
+                        `EnquiryId` INT NOT NULL,
+                        `Action` VARCHAR(50) NOT NULL,
+                        `PreviousStatus` VARCHAR(50) NULL,
+                        `NewStatus` VARCHAR(50) NULL,
+                        `PerformedByUserId` INT NULL,
+                        `PerformedByName` VARCHAR(150) NOT NULL,
+                        `PerformedByRole` VARCHAR(50) NOT NULL,
+                        `ContactMethod` VARCHAR(50) NULL,
+                        `Notes` TEXT NULL,
+                        `CreatedAt` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (`Id`),
+                        KEY `IX_EnquiryActivities_EnquiryId` (`EnquiryId`),
+                        KEY `IX_EnquiryActivities_CreatedAt` (`CreatedAt`)
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
                     CREATE TABLE IF NOT EXISTS `LandingContactConfig` (
@@ -130,7 +150,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 SELECT LAST_INSERT_ID();
             ";
 
-            return await conn.ExecuteScalarAsync<int>(sql, new
+            int id = await conn.ExecuteScalarAsync<int>(sql, new
             {
                 request.CampusId,
                 request.FullName,
@@ -140,6 +160,23 @@ namespace CollegeManagement.API.Repositories.Implementations
                 request.Subject,
                 request.Message
             });
+
+            if (id > 0)
+            {
+                await AddActivityAsync(
+                    id,
+                    "Submitted",
+                    null,
+                    "New",
+                    null,
+                    request.FullName,
+                    "Visitor",
+                    "Website Form",
+                    "Enquiry submitted via college website contact form."
+                );
+            }
+
+            return id;
         }
 
         public async Task<EnquiryDto?> GetEnquiryByIdAsync(int id)
@@ -150,14 +187,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                     e.`Id`, e.`CampusId`, c.`CampusName`, e.`FullName`, e.`Email`, e.`Mobile`,
                     e.`EnquiryType`, e.`Subject`, e.`Message`, e.`Status`, e.`Priority`,
                     e.`AssignedToStaffId`, e.`AssignedToStaffName`, e.`HandledByStaffId`,
-                    e.`HandledByStaffName`, e.`HandledByRole`, e.`ResponseNotes`, e.`ContactMethodUsed`,
+                    e.`HandledByUserId`, e.`HandledByStaffName`, e.`HandledByRole`, e.`ClaimedAt`,
+                    e.`ResponseNotes`, e.`ContactMethodUsed`,
                     e.`ContactedAt`, e.`ResolvedAt`, e.`CreatedAt`, e.`UpdatedAt`
                 FROM `Enquiries` e
                 LEFT JOIN `Campuses` c ON e.`CampusId` = c.`CampusId`
                 WHERE e.`Id` = @Id;
             ";
 
-            return await conn.QueryFirstOrDefaultAsync<EnquiryDto>(sql, new { Id = id });
+            var item = await conn.QueryFirstOrDefaultAsync<EnquiryDto>(sql, new { Id = id });
+            if (item != null)
+            {
+                item.Activities = await GetActivitiesAsync(id);
+            }
+            return item;
         }
 
         public async Task<(List<EnquiryDto> Items, int TotalCount)> ListEnquiriesAsync(
@@ -182,7 +225,7 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             if (campusId.HasValue && campusId.Value > 0)
             {
-                whereClauses.Add("e.`CampusId` = @CampusId");
+                whereClauses.Add("(e.`CampusId` = @CampusId OR e.`CampusId` IS NULL)");
                 p.Add("@CampusId", campusId.Value);
             }
 
@@ -208,7 +251,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     e.`Id`, e.`CampusId`, c.`CampusName`, e.`FullName`, e.`Email`, e.`Mobile`,
                     e.`EnquiryType`, e.`Subject`, e.`Message`, e.`Status`, e.`Priority`,
                     e.`AssignedToStaffId`, e.`AssignedToStaffName`, e.`HandledByStaffId`,
-                    e.`HandledByStaffName`, e.`HandledByRole`, e.`ResponseNotes`, e.`ContactMethodUsed`,
+                    e.`HandledByUserId`, e.`HandledByStaffName`, e.`HandledByRole`, e.`ClaimedAt`,
+                    e.`ResponseNotes`, e.`ContactMethodUsed`,
                     e.`ContactedAt`, e.`ResolvedAt`, e.`CreatedAt`, e.`UpdatedAt`
                 FROM `Enquiries` e
                 LEFT JOIN `Campuses` c ON e.`CampusId` = c.`CampusId`
@@ -249,19 +293,22 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.QueryFirstOrDefaultAsync<EnquiryStatsDto>(sql, new { CampusId = campusId }) ?? new EnquiryStatsDto();
         }
 
-        public async Task<bool> UpdateStatusAsync(int id, UpdateEnquiryStatusRequest request)
+        public async Task<bool> UpdateStatusAsync(int id, UpdateEnquiryStatusRequest request, int? userId = null, string? staffName = null, string? role = null)
         {
             var conn = await GetOpenConnectionAsync();
-            DateTime? contactedAt = null;
-            DateTime? resolvedAt = null;
+            var existing = await GetEnquiryByIdAsync(id);
+            if (existing == null) return false;
+
+            DateTime? contactedAt = existing.ContactedAt;
+            DateTime? resolvedAt = existing.ResolvedAt;
 
             if (request.Status.Equals("Contacted", StringComparison.OrdinalIgnoreCase))
             {
-                contactedAt = DateTime.UtcNow;
+                contactedAt ??= DateTime.UtcNow;
             }
             else if (request.Status.Equals("Resolved", StringComparison.OrdinalIgnoreCase) || request.Status.Equals("Closed", StringComparison.OrdinalIgnoreCase))
             {
-                resolvedAt = DateTime.UtcNow;
+                resolvedAt ??= DateTime.UtcNow;
             }
 
             const string sql = @"
@@ -269,16 +316,21 @@ namespace CollegeManagement.API.Repositories.Implementations
                     `Status` = @Status,
                     `ResponseNotes` = COALESCE(@ResponseNotes, `ResponseNotes`),
                     `ContactMethodUsed` = COALESCE(@ContactMethodUsed, `ContactMethodUsed`),
+                    `HandledByUserId` = COALESCE(@HandledByUserId, `HandledByUserId`),
                     `HandledByStaffId` = COALESCE(@HandledByStaffId, `HandledByStaffId`),
                     `HandledByStaffName` = COALESCE(@HandledByStaffName, `HandledByStaffName`),
                     `HandledByRole` = COALESCE(@HandledByRole, `HandledByRole`),
                     `AssignedToStaffId` = COALESCE(@AssignedToStaffId, `AssignedToStaffId`),
                     `AssignedToStaffName` = COALESCE(@AssignedToStaffName, `AssignedToStaffName`),
-                    `ContactedAt` = COALESCE(@ContactedAt, `ContactedAt`),
-                    `ResolvedAt` = COALESCE(@ResolvedAt, `ResolvedAt`),
+                    `ContactedAt` = @ContactedAt,
+                    `ResolvedAt` = @ResolvedAt,
                     `UpdatedAt` = UTC_TIMESTAMP()
                 WHERE `Id` = @Id;
             ";
+
+            int effectiveUserId = userId ?? request.HandledByUserId ?? existing.HandledByUserId ?? 0;
+            string effectiveStaffName = staffName ?? request.HandledByStaffName ?? existing.HandledByStaffName ?? "Staff";
+            string effectiveRole = role ?? request.HandledByRole ?? existing.HandledByRole ?? "Staff";
 
             int affected = await conn.ExecuteAsync(sql, new
             {
@@ -286,16 +338,195 @@ namespace CollegeManagement.API.Repositories.Implementations
                 request.Status,
                 request.ResponseNotes,
                 request.ContactMethodUsed,
+                HandledByUserId = effectiveUserId > 0 ? (int?)effectiveUserId : null,
                 request.HandledByStaffId,
-                request.HandledByStaffName,
-                request.HandledByRole,
+                HandledByStaffName = effectiveStaffName,
+                HandledByRole = effectiveRole,
                 request.AssignedToStaffId,
                 request.AssignedToStaffName,
                 ContactedAt = contactedAt,
                 ResolvedAt = resolvedAt
             });
 
+            if (affected > 0)
+            {
+                string action = request.Status.Equals("Contacted", StringComparison.OrdinalIgnoreCase)
+                    ? "Contacted"
+                    : request.Status.Equals("Resolved", StringComparison.OrdinalIgnoreCase)
+                        ? "Resolved"
+                        : "Status Changed";
+
+                await AddActivityAsync(
+                    id,
+                    action,
+                    existing.Status,
+                    request.Status,
+                    effectiveUserId > 0 ? effectiveUserId : null,
+                    effectiveStaffName,
+                    effectiveRole,
+                    request.ContactMethodUsed ?? existing.ContactMethodUsed,
+                    request.ResponseNotes
+                );
+            }
+
             return affected > 0;
+        }
+
+        public async Task<TakeChargeResultDto> TakeChargeAsync(int id, int? userId, int? staffId, string staffName, string role)
+        {
+            var conn = await GetOpenConnectionAsync();
+
+            // Atomic conditional update ensuring exclusive ownership concurrency
+            const string sqlClaim = @"
+                UPDATE `Enquiries`
+                SET 
+                    `HandledByUserId` = @UserId,
+                    `HandledByStaffId` = @StaffId,
+                    `HandledByStaffName` = @StaffName,
+                    `HandledByRole` = @Role,
+                    `ClaimedAt` = UTC_TIMESTAMP(),
+                    `Status` = CASE WHEN `Status` = 'New' THEN 'In Progress' ELSE `Status` END,
+                    `UpdatedAt` = UTC_TIMESTAMP()
+                WHERE `Id` = @Id 
+                  AND (`HandledByUserId` IS NULL OR `HandledByUserId` = 0)
+                  AND (`HandledByStaffName` IS NULL OR `HandledByStaffName` = '');
+            ";
+
+            int affected = await conn.ExecuteAsync(sqlClaim, new
+            {
+                Id = id,
+                UserId = userId,
+                StaffId = staffId,
+                StaffName = staffName,
+                Role = role
+            });
+
+            if (affected > 0)
+            {
+                var updated = await GetEnquiryByIdAsync(id);
+                await AddActivityAsync(
+                    id,
+                    "Taken Charge",
+                    "New",
+                    updated?.Status ?? "In Progress",
+                    userId,
+                    staffName,
+                    role,
+                    null,
+                    $"Took exclusive charge of enquiry as {role}."
+                );
+
+                return new TakeChargeResultDto
+                {
+                    Success = true,
+                    Enquiry = updated,
+                    Message = $"You have taken charge of this enquiry as {role}."
+                };
+            }
+
+            // If affected == 0, check if already claimed by this caller or another staff
+            var existing = await GetEnquiryByIdAsync(id);
+            if (existing == null)
+            {
+                return new TakeChargeResultDto
+                {
+                    Success = false,
+                    Message = "Enquiry not found."
+                };
+            }
+
+            bool isMe = (userId.HasValue && userId.Value > 0 && existing.HandledByUserId == userId.Value)
+                || string.Equals(existing.HandledByStaffName?.Trim(), staffName?.Trim(), StringComparison.OrdinalIgnoreCase);
+
+            if (isMe)
+            {
+                return new TakeChargeResultDto
+                {
+                    Success = true,
+                    Enquiry = existing,
+                    Message = "You already hold charge of this enquiry."
+                };
+            }
+
+            return new TakeChargeResultDto
+            {
+                Success = false,
+                AlreadyClaimedByOther = true,
+                Enquiry = existing,
+                ClaimedBy = new ClaimedByInfoDto
+                {
+                    UserId = existing.HandledByUserId,
+                    StaffName = existing.HandledByStaffName,
+                    Role = existing.HandledByRole,
+                    ClaimedAt = existing.ClaimedAt
+                },
+                Message = $"This enquiry was already claimed by {existing.HandledByRole}: {existing.HandledByStaffName}."
+            };
+        }
+
+        public async Task<bool> AddActivityAsync(
+            int enquiryId,
+            string action,
+            string? previousStatus,
+            string? newStatus,
+            int? userId,
+            string staffName,
+            string role,
+            string? contactMethod,
+            string? notes)
+        {
+            try
+            {
+                var conn = await GetOpenConnectionAsync();
+                const string sql = @"
+                    INSERT INTO `EnquiryActivities` (
+                        `EnquiryId`, `Action`, `PreviousStatus`, `NewStatus`, 
+                        `PerformedByUserId`, `PerformedByName`, `PerformedByRole`, 
+                        `ContactMethod`, `Notes`, `CreatedAt`
+                    ) VALUES (
+                        @EnquiryId, @Action, @PreviousStatus, @NewStatus, 
+                        @PerformedByUserId, @PerformedByName, @PerformedByRole, 
+                        @ContactMethod, @Notes, UTC_TIMESTAMP()
+                    );
+                ";
+
+                int affected = await conn.ExecuteAsync(sql, new
+                {
+                    EnquiryId = enquiryId,
+                    Action = action,
+                    PreviousStatus = previousStatus,
+                    NewStatus = newStatus,
+                    PerformedByUserId = userId,
+                    PerformedByName = string.IsNullOrWhiteSpace(staffName) ? "Staff" : staffName,
+                    PerformedByRole = string.IsNullOrWhiteSpace(role) ? "Staff" : role,
+                    ContactMethod = contactMethod,
+                    Notes = notes
+                });
+
+                return affected > 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to log enquiry activity: {Message}", ex.Message);
+                return false;
+            }
+        }
+
+        public async Task<List<EnquiryActivityDto>> GetActivitiesAsync(int enquiryId)
+        {
+            var conn = await GetOpenConnectionAsync();
+            const string sql = @"
+                SELECT 
+                    `Id`, `EnquiryId`, `Action`, `PreviousStatus`, `NewStatus`, 
+                    `PerformedByUserId`, `PerformedByName`, `PerformedByRole`, 
+                    `ContactMethod`, `Notes`, `CreatedAt`
+                FROM `EnquiryActivities`
+                WHERE `EnquiryId` = @EnquiryId
+                ORDER BY `CreatedAt` ASC, `Id` ASC;
+            ";
+
+            var list = await conn.QueryAsync<EnquiryActivityDto>(sql, new { EnquiryId = enquiryId });
+            return list.ToList();
         }
 
         public async Task<LandingContactConfigDto> GetLandingContactConfigAsync(int? campusId = null)

@@ -72,10 +72,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 TemplateCode = dict["TemplateCode"]?.ToString() ?? string.Empty,
                 Title = dict["Title"]?.ToString() ?? string.Empty,
                 Category = dict["Category"]?.ToString() ?? string.Empty,
+                CertificateType = dict.ContainsKey("CertificateType") ? dict["CertificateType"]?.ToString() : null,
                 ContentBody = dict["ContentBody"]?.ToString() ?? string.Empty,
                 Placeholders = ParsePlaceholders(placeholdersJson),
+                LogoPath = dict.ContainsKey("LogoPath") ? dict["LogoPath"]?.ToString() : null,
+                DocumentFilePath = dict.ContainsKey("DocumentFilePath") ? dict["DocumentFilePath"]?.ToString() : null,
+                IsDefault = dict.ContainsKey("IsDefault") && dict["IsDefault"] != null && Convert.ToBoolean(dict["IsDefault"]),
                 IsActive = Convert.ToBoolean(dict["IsActive"]),
                 Version = ver,
+                CampusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null && dict["CampusId"] != DBNull.Value ? Convert.ToInt32(dict["CampusId"]) : null,
                 CreatedAt = Convert.ToDateTime(dict["CreatedAt"]),
                 UpdatedAt = Convert.ToDateTime(dict["UpdatedAt"])
             };
@@ -90,8 +95,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 TemplateCode = dict["TemplateCode"]?.ToString() ?? string.Empty,
                 Title = dict["Title"]?.ToString() ?? string.Empty,
                 Category = dict["Category"]?.ToString() ?? string.Empty,
+                CertificateType = dict.ContainsKey("CertificateType") ? dict["CertificateType"]?.ToString() : null,
                 ContentBody = dict["ContentBody"]?.ToString() ?? string.Empty,
                 PlaceholdersJson = dict.ContainsKey("PlaceholdersJson") && dict["PlaceholdersJson"] != null ? dict["PlaceholdersJson"].ToString() ?? "[]" : "[]",
+                LogoPath = dict.ContainsKey("LogoPath") ? dict["LogoPath"]?.ToString() : null,
+                DocumentFilePath = dict.ContainsKey("DocumentFilePath") ? dict["DocumentFilePath"]?.ToString() : null,
+                IsDefault = dict.ContainsKey("IsDefault") && dict["IsDefault"] != null && Convert.ToBoolean(dict["IsDefault"]),
                 IsActive = Convert.ToBoolean(dict["IsActive"]),
                 Version = dict.ContainsKey("Version") && dict["Version"] != null ? dict["Version"].ToString() ?? "1" : "1",
                 CampusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null && dict["CampusId"] != DBNull.Value ? Convert.ToInt32(dict["CampusId"]) : null,
@@ -224,8 +233,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_TemplateCode", template.TemplateCode.Trim());
             parameters.Add("p_Title", template.Title.Trim());
             parameters.Add("p_Category", template.Category.Trim());
+            parameters.Add("p_CertificateType", string.IsNullOrWhiteSpace(template.CertificateType) ? null : template.CertificateType.Trim());
             parameters.Add("p_ContentBody", template.ContentBody);
             parameters.Add("p_PlaceholdersJson", template.PlaceholdersJson);
+            parameters.Add("p_LogoPath", string.IsNullOrWhiteSpace(template.LogoPath) ? null : template.LogoPath.Trim());
+            parameters.Add("p_DocumentFilePath", string.IsNullOrWhiteSpace(template.DocumentFilePath) ? null : template.DocumentFilePath.Trim());
+            parameters.Add("p_IsDefault", template.IsDefault == true ? 1 : 0);
             parameters.Add("p_IsActive", template.IsActive ? 1 : 0);
             parameters.Add("p_CampusId", template.CampusId);
 
@@ -246,14 +259,52 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_Id", id);
             parameters.Add("p_Title", template.Title.Trim());
             parameters.Add("p_Category", template.Category.Trim());
+            parameters.Add("p_CertificateType", string.IsNullOrWhiteSpace(template.CertificateType) ? null : template.CertificateType.Trim());
             parameters.Add("p_ContentBody", template.ContentBody);
             parameters.Add("p_PlaceholdersJson", template.PlaceholdersJson);
+            parameters.Add("p_LogoPath", string.IsNullOrWhiteSpace(template.LogoPath) ? null : template.LogoPath.Trim());
+            parameters.Add("p_DocumentFilePath", string.IsNullOrWhiteSpace(template.DocumentFilePath) ? null : template.DocumentFilePath.Trim());
+            parameters.Add("p_IsDefault", template.IsDefault == true ? 1 : 0);
             parameters.Add("p_IsActive", template.IsActive ? 1 : 0);
             parameters.Add("p_CampusId", campusId);
 
             var row = await conn.QueryFirstOrDefaultAsync(
                 new CommandDefinition(
                     "sp_UpdateTemplate",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return row == null ? null : MapRowToEntity(row);
+        }
+
+        public async Task<Template?> DuplicateAsync(int id, int? campusId = null, CancellationToken ct = default)
+        {
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Id", id);
+            parameters.Add("p_CampusId", campusId);
+
+            var row = await conn.QueryFirstOrDefaultAsync(
+                new CommandDefinition(
+                    "sp_DuplicateTemplate",
+                    parameters,
+                    commandType: CommandType.StoredProcedure,
+                    cancellationToken: ct));
+
+            return row == null ? null : MapRowToEntity(row);
+        }
+
+        public async Task<Template?> SetDefaultAsync(int id, int? campusId = null, CancellationToken ct = default)
+        {
+            var conn = await GetOpenConnectionAsync(ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_Id", id);
+            parameters.Add("p_CampusId", campusId);
+
+            var row = await conn.QueryFirstOrDefaultAsync(
+                new CommandDefinition(
+                    "sp_SetDefaultTemplate",
                     parameters,
                     commandType: CommandType.StoredProcedure,
                     cancellationToken: ct));

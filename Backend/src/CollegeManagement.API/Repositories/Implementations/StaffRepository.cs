@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Staff;
@@ -334,6 +335,28 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
             return !await query.AnyAsync();
         }
+
+        public async Task<Staff?> GetByDrivingLicenseAsync(string drivingLicense, int? excludeId = null)
+        {
+            if (string.IsNullOrWhiteSpace(drivingLicense)) return null;
+            var cleanDl = Regex.Replace(drivingLicense.Trim().ToUpperInvariant(), @"[-/\s]", "");
+            var query = _context.Staffs.AsNoTracking()
+                .Where(s => !s.IsDeleted && s.DrivingLicenseNumber != null && s.DrivingLicenseNumber != "");
+            if (excludeId.HasValue)
+            {
+                query = query.Where(s => s.Id != excludeId.Value);
+            }
+            var list = await query.ToListAsync();
+            return list.FirstOrDefault(s => Regex.Replace(s.DrivingLicenseNumber!.Trim().ToUpperInvariant(), @"[-/\s]", "") == cleanDl);
+        }
+
+        public async Task<bool> IsDrivingLicenseUniqueAsync(string drivingLicense, int? excludeId = null)
+        {
+            if (string.IsNullOrWhiteSpace(drivingLicense)) return true;
+            var existing = await GetByDrivingLicenseAsync(drivingLicense, excludeId);
+            return existing == null;
+        }
+
 
         public async Task<(List<Staff> Items, int TotalCount)> GetPagedStaffAsync(StaffQueryParams queryParams)
         {
@@ -669,6 +692,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             {
                 var query = _context.Staffs
                     .AsNoTracking()
+                    .Include(s => s.StaffCampusAssignments)
                     .Where(s => !s.IsDeleted);
 
                 if (boardId.HasValue && boardId.Value > 0)
@@ -678,20 +702,26 @@ namespace CollegeManagement.API.Repositories.Implementations
 
                 if (campusId.HasValue && campusId.Value > 0)
                 {
-                    query = query.Where(s => s.CampusId == campusId.Value);
+                    var cid = campusId.Value;
+                    query = query.Where(s => 
+                        (s.CampusId == cid && !s.StaffCampusAssignments.Any(a => a.CampusId == cid && a.Status == "TransferredOut")) ||
+                        s.StaffCampusAssignments.Any(a => a.CampusId == cid && a.IsActive && a.Status == "Active"));
                 }
 
                 var allStaff = await query.ToListAsync();
                 // Filter strictly by Active status (matching Staff Management module)
                 var activeStaff = allStaff.Where(s => string.IsNullOrEmpty(s.Status) || string.Equals(s.Status, "Active", StringComparison.OrdinalIgnoreCase)).ToList();
 
-                var totalStaff = activeStaff.Count;
                 var teachingStaff = activeStaff.Count(s =>
-                    string.IsNullOrWhiteSpace(s.StaffType) ||
-                    string.Equals(s.StaffType.Trim(), "Teaching", StringComparison.OrdinalIgnoreCase) ||
-                    (s.StaffType.ToLowerInvariant().Contains("teach") && !s.StaffType.ToLowerInvariant().Contains("non"))
+                    string.Equals(s.StaffType?.Trim(), "Teaching", StringComparison.OrdinalIgnoreCase) ||
+                    (s.StaffType != null && s.StaffType.ToLowerInvariant().Contains("teach") && !s.StaffType.ToLowerInvariant().Contains("non"))
                 );
-                var nonTeachingStaff = totalStaff - teachingStaff;
+                var nonTeachingStaff = activeStaff.Count(s =>
+                    string.Equals(s.StaffType?.Trim(), "Non-Teaching", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(s.StaffType?.Trim(), "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
+                    (s.StaffType != null && s.StaffType.ToLowerInvariant().Contains("non"))
+                );
+                var totalStaff = teachingStaff + nonTeachingStaff;
                 
                 var completedCount = activeStaff.Count(s => string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase));
                 var pendingCount = totalStaff - completedCount;
@@ -758,11 +788,21 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task UpdateOfferLetterPathAsync(int id, string offerLetterPath)
         {
+            await UpdateOfferLetterInfoAsync(id, offerLetterPath, string.Empty);
+        }
+
+        public async Task UpdateOfferLetterInfoAsync(int id, string offerLetterPath, string offerLetterNumber)
+        {
             var cleanPath = offerLetterPath?.Trim() ?? string.Empty;
+            var cleanNo = offerLetterNumber?.Trim() ?? string.Empty;
             var staff = await _context.Staffs.FindAsync(id);
             if (staff != null)
             {
                 staff.OfferLetterPath = cleanPath;
+                if (!string.IsNullOrWhiteSpace(cleanNo))
+                {
+                    staff.OfferLetterNumber = cleanNo;
+                }
                 staff.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
             }

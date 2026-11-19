@@ -9,7 +9,6 @@ import { ConfirmDialog, SkeletonTable, Modal, Toast } from "@/components/common/
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
-import { holidayRecords } from "@/data/mockData.js";
 import "./HolidayManagementPage.css";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
 import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
@@ -281,8 +280,8 @@ function HolidayForm({ holiday, onClose, onSave, saving }) {
 export default function HolidayManagementPage() {
   const { selectedAcademicYearId, selectedBoardId } = useAcademicContext();
   const { selectedCampusId } = useCampusContext();
-  const [holidays, setHolidays] = useState(holidayRecords);
-  const [summary, setSummary] = useState({ total: 8, national: 3, festival: 5, upcoming: 7, completed: 1 });
+  const [holidays, setHolidays] = useState([]);
+  const [summary, setSummary] = useState({ total: 0, national: 0, festival: 0, upcoming: 0, completed: 0 });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState("");

@@ -7,22 +7,19 @@ const STUDENT_PERMISSION_KEY_ALIASES = Object.freeze({
   examinations: "examination",
 });
 
-// The Student portal hides either Transport or Hostel according to a student's
-// active facility allocation. The role matrix uses the hostel branch as the
-// standard Student sidebar set; individual student visibility remains driven
-// by the StudentProfileContext facility check in StudentSidebar.
+// The Student portal shows either Transport or Hostel according to a student's
+// active facility allocation in StudentSidebar. Both modules remain configurable
+// in the Student role matrix so administrators can govern access to either.
 export const STUDENT_SIDEBAR_NAVIGATION = Object.freeze(
   studentMenuGroups.flatMap(([section, links]) =>
-    links
-      .filter(([, path]) => path !== "transport")
-      .map(([label, path, , moduleKey]) => ({
-        id: STUDENT_PERMISSION_KEY_ALIASES[moduleKey] || moduleKey,
-        sidebarModuleKey: moduleKey,
-        label,
-        route: `/student-dashboard${path ? `/${path}` : ""}`,
-        section,
-        availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE],
-      })),
+    links.map(([label, path, , moduleKey]) => ({
+      id: STUDENT_PERMISSION_KEY_ALIASES[moduleKey] || moduleKey,
+      sidebarModuleKey: moduleKey,
+      label,
+      route: `/student-dashboard${path ? `/${path}` : ""}`,
+      section,
+      availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE],
+    })),
   ),
 );
 
@@ -39,6 +36,7 @@ export const PARENT_SIDEBAR_NAVIGATION = Object.freeze([
   { id: "parent-communication", permissionKey: "reports-analytics", label: "Communication", route: "/parent-dashboard/communication", section: "Student & Academics", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
   { id: "parent-announcements-events", permissionKey: "reports-analytics", label: "Announcements & Events", route: "/parent-dashboard/announcements", section: "Student & Academics", legacyPermissionKeys: ["reports-analytics"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
   { id: "parent-documents", permissionKey: "certificates", label: "Documents", route: "/parent-dashboard/documents", section: "Student & Academics", legacyPermissionKeys: ["certificates"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "parent-profile", permissionKey: "profile", label: "My Profile", route: "/parent-dashboard/profile", section: "Settings", legacyPermissionKeys: ["profile", "my-profile"], availableActions: [ACTIONS.VIEW, ACTIONS.EDIT] },
   { id: "parent-settings", permissionKey: "settings", label: "Settings", route: "/parent-dashboard/settings", section: "Settings", legacyPermissionKeys: ["settings"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
 ]);
 
@@ -210,6 +208,20 @@ export const INVENTORY_MANAGER_SIDEBAR_NAVIGATION = Object.freeze([
   { id: "inventory-settings", permissionKey: "settings", label: "Settings", section: "Inventory Portal", availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
 ]);
 
+// Canonical Receptionist / Non-Teaching Staff portal navigation matching NonTeachingLayout.
+export const RECEPTIONIST_SIDEBAR_NAVIGATION = Object.freeze([
+  { id: "receptionist-dashboard", permissionKey: "dashboard", label: "Dashboard", route: "/non-teaching-dashboard", section: "Staff Overview", legacyPermissionKeys: ["dashboard"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-profile", permissionKey: "profile", label: "My Profile", route: "/non-teaching-dashboard/profile", section: "Staff Overview", legacyPermissionKeys: ["profile", "my-profile"], availableActions: [ACTIONS.VIEW, ACTIONS.EDIT] },
+  { id: "receptionist-my-attendance", permissionKey: "staff-attendance", screenKey: "my-attendance", label: "My Attendance", route: "/non-teaching-dashboard/attendance", section: "My Workplace", legacyPermissionKeys: ["staff-attendance"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE] },
+  { id: "receptionist-leave-management", permissionKey: "staff-leave-management", screenKey: "staff-leave", label: "Leave Management", route: "/non-teaching-dashboard/leave", section: "My Workplace", legacyPermissionKeys: ["staff-leave-management"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "receptionist-my-tasks", permissionKey: "dashboard", label: "My Tasks", route: "/non-teaching-dashboard/tasks", section: "My Workplace", legacyPermissionKeys: ["dashboard"], availableActions: [ACTIONS.VIEW, ACTIONS.EDIT] },
+  { id: "receptionist-payslips", permissionKey: "payroll", label: "Salary & Payslips", route: "/non-teaching-dashboard/payslip", section: "My Workplace", legacyPermissionKeys: ["payroll"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-announcements", permissionKey: "reports-analytics", label: "Announcements", route: "/non-teaching-dashboard/announcements", section: "My Workplace", legacyPermissionKeys: ["reports-analytics"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-enquiries", permissionKey: "enquiry-management", label: "Front Desk & Enquiries", route: "/non-teaching-dashboard/enquiries", section: "Operations & Help", legacyPermissionKeys: ["enquiry-management", "enquiries"], availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE] },
+  { id: "receptionist-department-portal", permissionKey: "department-designation", label: "Department Portal", route: "/non-teaching-dashboard/department", section: "Operations & Help", legacyPermissionKeys: ["department-designation"], availableActions: [ACTIONS.VIEW] },
+  { id: "receptionist-help-support", permissionKey: "settings", label: "Help & Support", route: "/non-teaching-dashboard/support", section: "Operations & Help", legacyPermissionKeys: ["settings"], availableActions: [ACTIONS.VIEW] },
+]);
+
 // Permission-matrix catalog selection for every role supported by the CMS.
 // `null` means the role uses the complete main dashboard menu; an empty list
 // means that role has no configurable dashboard navigation.
@@ -226,10 +238,13 @@ export const ROLE_SIDEBAR_MODULE_KEYS = Object.freeze({
   EXAMINATION_CELL: EXAMINATION_CELL_SIDEBAR_NAVIGATION.map((item) => item.id),
   HOSTEL_WARDEN: HOSTEL_WARDEN_NAVIGATION.map((item) => item.id),
   BUS_DRIVER: DRIVER_SIDEBAR_NAVIGATION.map((item) => item.id),
-  OFFICE_STAFF: ["dashboard", "student-management", "staff-management", "certificates", "reports-analytics", "profile", "settings"],
-  ADMISSION_STAFF: ["dashboard", "student-admission", "student-management", "certificates", "profile", "settings"],
+  OFFICE_STAFF: ["dashboard", "student-management", "staff-management", "enquiry-management", "certificates", "reports-analytics", "profile", "settings"],
+  ADMISSION_STAFF: ["dashboard", "student-admission", "student-management", "enquiry-management", "certificates", "profile", "settings"],
   TRANSPORT_MANAGER: TRANSPORT_MANAGER_SIDEBAR_NAVIGATION.map((item) => item.id),
   LAB_ASSISTANT: ["dashboard", "inventory-management", "profile", "staff-attendance", "staff-leave-management", "holiday-management", "settings"],
   INVENTORY_MANAGER: INVENTORY_MANAGER_SIDEBAR_NAVIGATION.map((item) => item.id),
+  RECEPTIONIST: RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => item.id),
+  NON_TEACHING: RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => item.id),
+  NON_TEACHING_STAFF: RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => item.id),
   UNASSIGNED: [],
 });

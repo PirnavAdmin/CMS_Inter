@@ -6,8 +6,8 @@ import { getApiErrorMessage } from "@/api/axios.js";
 import { clearPasswordResetContext, loginUser } from "@/modules/auth/services/authService.js";
 import { getCurrentUserPermissions } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
 import { clearAuthSession, saveAuthSession } from "@/modules/auth/authStorage.js";
-import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
-import { isWardenRole, isTransportManagerRole } from "@/routes/ProtectedRoute.jsx";
+import { invalidateEffectivePermissionsCache } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
+import { resolveHomePortalPath } from "@/routes/ProtectedRoute.jsx";
 import { useCampusImages } from "../../admin/AdminSettings/campusImages.js";
 import { getCampusContent } from "../../admin/AdminSettings/campusContent.js";
 import { isSuperAdminRole } from "@/modules/super-admin/superAdminSession.js";
@@ -59,6 +59,27 @@ export default function Login() {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const safetyTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const isDeactivatedReason = params.get("reason") === "deactivated";
+      const storedDeactivatedMsg =
+        window.sessionStorage.getItem("cms_account_deactivated_msg") ||
+        window.localStorage.getItem("cms_account_deactivated_msg");
+
+      if (isDeactivatedReason || storedDeactivatedMsg) {
+        setError(
+          storedDeactivatedMsg ||
+            "Your account has been deactivated by an administrator. Please contact support."
+        );
+        window.sessionStorage.removeItem("cms_account_deactivated_msg");
+        window.localStorage.removeItem("cms_account_deactivated_msg");
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -134,104 +155,25 @@ export default function Login() {
       } catch (e) {
         console.warn("Could not load user permissions at login:", e?.message);
       }
+      invalidateEffectivePermissionsCache();
       if (remember) saveRememberedCredentials({ emailOrMobile, password });
 
-      const userRole = String(result.user?.role || "").toLowerCase();
-      const isAdmin = result.user?.isAdmin || userRole.includes("admin") || result.roleType === "admin";
-
-      const isTransportManager =
-        !isAdmin &&
-        (isTransportManagerRole(result.user?.role, result.user) ||
-          result.roleType === "transport_manager" ||
-          String(result.user?.role || "").toLowerCase().includes("transport") ||
-          String(result.user?.designation || "").toLowerCase().includes("transport"));
-      const isWarden =
-        !isAdmin &&
-        !isTransportManager &&
-        (isWardenRole(result.user?.role, result.user) ||
-          result.roleType === "warden" ||
-          String(result.user?.role || "").toLowerCase().includes("warden") ||
-          String(result.user?.designation || "").toLowerCase().includes("warden"));
-      const isInventory = !isAdmin && (userRole.includes("inventory") || userRole === "store manager" || userRole === "storekeeper");
-      const isExamCell = !isAdmin && !isWarden && !isTransportManager && (isExamCellRole(userRole) || result.roleType === "examcell" || userRole.includes("exam"));
-      const isPrincipal = !isAdmin && !isWarden && !isTransportManager && (userRole === "principal" || userRole.includes("principal"));
-      const isAccountant =
-        !isAdmin &&
-        !isWarden &&
-        !isTransportManager &&
-        (userRole.includes("accountant") || userRole.includes("accounting") || userRole === "finance" || userRole === "cashier");
-      const isNonTeaching =
-        !isAdmin &&
-        !isWarden &&
-        !isTransportManager &&
-        !isExamCell &&
-        !isPrincipal &&
-        !isAccountant &&
-        (userRole === "non_teaching_staff" ||
-          userRole === "non-teaching" ||
-          userRole === "non-teaching-staff" ||
-          userRole === "nonteaching" ||
-          userRole === "receptionist" ||
-          userRole.includes("reception") ||
-          result.roleType === "non_teaching" ||
-          result.roleType === "receptionist" ||
-          (userRole === "staff" && String(result.user?.staffType || "").toLowerCase() === "non-teaching"));
-      const isFacultyOrStaff =
-        !isAdmin &&
-        !isWarden &&
-        !isTransportManager &&
-        !isNonTeaching &&
-        (userRole === "faculty" ||
-        userRole === "teacher" ||
-        userRole === "staff" ||
-        userRole === "hod" ||
-        userRole.includes("faculty") ||
-        userRole.includes("teacher") ||
-        userRole.includes("staff") ||
-        userRole.includes("lecturer"));
-      const isParent =
-        !isAdmin &&
-        !isWarden &&
-        !isTransportManager &&
-        (userRole === "parent" ||
-        userRole.includes("parent") ||
-        result.roleType === "parent");
+      const userWithRoleType = {
+        ...result.user,
+        roleType: result.user?.roleType || result.roleType,
+      };
+      const homePath = resolveHomePortalPath(result.user?.role, userWithRoleType, result.user?.permissions);
 
       if (safetyTimeoutRef.current) clearTimeout(safetyTimeoutRef.current);
       setBusy(false);
       await syncUserTheme({ force: true }).catch(() => {});
 
-      if (isAdmin) {
-        navigate("/dashboard", { replace: true });
-      } else if (isTransportManager) {
-        navigate("/transport-manager/overview", { replace: true });
-      } else if (isWarden) {
-        navigate("/warden-dashboard", { replace: true });
-      } else if (isInventory) {
-        navigate("/inventory-dashboard", { replace: true });
-      } else if (userRole.includes("driver")) {
-        navigate("/driver", { replace: true });
-      } else if (isExamCell) {
-        navigate("/exam-cell-dashboard", { replace: true });
-      } else if (isPrincipal) {
-        navigate("/principal-dashboard", { replace: true });
-      } else if (isAccountant) {
-        navigate("/accountant-dashboard", { replace: true });
-      } else if (isNonTeaching) {
-        navigate("/non-teaching-dashboard", { replace: true });
-      } else if (isFacultyOrStaff) {
+      if (homePath === "/faculty-dashboard") {
         const pStatus = result?.user?.profileStatus;
         const isCompleted = isStaffPortalUnlocked(pStatus, result?.user?.isOnboarded === true);
-
-        if (!isCompleted) {
-          navigate("/faculty-dashboard/profile", { replace: true });
-        } else {
-          navigate("/faculty-dashboard", { replace: true });
-        }
-      } else if (isParent) {
-        navigate("/parent-dashboard", { replace: true });
+        navigate(isCompleted ? "/faculty-dashboard" : "/faculty-dashboard/profile", { replace: true });
       } else {
-        navigate(result.user?.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
+        navigate(homePath, { replace: true });
       }
     } catch (loginError) {
       clearAuthSession();

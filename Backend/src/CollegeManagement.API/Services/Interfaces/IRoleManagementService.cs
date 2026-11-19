@@ -28,5 +28,6 @@ namespace CollegeManagement.API.Services.Interfaces
         List<object> GetModulesMetadata();
         Task<List<RoleModuleDto>> GetModulesForRoleAsync(int roleId);
         Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request);
+        Task<UpdateUserStatusResponse> UpdateUserStatusAsync(int userId, bool isActive, int? actingUserId, bool actingIsSuperAdmin, string? reason = null);
     }
 }

@@ -73,9 +73,9 @@ export const FIXED_NUMBER_SERIES = [
     format: "ADM-{SEQ}",
     numberLength: 2,
     startNumber: 1,
-    currentNumber: 17,
-    totalGenerated: 17,
-    currentExample: "ADM-17",
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "ADM-01",
     description: "Configure admission number format for students.",
     status: "Active",
     allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}"],
@@ -94,8 +94,8 @@ export const FIXED_NUMBER_SERIES = [
     format: "{GROUP}-{TYPE}-{YEAR}",
     numberLength: 4,
     startNumber: 1,
-    currentNumber: 1,
-    totalGenerated: 1,
+    currentNumber: 0,
+    totalGenerated: 0,
     currentExample: "MPC-FINAL-2025",
     description: "Configure code format for examination schedules and assessments.",
     status: "Active",
@@ -157,9 +157,9 @@ export const FIXED_NUMBER_SERIES = [
     format: "FEE-{YYYYMMDD}-{SEQ}",
     numberLength: 6,
     startNumber: 1,
-    currentNumber: 11,
-    totalGenerated: 11,
-    currentExample: "FEE-20260904-000011",
+    currentNumber: 0,
+    totalGenerated: 0,
+    currentExample: "FEE-20260904-000001",
     description: "Configure receipt number format for fee collections.",
     status: "Active",
     allowedTokens: ["{PREFIX}", "{YYYYMMDD}", "{YYYY}", "{MM}", "{DD}", "{SEQ}"],
@@ -263,81 +263,11 @@ export function isSeriesRemoved(item) {
   return false;
 }
 
-// --- MOCK GENERATED HISTORY DATA FOR EACH FIXED TYPE ---
-export const MOCK_GENERATED_HISTORY = {
-  "teaching-staff-id": [
-    { id: 1, val: "PCTCH0007", name: "Dr. S. Ramesh", staffType: "Teaching", dept: "Mathematics", desig: "HOD", date: "12 May 2026" },
-    { id: 2, val: "PCTCH0006", name: "Ms. Priya Sharma", staffType: "Teaching", dept: "Physics", desig: "Lecturer", date: "10 May 2026" },
-    { id: 3, val: "PCTCH0005", name: "Mr. Kiran Kumar", staffType: "Teaching", dept: "Chemistry", desig: "Senior Lecturer", date: "09 May 2026" },
-    { id: 4, val: "PCTCH0004", name: "Mrs. Anitha Rao", staffType: "Teaching", dept: "English", desig: "Lecturer", date: "08 May 2026" },
-    { id: 5, val: "PCTCH0002", name: "Dr. Kavita Reddy", staffType: "Teaching", dept: "Computer Science", desig: "Professor", date: "05 May 2026" },
-  ],
-  "non-teaching-staff-id": [
-    { id: 1, val: "PCNT0003", name: "Mr. Imran Khan", staffType: "Non-Teaching", dept: "Computer Science", desig: "Lab Technician", date: "07 May 2026" },
-    { id: 2, val: "PCNT0001", name: "Mr. Rajesh Varma", staffType: "Non-Teaching", dept: "Administration", desig: "Office Assistant", date: "02 May 2026" },
-  ],
-  "admission-no": [
-    { id: 1, val: "ADM-17", name: "Rahul Kumar", year: "2026-2027", board: "BIEAP", group: "MPC", date: "12 May 2026" },
-    { id: 2, val: "ADM-16", name: "Sneha Reddy", year: "2026-2027", board: "BIEAP", group: "BiPC", date: "11 May 2026" },
-    { id: 3, val: "ADM-15", name: "Aditya Joshi", year: "2026-2027", board: "CBSE", group: "MPC", date: "10 May 2026" },
-    { id: 4, val: "ADM-14", name: "Pooja Hegde", year: "2026-2027", board: "BIEAP", group: "CEC", date: "09 May 2026" },
-    { id: 5, val: "ADM-13", name: "Venkatesh Rao", year: "2026-2027", board: "BIEAP", group: "HEC", date: "08 May 2026" },
-  ],
-  "exam-code": [
-    { id: 1, val: "MPC-FINAL-2025", examName: "MPC Annual Final Exam 2025", year: "2025-2026", board: "BIEAP", type: "Final", date: "15 Dec 2025" },
-    { id: 2, val: "EXAM-2026-COMP", examName: "Computer Science Comprehensive", year: "2026-2027", board: "BIEAP", type: "Special", date: "10 Jan 2026" },
-    { id: 3, val: "EXAM-2026-0019", examName: "Mid Term Assessment II", year: "2026-2027", board: "BIEAP", type: "Mid Term", date: "20 Feb 2026" },
-    { id: 4, val: "EXAM-2026-0008", examName: "Physics Unit Test 1", year: "2026-2027", board: "BIEAP", type: "Unit Test", date: "05 Mar 2026" },
-    { id: 5, val: "EXAM-2026-0007", examName: "Chemistry Lab Practicals", year: "2026-2027", board: "BIEAP", type: "Practical", date: "01 Mar 2026" },
-  ],
-  "certificate-number": [
-    { id: 1, val: "CND-2026-82FC40", certType: "Conduct Certificate", student: "Rahul Kumar", admNo: "ADM-17", date: "01 Jun 2026", status: "Issued" },
-    { id: 2, val: "CND-2026-C309B9", certType: "Transfer Certificate", student: "Sneha Reddy", admNo: "ADM-16", date: "28 May 2026", status: "Issued" },
-    { id: 3, val: "CND-2026-E0ADA1", certType: "Bonafide Certificate", student: "Aditya Joshi", admNo: "ADM-15", date: "25 May 2026", status: "Issued" },
-    { id: 4, val: "CND-2026-490097", certType: "Course Completion", student: "Pooja Hegde", admNo: "ADM-14", date: "20 May 2026", status: "Issued" },
-    { id: 5, val: "CND-2026-723439", certType: "Study Certificate", student: "Venkatesh Rao", admNo: "ADM-13", date: "15 May 2026", status: "Issued" },
-  ],
-  "receipt-no": [
-    { id: 1, val: "FEE-20260904-000011", student: "Rahul Kumar", admNo: "ADM-17", type: "Tuition Fee", amount: "₹25,000", date: "04 Sep 2026" },
-    { id: 2, val: "FEE-20260904-000010", student: "Sneha Reddy", admNo: "ADM-16", type: "Admission Fee", amount: "₹15,000", date: "04 Sep 2026" },
-    { id: 3, val: "FEE-20260903-000009", student: "Aditya Joshi", admNo: "ADM-15", type: "Laboratory Fee", amount: "₹8,500", date: "03 Sep 2026" },
-    { id: 4, val: "FEE-20260903-000008", student: "Pooja Hegde", admNo: "ADM-14", type: "Transport Fee", amount: "₹12,000", date: "03 Sep 2026" },
-    { id: 5, val: "FEE-20260902-000007", student: "Venkatesh Rao", admNo: "ADM-13", type: "Hostel Fee", amount: "₹35,000", date: "02 Sep 2026" },
-  ],
-  "roll-no": [
-    { id: 1, val: "26MCB1M0006", name: "Rahul Kumar", rollNo: "26MCB1M0006", board: "BIEAP", group: "MPC", program: "Intermediate", year: "2026-2027", date: "12 May 2026" },
-    { id: 2, val: "26MCB1M0005", name: "Sneha Reddy", rollNo: "26MCB1M0005", board: "BIEAP", group: "MPC", program: "Intermediate", year: "2026-2027", date: "11 May 2026" },
-    { id: 3, val: "26MCC1B0002", name: "Aditya Joshi", rollNo: "26MCC1B0002", board: "CBSE", group: "BiPC", program: "Intermediate", year: "2026-2027", date: "10 May 2026" },
-    { id: 4, val: "26MCB1C0004", name: "Pooja Hegde", rollNo: "26MCB1C0004", board: "BIEAP", group: "CEC", program: "Intermediate", year: "2026-2027", date: "09 May 2026" },
-    { id: 5, val: "26MCB1M0003", name: "Venkatesh Rao", rollNo: "26MCB1M0003", board: "BIEAP", group: "MEC", program: "Intermediate", year: "2026-2027", date: "08 May 2026" },
-  ],
-};
+// --- LIVE GENERATED HISTORY (Zero mock fallback) ---
+export const MOCK_GENERATED_HISTORY = {};
 
-// --- MOCK CONFIGURATION HISTORY LOGS ---
-export const MOCK_CONFIG_HISTORY = {
-  "teaching-staff-id": [
-    { version: "v1.0", format: "PCTCH{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-    { version: "v0.9", format: "PCTCH-{SEQ}", prefix: "PCTCH", length: 4, startNum: 1, changedBy: "Admin", date: "15 Mar 2026", status: "Previous" },
-  ],
-  "non-teaching-staff-id": [
-    { version: "v1.0", format: "PCNT{SEQ}", prefix: "PCNT", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "admission-no": [
-    { version: "v1.0", format: "ADM-{SEQ}", prefix: "ADM", length: 2, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "exam-code": [
-    { version: "v1.0", format: "{GROUP}-{TYPE}-{YEAR}", prefix: "EXAM", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "certificate-number": [
-    { version: "v1.0", format: "CND-{YEAR}-{RANDOM}", prefix: "CND", length: 6, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "receipt-no": [
-    { version: "v1.0", format: "FEE-{YYYYMMDD}-{SEQ}", prefix: "FEE", length: 6, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-  "roll-no": [
-    { version: "v1.0", format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}", prefix: "—", length: 4, startNum: 1, changedBy: "Admin", date: "01 Apr 2026", status: "Active" },
-  ],
-};
+// --- LIVE CONFIGURATION HISTORY LOGS (Zero mock fallback) ---
+export const MOCK_CONFIG_HISTORY = {};
 
 // --- HELPER STORAGE READ / WRITE ---
 export function readNumberSeriesSettings() {

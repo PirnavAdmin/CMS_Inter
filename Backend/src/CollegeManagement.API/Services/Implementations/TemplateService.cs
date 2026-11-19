@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -10,16 +11,26 @@ using CollegeManagement.API.DTOs.Settings;
 using CollegeManagement.API.Models.Settings;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 
 namespace CollegeManagement.API.Services.Implementations
 {
     public class TemplateService : ITemplateService
     {
         private readonly ITemplateRepository _repository;
+        private readonly IWebHostEnvironment? _environment;
+        private readonly IConfiguration? _configuration;
 
-        public TemplateService(ITemplateRepository repository)
+        public TemplateService(
+            ITemplateRepository repository,
+            IWebHostEnvironment? environment = null,
+            IConfiguration? configuration = null)
         {
             _repository = repository;
+            _environment = environment;
+            _configuration = configuration;
         }
 
         private static List<string> ExtractPlaceholders(string contentBody, List<string>? providedList)
@@ -100,10 +111,15 @@ namespace CollegeManagement.API.Services.Implementations
                 TemplateCode = t.TemplateCode,
                 Title = t.Title,
                 Category = t.Category,
+                CertificateType = t.CertificateType,
                 ContentBody = t.ContentBody,
                 Placeholders = placeholders,
+                LogoPath = t.LogoPath,
+                DocumentFilePath = t.DocumentFilePath,
+                IsDefault = t.IsDefault == true,
                 IsActive = t.IsActive,
                 Version = ver,
+                CampusId = t.CampusId,
                 CreatedAt = t.CreatedAt,
                 UpdatedAt = t.UpdatedAt
             };
@@ -122,7 +138,6 @@ namespace CollegeManagement.API.Services.Implementations
             if (pageSize < 1) pageSize = 10;
             if (pageSize > 100) pageSize = 100;
 
-            // Ensure baseline certificate seeds exist if table empty
             await _repository.EnsureSeedsAsync(ct);
 
             return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
@@ -190,10 +205,15 @@ namespace CollegeManagement.API.Services.Implementations
                 TemplateCode = cleanCode,
                 Title = dto.Title.Trim(),
                 Category = string.IsNullOrWhiteSpace(dto.Category) ? "Certificate" : dto.Category.Trim(),
+                CertificateType = string.IsNullOrWhiteSpace(dto.CertificateType) ? null : dto.CertificateType.Trim(),
                 ContentBody = sanitizedBody,
                 PlaceholdersJson = JsonSerializer.Serialize(placeholders),
+                LogoPath = string.IsNullOrWhiteSpace(dto.LogoPath) ? null : dto.LogoPath.Trim(),
+                DocumentFilePath = string.IsNullOrWhiteSpace(dto.DocumentFilePath) ? null : dto.DocumentFilePath.Trim(),
+                IsDefault = dto.IsDefault == true,
                 IsActive = dto.IsActive,
                 Version = "v1",
+                CampusId = campusId,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -220,15 +240,26 @@ namespace CollegeManagement.API.Services.Implementations
             if (!string.IsNullOrWhiteSpace(dto.Category))
                 existing.Category = dto.Category.Trim();
 
+            if (dto.CertificateType != null)
+                existing.CertificateType = string.IsNullOrWhiteSpace(dto.CertificateType) ? null : dto.CertificateType.Trim();
+
             if (!string.IsNullOrWhiteSpace(dto.ContentBody))
                 existing.ContentBody = dto.ContentBody;
+
+            if (dto.LogoPath != null)
+                existing.LogoPath = string.IsNullOrWhiteSpace(dto.LogoPath) ? null : dto.LogoPath.Trim();
+
+            if (dto.DocumentFilePath != null)
+                existing.DocumentFilePath = string.IsNullOrWhiteSpace(dto.DocumentFilePath) ? null : dto.DocumentFilePath.Trim();
+
+            if (dto.IsDefault.HasValue)
+                existing.IsDefault = dto.IsDefault.Value;
 
             existing.IsActive = dto.IsActive;
 
             var placeholders = ExtractPlaceholders(existing.ContentBody, dto.Placeholders);
             existing.PlaceholdersJson = JsonSerializer.Serialize(placeholders);
 
-            // Increment version
             int currentVer = 1;
             if (!string.IsNullOrWhiteSpace(existing.Version))
             {
@@ -242,6 +273,20 @@ namespace CollegeManagement.API.Services.Implementations
             return updated == null ? null : MapToDto(updated);
         }
 
+        public async Task<TemplateResponseDto?> DuplicateTemplateAsync(int id, int? campusId = null, CancellationToken ct = default)
+        {
+            if (id <= 0) return null;
+            var cloned = await _repository.DuplicateAsync(id, campusId, ct);
+            return cloned == null ? null : MapToDto(cloned);
+        }
+
+        public async Task<bool> SetDefaultTemplateAsync(int id, int? campusId = null, CancellationToken ct = default)
+        {
+            if (id <= 0) return false;
+            var result = await _repository.SetDefaultAsync(id, campusId, ct);
+            return result != null;
+        }
+
         public async Task<bool> DeleteTemplateAsync(int id, int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return false;
@@ -252,6 +297,47 @@ namespace CollegeManagement.API.Services.Implementations
         {
             if (id <= 0) return false;
             return await _repository.ToggleActiveAsync(id, campusId, ct);
+        }
+
+        public async Task<(string Url, string RelativePath)> SaveTemplateLogoAsync(IFormFile file, CancellationToken ct = default)
+        {
+            if (file == null || file.Length == 0)
+                throw new ValidationException("No file was uploaded.");
+
+            if (file.Length > 5 * 1024 * 1024)
+                throw new ValidationException("Logo file size exceeds maximum limit of 5 MB.");
+
+            var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var allowed = new[] { ".png", ".jpg", ".jpeg", ".svg", ".webp" };
+            if (!allowed.Contains(ext))
+                throw new ValidationException($"Invalid file extension '{ext}'. Supported formats: .png, .jpg, .jpeg, .svg, .webp.");
+
+            var uniqueName = $"logo_{Guid.NewGuid():N}_{Path.GetFileName(file.FileName)}";
+
+            // 1. Permanent Storage (outside wwwroot)
+            var storageRoot = _configuration?["TemplateStorage:StorageRoot"]
+                ?? Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "PrivateStorage", "Templates");
+            var permFolder = Path.Combine(storageRoot, "Logos");
+            if (!Directory.Exists(permFolder)) Directory.CreateDirectory(permFolder);
+            var permPhysicalPath = Path.Combine(permFolder, uniqueName);
+
+            // 2. WebRoot public preview path
+            var webRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var webFolder = Path.Combine(webRoot, "uploads", "templates", "logos");
+            if (!Directory.Exists(webFolder)) Directory.CreateDirectory(webFolder);
+            var webPhysicalPath = Path.Combine(webFolder, uniqueName);
+
+            using (var stream = new FileStream(permPhysicalPath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream, ct);
+            }
+
+            File.Copy(permPhysicalPath, webPhysicalPath, overwrite: true);
+
+            var relativePath = $"uploads/templates/logos/{uniqueName}";
+            var url = $"/{relativePath}";
+
+            return (url, relativePath);
         }
 
         public async Task<RenderedTemplateResponseDto> RenderTemplateAsync(
@@ -296,7 +382,6 @@ namespace CollegeManagement.API.Services.Implementations
                 template = await _repository.GetByIdAsync(request.TemplateId.Value, campusId, ct);
             }
 
-            // Fallback default: BC or BONAFIDE_CERT or any first active Certificate template
             if (template == null)
             {
                 template = await _repository.GetByCodeAsync("BC", campusId, ct)
@@ -309,7 +394,6 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ValidationException("No valid template found to render.");
             }
 
-            // 1. Resolve Student Data via Stored Procedure if studentId or admissionNo provided
             string studentName = "Sample Student";
             string fatherName = "Sample Father";
             string motherName = "Sample Mother";
@@ -385,7 +469,6 @@ namespace CollegeManagement.API.Services.Implementations
                 ["{{issued_by}}"] = !string.IsNullOrWhiteSpace(request.IssuedBy) ? request.IssuedBy : "Principal"
             };
 
-            // Apply custom overrides if any
             if (request.CustomPlaceholders != null)
             {
                 foreach (var kvp in request.CustomPlaceholders)
@@ -397,7 +480,6 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            // Replace in content body with HTML-encoded dynamic values to prevent injection
             var renderedHtml = SanitizeHtml(template.ContentBody);
             foreach (var kvp in placeholderValues)
             {

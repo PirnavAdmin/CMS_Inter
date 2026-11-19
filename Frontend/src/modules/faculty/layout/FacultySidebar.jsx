@@ -15,7 +15,7 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { useFaculty } from "../FacultyContext.jsx";
 import { useFacultyPermissions } from "../PermissionContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
-import { calculateStaffProfileCompletion, isStaffPortalUnlocked } from "../profileCompletion.js";
+import { calculateStaffProfileCompletion, isStaffPortalUnlocked, getMissingMandatoryFields, MANDATORY_PROFILE_FIELDS } from "../profileCompletion.js";
 import { readCampusImages } from "@/modules/admin/AdminSettings/campusImages.js";
 import { campusContentDefaults } from "@/modules/admin/AdminSettings/campusContent.js";
 
@@ -224,6 +224,9 @@ export default function FacultySidebar() {
             {/* Profile Completion Progress Card */}
             {(() => {
               const comp = compPct;
+              const missing = getMissingMandatoryFields(profileData);
+              const isAllComplete = missing.length === 0;
+
               return (
                 <div style={{
                   background: "rgba(255, 255, 255, 0.7)",
@@ -237,7 +240,7 @@ export default function FacultySidebar() {
                     <span style={{
                       fontSize: "11px",
                       fontWeight: "800",
-                      color: comp >= 50 ? "var(--cms-primary, #355e3b)" : "#d97706"
+                      color: isAllComplete ? "var(--cms-primary, #355e3b)" : "#d97706"
                     }}>
                       {comp}%
                     </span>
@@ -246,13 +249,15 @@ export default function FacultySidebar() {
                     <div style={{
                       width: `${comp}%`,
                       height: "100%",
-                      background: comp >= 50 ? "var(--cms-primary, #355e3b)" : "#f59e0b",
+                      background: isAllComplete ? "var(--cms-primary, #355e3b)" : "#f59e0b",
                       borderRadius: "3px",
                       transition: "width 0.3s ease"
                     }} />
                   </div>
-                  <div style={{ fontSize: "10px", color: "#64748b", marginTop: "6px", lineHeight: "1.3" }}>
-                    {comp >= 50 ? "✓ 50% reached. Ready to review and submit." : "Min 50% required for submission & Offer Letter."}
+                  <div style={{ fontSize: "10px", color: isAllComplete ? "#166534" : "#64748b", marginTop: "6px", lineHeight: "1.3" }}>
+                    {isAllComplete
+                      ? "✓ All mandatory fields completed. Ready to submit."
+                      : `${missing.length} mandatory field(s) remaining for submission.`}
                   </div>
                 </div>
               );

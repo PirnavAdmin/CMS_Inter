@@ -699,7 +699,7 @@ namespace CollegeManagement.API.Controllers.V1
         // ==========================================
 
         [HttpGet("student-allocations")]
-        [Authorize(Roles = "Admin,Warden,Teacher,Student,Parent")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Warden,Hostel Warden,Teacher,Faculty,Student,Parent")]
         [ParentStudentAuthorization]
         public async Task<IActionResult> GetAllStudentAllocations(
             [FromQuery] int? hostelId = null,
