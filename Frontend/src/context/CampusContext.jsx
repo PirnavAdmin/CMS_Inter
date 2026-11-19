@@ -36,8 +36,7 @@ export function CampusProvider({ children }) {
     } catch (e) {
       console.warn("Failed to load campuses from localStorage", e);
     }
-    const token = getAuthToken();
-    if (token || (u?.collegeId && Number(u.collegeId) > 0)) return [];
+    if (u?.collegeId && Number(u.collegeId) > 1) return [];
     return DEFAULT_CAMPUSES.map(campusApi.normalizeCampus);
   });
 
@@ -45,8 +44,7 @@ export function CampusProvider({ children }) {
   const [selectedCampusId, setSelectedCampusId] = useState(() => {
     const u = getAuthUser();
     const suffix = getTenantKeySuffix();
-    const token = getAuthToken();
-    if ((token || (u?.collegeId && Number(u.collegeId) > 0)) && campuses.length === 0) {
+    if (u?.collegeId && Number(u.collegeId) > 1 && campuses.length === 0) {
       return "";
     }
     try {
@@ -59,8 +57,8 @@ export function CampusProvider({ children }) {
     } catch (e) {
       console.warn("Failed to load selected campus id", e);
     }
-    if (token || (u?.collegeId && Number(u.collegeId) > 0)) return "";
-    return DEFAULT_CAMPUSES[0]?.id || "";
+    if (u?.collegeId && Number(u.collegeId) > 1) return "";
+    return u?.campusId ? String(u.campusId) : (DEFAULT_CAMPUSES[0]?.id ? String(DEFAULT_CAMPUSES[0].id) : "1");
   });
 
   // For Principal or assigned staff role, track their assigned campus IDs
@@ -132,8 +130,17 @@ export function CampusProvider({ children }) {
           const exists = data.some(
             (c) => String(c.id) === String(prev) || String(c.campusId) === String(prev)
           );
-          if (exists) return prev;
-          return data[0]?.id ? String(data[0].id) : (data[0]?.campusId ? String(data[0].campusId) : "");
+          if (exists && prev !== "10") return prev;
+
+          const u = getAuthUser();
+          const preferred = 
+            data.find((c) => String(c.id ?? c.campusId) === String(u?.campusId)) ||
+            data.find((c) => c.isHQ || c.IsHQ || c.code === "MAIN" || c.campusCode === "MAIN") ||
+            data.find((c) => String(c.name || "").toLowerCase().includes("main")) ||
+            data.find((c) => String(c.id ?? c.campusId) === "1") ||
+            data[0];
+
+          return preferred?.id ? String(preferred.id) : (preferred?.campusId ? String(preferred.campusId) : "");
         });
       }
     } catch (err) {
