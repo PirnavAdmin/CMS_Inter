@@ -2343,3 +2343,6 @@
     font-size: 12px;
   }
 }
+
+/* Keep the student attendance shell usable when a college has no records. */
+.att-student-setup-message { padding:14px 18px; margin:12px 0; color:var(--cms-muted); }
