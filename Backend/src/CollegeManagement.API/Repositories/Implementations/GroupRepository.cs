@@ -19,10 +19,12 @@ namespace CollegeManagement.API.Repositories
     public class GroupRepository : IGroupRepository
     {
         private readonly AppDbContext _context;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
-        public GroupRepository(AppDbContext context)
+        public GroupRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync(CancellationToken cancellationToken = default)
@@ -55,6 +57,20 @@ namespace CollegeManagement.API.Repositories
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            if (!collegeId.HasValue || collegeId <= 0)
+            {
+                var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                         ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+                if (int.TryParse(claim, out int cid) && cid > 0)
+                {
+                    collegeId = cid;
+                }
+                else
+                {
+                    collegeId = 1;
+                }
+            }
 
             var cmd = new CommandDefinition(
                 "sp_GetAllGroups",

@@ -17,20 +17,22 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         }
 
         public async Task<HostelDashboardResponseDto>
-            GetDashboardAsync(int? hostelId = null)
+            GetDashboardAsync(int? hostelId = null, int? campusId = null)
         {
             using var multi =
                 await _dbConnection.QueryMultipleAsync(
                     "sp_GetHostelDashboard",
                     new
                     {
-                        p_HostelId = hostelId
+                        p_HostelId = hostelId,
+                        p_CampusId = campusId
                     },
                     commandType: CommandType.StoredProcedure);
 
             var dashboard =
-                await multi.ReadFirstAsync
-                    <HostelDashboardResponseDto>();
+                await multi.ReadFirstOrDefaultAsync
+                    <HostelDashboardResponseDto>()
+                ?? new HostelDashboardResponseDto();
 
             var blocks =
                 (await multi.ReadAsync

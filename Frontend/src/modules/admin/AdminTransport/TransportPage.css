@@ -2307,3 +2307,111 @@
   border-color: var(--cms-border, #2d3326);
   color: var(--cms-text, #e2e6d9);
 }
+
+/* Route Interactive Map Picker (Uber-style) */
+.cms-route-map-wrapper {
+  grid-column: 1 / -1;
+  border: 1.5px solid #dcd3f5;
+  border-radius: 12px;
+  background: #fbf9ff;
+  padding: 12px;
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(92, 59, 158, 0.05);
+}
+
+.cms-route-map-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cms-route-pin-selector {
+  display: inline-flex;
+  background: #ffffff;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border, #e5e7eb);
+  gap: 4px;
+}
+
+.cms-route-pin-btn {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cms-muted, #64748b);
+  transition: all 0.15s ease-in-out;
+}
+
+.cms-route-pin-btn.active-start {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cms-route-pin-btn.active-end {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.cms-route-map-stat-pill {
+  background: #ffffff;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #5c3b9e;
+  border: 1px solid #ddd6fe;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cms-route-map-canvas {
+  height: 270px;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  z-index: 1;
+}
+
+.cms-transport-form-modal.cms-transport-route-modal .cms-modal-content {
+  max-width: 900px !important;
+  width: 95vw !important;
+}
+
+.cms-route-map-canvas .leaflet-pane {
+  z-index: 5 !important;
+}
+.cms-route-map-canvas .leaflet-top,
+.cms-route-map-canvas .leaflet-bottom {
+  z-index: 10 !important;
+}
+
+[data-theme="dark"] .cms-route-map-wrapper {
+  background: #1f1b2b;
+  border-color: #3b3254;
+}
+
+[data-theme="dark"] .cms-route-pin-selector {
+  background: #2a253a;
+  border-color: #3b3254;
+}
+
+[data-theme="dark"] .cms-route-map-stat-pill {
+  background: #2a253a;
+  border-color: #4a3e6b;
+  color: #c4b5fd;
+}

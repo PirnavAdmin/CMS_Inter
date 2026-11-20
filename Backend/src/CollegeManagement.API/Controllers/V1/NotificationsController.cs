@@ -31,6 +31,14 @@ namespace CollegeManagement.API.Controllers.V1
             return int.TryParse(claim, out var id) ? id : null;
         }
 
+        private int? GetCurrentCollegeId()
+        {
+            var claim = User.FindFirst("CollegeId")?.Value
+                        ?? User.FindFirst("collegeId")?.Value;
+
+            return int.TryParse(claim, out var id) && id > 0 ? id : null;
+        }
+
         /// <summary>
         /// Get notifications for the authenticated user (supports pagination, unread filter, or latest-10 history mode).
         /// </summary>
@@ -288,6 +296,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var callerCollegeId = GetCurrentCollegeId();
                 if (dto.UserId.HasValue && dto.UserId.Value > 0)
                 {
                     var notif = await _notificationService.SendToUserAsync(
@@ -297,7 +306,7 @@ namespace CollegeManagement.API.Controllers.V1
                 else if (!string.IsNullOrWhiteSpace(dto.Role))
                 {
                     var count = await _notificationService.SendToRoleAsync(
-                        dto.Role, dto.CampusId, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                        dto.Role, dto.CampusId, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl, callerCollegeId);
                     return Ok(new { success = true, count });
                 }
                 else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
@@ -309,7 +318,7 @@ namespace CollegeManagement.API.Controllers.V1
                 else
                 {
                     var count = await _notificationService.SendGlobalAsync(
-                        dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                        dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl, callerCollegeId);
                     return Ok(new { success = true, count });
                 }
             }
@@ -331,9 +340,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var callerCollegeId = GetCurrentCollegeId();
                 var title = dto.Title.StartsWith("Announcement", StringComparison.OrdinalIgnoreCase) ? dto.Title : $"Announcement: {dto.Title}";
                 var roles = new[] { "Student", "Parent", "Teacher", "Faculty", "Staff" };
-                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Announcement", dto.ReferenceId, dto.ActionUrl ?? "/announcements");
+                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Announcement", dto.ReferenceId, dto.ActionUrl ?? "/announcements", callerCollegeId);
                 return Ok(new { success = true, recipientCount = count, message = "Announcement broadcasted successfully." });
             }
             catch (Exception ex)
@@ -354,9 +364,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var callerCollegeId = GetCurrentCollegeId();
                 var title = dto.Title.StartsWith("Circular", StringComparison.OrdinalIgnoreCase) ? dto.Title : $"Circular: {dto.Title}";
                 var roles = new[] { "Student", "Parent", "Teacher", "Faculty", "Staff" };
-                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Circular", dto.ReferenceId, dto.ActionUrl ?? "/circulars");
+                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Circular", dto.ReferenceId, dto.ActionUrl ?? "/circulars", callerCollegeId);
                 return Ok(new { success = true, recipientCount = count, message = "Circular published and broadcasted successfully." });
             }
             catch (Exception ex)

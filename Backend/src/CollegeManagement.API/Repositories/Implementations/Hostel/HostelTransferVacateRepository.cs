@@ -33,6 +33,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_RequestType = string.IsNullOrWhiteSpace(requestType) ? null : requestType.Trim(),
                     p_ApprovalStatus = string.IsNullOrWhiteSpace(approvalStatus) ? null : approvalStatus.Trim(),
                     p_FeeSettlementStatus = string.IsNullOrWhiteSpace(feeSettlementStatus) ? null : feeSettlementStatus.Trim(),
+                    p_RequestDate = requestDate?.Date,
                     p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
                     p_CampusId = campusId
                 },

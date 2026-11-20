@@ -9,7 +9,21 @@
 
   <ItemGroup>
     <PackageReference Include="MySqlConnector" Version="2.6.2" />
-    <ProjectReference Include="..\src\CollegeManagement.API\CollegeManagement.API.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.IdentityModel.Tokens.Jwt">
+      <HintPath>..\src\CollegeManagement.API\bin\Debug\net8.0\System.IdentityModel.Tokens.Jwt.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.IdentityModel.Tokens">
+      <HintPath>..\src\CollegeManagement.API\bin\Debug\net8.0\Microsoft.IdentityModel.Tokens.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.IdentityModel.JsonWebTokens">
+      <HintPath>..\src\CollegeManagement.API\bin\Debug\net8.0\Microsoft.IdentityModel.JsonWebTokens.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.IdentityModel.Logging">
+      <HintPath>..\src\CollegeManagement.API\bin\Debug\net8.0\Microsoft.IdentityModel.Logging.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

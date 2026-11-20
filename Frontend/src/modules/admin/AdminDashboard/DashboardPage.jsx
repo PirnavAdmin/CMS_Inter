@@ -1338,8 +1338,10 @@ export default function DashboardPage() {
     }
 
     const groupCountFromGroupState = Array.isArray(groupState.data?.items) ? groupState.data.items.length : 0;
-    if (groupCountFromGroupState > 0) {
-      base.totalGroups = Math.max(Number(base.totalGroups ?? 0), groupCountFromGroupState);
+    if (base.totalGroups === undefined || base.totalGroups === null) {
+      base.totalGroups = groupCountFromGroupState;
+      base.groupCount = groupCountFromGroupState;
+    } else {
       base.groupCount = base.totalGroups;
     }
 

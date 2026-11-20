@@ -153,12 +153,12 @@ public class CampusAuthorizationService : ICampusAuthorizationService
                 };
             }
 
-            // Legacy single-tenant admin with no CollegeId
+            // Non-SuperAdmin Admin with no CollegeId must not bypass tenant boundaries
+            _logger.LogWarning("Tenant isolation block: Admin user has missing CollegeId claim.");
             return new CampusResolutionResult
             {
-                IsAuthorized = true,
-                IsAdmin = true,
-                EffectiveCampusId = requestedCampusId
+                IsAuthorized = false,
+                ErrorMessage = "Tenant context required: Admin must belong to a valid college."
             };
         }
 

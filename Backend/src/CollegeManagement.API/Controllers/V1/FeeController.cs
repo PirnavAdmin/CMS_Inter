@@ -52,8 +52,7 @@ public class FeeController : ControllerBase
 
     private bool IsGlobalAdmin()
     {
-        return User.IsInRole("Admin") || User.IsInRole("Super Admin") ||
-               User.IsInRole("SuperAdmin") || User.IsInRole("Administrator");
+        return User.IsInRole("Super Admin") || User.IsInRole("SuperAdmin");
     }
 
     private int? GetCurrentUserId()

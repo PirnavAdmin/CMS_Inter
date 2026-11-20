@@ -12,19 +12,32 @@ using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
+using Microsoft.AspNetCore.Http;
+
 namespace CollegeManagement.API.Repositories.Implementations
 {
     public class StudentAdmissionRepository : IStudentAdmissionRepository
     {
         private readonly AppDbContext _context;
         private readonly ILogger<StudentAdmissionRepository> _logger;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
         public StudentAdmissionRepository(
             AppDbContext context,
-            ILogger<StudentAdmissionRepository> logger)
+            ILogger<StudentAdmissionRepository> logger,
+            IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context ?? throw new ArgumentNullException(nameof(context));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<IDbConnection> GetOpenConnectionAsync()
@@ -488,35 +501,39 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         public async Task ValidateMasterReferencesAsync(CreateStudentAdmissionRequest request)
         {
+            var collegeId = ResolveCollegeId();
+
             if (request.CampusId.HasValue && request.CampusId.Value > 0)
             {
-                var campusExists = await _context.Campuses.AnyAsync(c => c.CampusId == request.CampusId.Value && c.IsActive);
+                var campusExists = await _context.Campuses.AnyAsync(c => c.CampusId == request.CampusId.Value && c.IsActive && (!collegeId.HasValue || c.CollegeId == collegeId.Value));
                 if (!campusExists)
-                    throw new ArgumentException($"CampusId {request.CampusId.Value} does not exist or is inactive.");
+                    throw new ArgumentException($"CampusId {request.CampusId.Value} does not exist, is inactive, or does not belong to your college.");
             }
             else
             {
-                throw new ArgumentException("Valid CampusId is required.");
+                throw new ArgumentException("A valid active Campus is required before admitting students.");
             }
 
             if (request.SourceCampusId.HasValue && request.SourceCampusId.Value > 0)
             {
-                var sourceExists = await _context.Campuses.AnyAsync(c => c.CampusId == request.SourceCampusId.Value && c.IsActive);
+                var sourceExists = await _context.Campuses.AnyAsync(c => c.CampusId == request.SourceCampusId.Value && c.IsActive && (!collegeId.HasValue || c.CollegeId == collegeId.Value));
                 if (!sourceExists)
-                    throw new ArgumentException($"SourceCampusId {request.SourceCampusId.Value} does not exist or is inactive.");
+                    throw new ArgumentException($"SourceCampusId {request.SourceCampusId.Value} does not exist or does not belong to your college.");
             }
 
             if (!await _context.Boards.AnyAsync(b => b.BoardId == request.BoardId && b.IsActive))
                 throw new ArgumentException($"BoardId {request.BoardId} does not exist or is inactive.");
 
-            if (!await _context.AcademicYears.AnyAsync(a => a.AcademicYearId == request.AcademicYearId && a.IsActive))
-                throw new ArgumentException($"AcademicYearId {request.AcademicYearId} does not exist or is inactive.");
+            var academicYearExists = await _context.AcademicYears.AnyAsync(a => a.AcademicYearId == request.AcademicYearId && a.IsActive && (!collegeId.HasValue || a.CollegeId == collegeId.Value));
+            if (!academicYearExists)
+                throw new ArgumentException($"AcademicYearId {request.AcademicYearId} does not exist, is inactive, or does not belong to your college. Please configure an active Academic Year first.");
 
             if (!await _context.AcademicLevels.AnyAsync(l => l.AcademicLevelId == request.AcademicLevelId && l.IsActive))
                 throw new ArgumentException($"AcademicLevelId {request.AcademicLevelId} does not exist or is inactive.");
 
-            if (!await _context.Groups.AnyAsync(g => g.GroupId == request.GroupId && g.IsActive))
-                throw new ArgumentException($"GroupId {request.GroupId} does not exist or is inactive.");
+            var groupExists = await _context.Groups.AnyAsync(g => g.GroupId == request.GroupId && g.IsActive && (!collegeId.HasValue || g.CollegeId == collegeId.Value));
+            if (!groupExists)
+                throw new ArgumentException($"GroupId {request.GroupId} does not exist, is inactive, or does not belong to your college. Please configure a valid Group first.");
 
             if (!await _context.Programs.AnyAsync(p => p.ProgramId == request.ProgramId && p.IsActive))
                 throw new ArgumentException($"ProgramId {request.ProgramId} does not exist or is inactive.");
@@ -527,9 +544,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     throw new ArgumentException("Fee structure is required for non-referral admissions.");
 
                 var feeStructureExists = await _context.FeeStructures
-                    .AnyAsync(f => f.FeeStructureId == request.FeeStructureId.Value && f.IsActive);
+                    .AnyAsync(f => f.FeeStructureId == request.FeeStructureId.Value && f.IsActive && (!collegeId.HasValue || f.Campus.CollegeId == collegeId.Value));
                 if (!feeStructureExists)
-                    throw new ArgumentException($"FeeStructureId {request.FeeStructureId.Value} does not exist or is inactive.");
+                    throw new ArgumentException($"FeeStructureId {request.FeeStructureId.Value} does not exist or is inactive for your college.");
             }
         }
 

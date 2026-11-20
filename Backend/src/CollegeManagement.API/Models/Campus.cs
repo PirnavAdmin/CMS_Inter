@@ -12,6 +12,8 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int CampusId { get; set; }
 
+        public int CollegeId { get; set; } = 1;
+
         [Required]
         [MaxLength(150)]
         public string CampusName { get; set; } = string.Empty;

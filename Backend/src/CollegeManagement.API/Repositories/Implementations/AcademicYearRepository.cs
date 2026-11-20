@@ -13,10 +13,12 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class AcademicYearRepository : IAcademicYearRepository
     {
         private readonly AppDbContext _context;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
-        public AcademicYearRepository(AppDbContext context)
+        public AcademicYearRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task<IEnumerable<AcademicYear>> GetAllAsync()
@@ -131,6 +133,31 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task AddAsync(AcademicYear academicYear)
         {
+            if (academicYear.CollegeId == null || academicYear.CollegeId <= 0)
+            {
+                if (academicYear.CampusId.HasValue && academicYear.CampusId.Value > 0)
+                {
+                    academicYear.CollegeId = await _context.Campuses
+                        .Where(c => c.CampusId == academicYear.CampusId.Value)
+                        .Select(c => c.CollegeId)
+                        .FirstOrDefaultAsync();
+                }
+                
+                if (academicYear.CollegeId == null || academicYear.CollegeId <= 0)
+                {
+                    var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                             ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+                    if (int.TryParse(claim, out int cid) && cid > 0)
+                    {
+                        academicYear.CollegeId = cid;
+                    }
+                    else
+                    {
+                        academicYear.CollegeId = 1;
+                    }
+                }
+            }
+
             await _context.AcademicYears.AddAsync(academicYear);
             await _context.SaveChangesAsync();
         }

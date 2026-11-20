@@ -5,12 +5,15 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Helpers;
+using CollegeManagement.API.Services.Interfaces;
 using Dapper;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Filters
@@ -18,8 +21,8 @@ namespace CollegeManagement.API.Filters
     /// <summary>
     /// Enforces server-side multi-tenant isolation across all V1 module controllers.
     /// Automatically scopes omitted campusId / DTO.CampusId parameters to the authenticated
-    /// user's CollegeId campuses (or 999999999 sentinel when the college has no campuses yet),
-    /// and blocks cross-tenant campus access with 403 Forbidden.
+    /// user's CollegeId campuses, and blocks cross-tenant campus access (arguments, headers, DTOs)
+    /// with 403 Forbidden.
     /// </summary>
     public class TenantIsolationActionFilter : IAsyncActionFilter
     {
@@ -38,15 +41,21 @@ namespace CollegeManagement.API.Filters
 
         private readonly AppDbContext _db;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly ITenantSecurityService _securityService;
+        private readonly IMemoryCache _cache;
         private readonly ILogger<TenantIsolationActionFilter> _logger;
 
         public TenantIsolationActionFilter(
             AppDbContext db,
             IJwtTokenHelper jwtTokenHelper,
+            ITenantSecurityService securityService,
+            IMemoryCache cache,
             ILogger<TenantIsolationActionFilter> logger)
         {
             _db = db;
             _jwtTokenHelper = jwtTokenHelper;
+            _securityService = securityService;
+            _cache = cache;
             _logger = logger;
         }
 
@@ -74,26 +83,59 @@ namespace CollegeManagement.API.Filters
             }
 
             int? collegeId = _jwtTokenHelper.GetCollegeId(user);
-            if (!collegeId.HasValue || collegeId.Value <= 1)
+            if (!collegeId.HasValue || collegeId.Value <= 0)
             {
-                await next();
+                _logger.LogWarning("Cross-tenant block: Authenticated user has missing or invalid CollegeId on {Controller}", controllerName);
+                context.Result = new ObjectResult(new
+                {
+                    success = false,
+                    message = "Tenant context required."
+                })
+                { StatusCode = StatusCodes.Status403Forbidden };
                 return;
             }
 
-            var conn = _db.Database.GetDbConnection();
-            if (conn.State != ConnectionState.Open)
+            string cacheKey = $"tenant_campuses_{collegeId.Value}";
+            if (!_cache.TryGetValue(cacheKey, out List<int>? ownedCampuses) || ownedCampuses == null)
             {
-                await conn.OpenAsync(context.HttpContext.RequestAborted);
-            }
+                var conn = _db.Database.GetDbConnection();
+                if (conn.State != ConnectionState.Open)
+                {
+                    await conn.OpenAsync(context.HttpContext.RequestAborted);
+                }
 
-            var ownedCampuses = (await conn.QueryAsync<int>(
-                "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId AND IsActive = 1 ORDER BY IsHQ DESC, CampusId ASC;",
-                new { CollegeId = collegeId.Value })).ToList();
+                ownedCampuses = (await conn.QueryAsync<int>(
+                    "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId AND IsActive = 1 ORDER BY IsHQ DESC, CampusId ASC;",
+                    new { CollegeId = collegeId.Value })).ToList();
+
+                _cache.Set(cacheKey, ownedCampuses, TimeSpan.FromMinutes(5));
+            }
 
             var ownedSet = new HashSet<int>(ownedCampuses);
             int effectiveCampusId = ownedCampuses.Count > 0 ? ownedCampuses[0] : NoCampusSentinel;
 
-            // Ensure any optional campus parameter declared on the action descriptor is initialized
+            // 1. Strict X-Campus-Id header validation
+            if (context.HttpContext.Request.Headers.TryGetValue("X-Campus-Id", out var headerVal))
+            {
+                if (int.TryParse(headerVal.FirstOrDefault(), out int xCampusId) && xCampusId > 0 && xCampusId != NoCampusSentinel)
+                {
+                    if (!ownedSet.Contains(xCampusId))
+                    {
+                        _logger.LogWarning(
+                            "Cross-tenant header block: CollegeId {CollegeId} sent unauthorized X-Campus-Id {CampusId} on {Controller}",
+                            collegeId.Value, xCampusId, controllerName);
+                        context.Result = new ObjectResult(new
+                        {
+                            success = false,
+                            message = "Access denied: Unauthorized campus access."
+                        })
+                        { StatusCode = StatusCodes.Status403Forbidden };
+                        return;
+                    }
+                }
+            }
+
+            // 2. Ensure any optional campus parameter declared on the action descriptor is initialized
             foreach (var p in context.ActionDescriptor.Parameters)
             {
                 if ((string.Equals(p.Name, "campusId", StringComparison.OrdinalIgnoreCase) ||
@@ -107,6 +149,7 @@ namespace CollegeManagement.API.Filters
                 }
             }
 
+            // 3. Validate and scope all ActionArguments
             foreach (var key in context.ActionArguments.Keys.ToList())
             {
                 var arg = context.ActionArguments[key];
@@ -117,19 +160,15 @@ namespace CollegeManagement.API.Filters
                     int? requested = TryToInt(arg);
                     if (requested.HasValue && requested.Value > 0 && requested.Value != NoCampusSentinel)
                     {
-                        if (requested.Value == 1 && !ownedSet.Contains(1))
-                        {
-                            context.ActionArguments[key] = effectiveCampusId;
-                        }
-                        else if (!ownedSet.Contains(requested.Value))
+                        if (!ownedSet.Contains(requested.Value))
                         {
                             _logger.LogWarning(
-                                "Cross-tenant block: CollegeId {CollegeId} requested CampusId {CampusId} on {Controller}",
+                                "Cross-tenant block: CollegeId {CollegeId} requested unauthorized CampusId {CampusId} on {Controller}",
                                 collegeId.Value, requested.Value, controllerName);
                             context.Result = new ObjectResult(new
                             {
                                 success = false,
-                                message = "Access denied: This campus does not belong to your college."
+                                message = "Access denied: Unauthorized campus access."
                             })
                             { StatusCode = StatusCodes.Status403Forbidden };
                             return;
@@ -153,19 +192,15 @@ namespace CollegeManagement.API.Filters
                         int? propVal = TryToInt(campusProp.GetValue(arg));
                         if (propVal.HasValue && propVal.Value > 0 && propVal.Value != NoCampusSentinel)
                         {
-                            if (propVal.Value == 1 && !ownedSet.Contains(1))
-                            {
-                                campusProp.SetValue(arg, effectiveCampusId);
-                            }
-                            else if (!ownedSet.Contains(propVal.Value))
+                            if (!ownedSet.Contains(propVal.Value))
                             {
                                 _logger.LogWarning(
-                                    "Cross-tenant DTO block: CollegeId {CollegeId} sent CampusId {CampusId} on {Controller}",
+                                    "Cross-tenant DTO block: CollegeId {CollegeId} sent unauthorized CampusId {CampusId} on {Controller}",
                                     collegeId.Value, propVal.Value, controllerName);
                                 context.Result = new ObjectResult(new
                                 {
                                     success = false,
-                                    message = "Access denied: This campus does not belong to your college."
+                                    message = "Access denied: Unauthorized campus access."
                                 })
                                 { StatusCode = StatusCodes.Status403Forbidden };
                                 return;
@@ -179,7 +214,7 @@ namespace CollegeManagement.API.Filters
                 }
             }
 
-            // Ensure omitted campusId / selectedCampusId parameters (not present in ActionArguments) also receive effectiveCampusId
+            // 4. Ensure omitted campusId parameters receive effectiveCampusId
             foreach (var param in context.ActionDescriptor.Parameters)
             {
                 if ((string.Equals(param.Name, "campusId", StringComparison.OrdinalIgnoreCase) ||
@@ -191,7 +226,99 @@ namespace CollegeManagement.API.Filters
                 }
             }
 
+            // 5. Entity-level IDOR Protection
+            try
+            {
+                int? idVal = TryExtractId(context, "id");
+                string ctrl = controllerName ?? string.Empty;
+
+                if (string.Equals(ctrl, "Students", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(ctrl, "StudentAdmissions", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetStudentId = TryExtractId(context, "studentId") ?? idVal;
+                    if (targetStudentId.HasValue && targetStudentId.Value > 0)
+                    {
+                        await _securityService.ValidateStudentOwnershipAsync(targetStudentId.Value, collegeId.Value);
+                    }
+                }
+                else if (string.Equals(ctrl, "Staff", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "Faculty", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetStaffId = TryExtractId(context, "staffId") ?? TryExtractId(context, "facultyId") ?? idVal;
+                    if (targetStaffId.HasValue && targetStaffId.Value > 0)
+                    {
+                        await _securityService.ValidateStaffOwnershipAsync(targetStaffId.Value, collegeId.Value);
+                    }
+                }
+                else if (string.Equals(ctrl, "Department", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "Departments", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "NonTeachingDepartment", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetDeptId = TryExtractId(context, "departmentId") ?? idVal;
+                    if (targetDeptId.HasValue && targetDeptId.Value > 0)
+                    {
+                        await _securityService.ValidateDepartmentOwnershipAsync(targetDeptId.Value, collegeId.Value);
+                    }
+                }
+                else if (string.Equals(ctrl, "Designation", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "Designations", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetDesigId = TryExtractId(context, "designationId") ?? idVal;
+                    if (targetDesigId.HasValue && targetDesigId.Value > 0)
+                    {
+                        await _securityService.ValidateDesignationOwnershipAsync(targetDesigId.Value, collegeId.Value);
+                    }
+                }
+                else if (string.Equals(ctrl, "Examination", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "Examinations", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetExamId = TryExtractId(context, "examinationId") ?? TryExtractId(context, "examId") ?? idVal;
+                    if (targetExamId.HasValue && targetExamId.Value > 0)
+                    {
+                        await _securityService.ValidateExamOwnershipAsync(targetExamId.Value, collegeId.Value);
+                    }
+                }
+                else if (string.Equals(ctrl, "Fee", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "FeeStructure", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetFeeId = TryExtractId(context, "feeStructureId");
+                    if (targetFeeId.HasValue && targetFeeId.Value > 0)
+                    {
+                        await _securityService.ValidateFeeStructureOwnershipAsync(targetFeeId.Value, collegeId.Value);
+                    }
+                }
+            }
+            catch (ForbiddenException fex)
+            {
+                context.Result = new ObjectResult(new { success = false, message = fex.Message })
+                {
+                    StatusCode = StatusCodes.Status403Forbidden
+                };
+                return;
+            }
+            catch (NotFoundException nex)
+            {
+                context.Result = new ObjectResult(new { success = false, message = nex.Message })
+                {
+                    StatusCode = StatusCodes.Status404NotFound
+                };
+                return;
+            }
+
             await next();
+        }
+
+        private static int? TryExtractId(ActionExecutingContext context, string key)
+        {
+            if (context.ActionArguments.TryGetValue(key, out var argVal))
+            {
+                return TryToInt(argVal);
+            }
+            if (context.RouteData.Values.TryGetValue(key, out var routeVal))
+            {
+                return TryToInt(routeVal);
+            }
+            return null;
         }
 
         private static int? TryToInt(object? value)

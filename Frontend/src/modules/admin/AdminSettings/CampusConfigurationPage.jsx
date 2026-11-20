@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { 
   Building2, 
@@ -110,6 +111,13 @@ export default function CampusConfigurationPage() {
   });
 
   const [formError, setFormError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+  const validatePhone = (value) => {
+    const phone = value.trim();
+    return phone && !/^[0-9]{10}$/.test(phone)
+      ? "Contact phone must contain exactly 10 digits."
+      : "";
+  };
 
   // Load live statistics from /api/v1/campuses/stats
   const loadStats = useCallback(async () => {
@@ -152,6 +160,7 @@ export default function CampusConfigurationPage() {
 
   // Open Modal for Add
   const handleOpenAdd = () => {
+    setPhoneError("");
     setEditingCampus(null);
     setFormData({
       name: "",
@@ -169,6 +178,7 @@ export default function CampusConfigurationPage() {
 
   // Open Modal for Edit
   const handleOpenEdit = (campus) => {
+    setPhoneError("");
     setEditingCampus(campus);
     const existingBoards = Array.isArray(campus.affiliatedBoards) && campus.affiliatedBoards.length > 0
       ? campus.affiliatedBoards.map((b) => b.boardName || b.name || b.boardCode || b.code)
@@ -225,6 +235,12 @@ export default function CampusConfigurationPage() {
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
+    const contactError = validatePhone(formData.phone);
+    setPhoneError(contactError);
+    if (contactError) {
+      document.getElementById("campusPhone")?.focus();
+      return;
+    }
 
     if (!formData.name.trim()) {
       setFormError("Campus Name is required.");
@@ -239,6 +255,27 @@ export default function CampusConfigurationPage() {
       return;
     }
 
+    if (submitting) return;
+    if (formData.name.trim().length < 2 || !/\p{L}/u.test(formData.name)) {
+      setFormError("Enter a campus name containing letters and at least 2 characters.");
+      return;
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,49}$/.test(formData.code.trim())) {
+      setFormError("Campus Code must start with a letter or number and contain only letters, numbers, hyphens or underscores (up to 50 characters).");
+      return;
+    }
+    if (campuses.some((campus) =>
+      String(campus.campusId ?? campus.id) !== String(editingCampus?.campusId ?? editingCampus?.id) &&
+      String(campus.code || campus.campusCode || "").trim().toLowerCase() === formData.code.trim().toLowerCase()
+    )) {
+      setFormError("This campus code is already in use.");
+      return;
+    }
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      setFormError("Enter a valid email address.");
+      return;
+    }
+
     // Resolve Board IDs from selected board names
     const resolvedBoardIds = formData.boards
       .map((bName) => {
@@ -246,6 +283,11 @@ export default function CampusConfigurationPage() {
         return found ? Number(found.id || found.boardId) : null;
       })
       .filter((id) => id != null && !isNaN(id));
+
+    if (resolvedBoardIds.length !== formData.boards.length) {
+      setFormError("Please select valid affiliated boards from the list.");
+      return;
+    }
 
     const payload = {
       campusName: formData.name.trim(),
@@ -255,7 +297,7 @@ export default function CampusConfigurationPage() {
       email: formData.email.trim(),
       isHQ: editingCampus ? Boolean(editingCampus.isHQ) : false,
       isActive: formData.status.includes("Active"),
-      boardIds: resolvedBoardIds.length > 0 ? resolvedBoardIds : [1],
+      boardIds: resolvedBoardIds,
     };
 
     try {
@@ -586,14 +628,15 @@ export default function CampusConfigurationPage() {
         </div>
 
         {/* Modal matching Image 1 with Board Multi-Select */}
-        {modalOpen && (
-          <div className="campus-modal-overlay" onClick={() => setModalOpen(false)}>
-            <div className="campus-modal-card" onClick={(e) => e.stopPropagation()}>
+        {modalOpen && createPortal(
+          <div className="campus-modal-overlay" onClick={() => !submitting && setModalOpen(false)}>
+            <div className="campus-modal-card" role="dialog" aria-modal="true" aria-labelledby="campus-modal-title" onClick={(e) => e.stopPropagation()}>
               <div className="campus-modal-header">
-                <h3>{editingCampus ? "Edit Campus Branch" : "Add Campus Branch"}</h3>
+                <h3 id="campus-modal-title">{editingCampus ? "Edit Campus Branch" : "Add Campus Branch"}</h3>
                 <button
                   type="button"
                   className="campus-modal-close-btn"
+                  disabled={submitting}
                   onClick={() => setModalOpen(false)}
                   aria-label="Close"
                 >
@@ -602,7 +645,7 @@ export default function CampusConfigurationPage() {
               </div>
 
               {formError && (
-                <div style={{ padding: "8px 12px", background: "#fef2f2", color: "#b91c1c", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
+                <div role="alert" style={{ padding: "8px 12px", background: "#fef2f2", color: "#b91c1c", borderRadius: 8, fontSize: 13, marginBottom: 14 }}>
                   {formError}
                 </div>
               )}
@@ -614,6 +657,8 @@ export default function CampusConfigurationPage() {
                   </label>
                   <input
                     id="campusName"
+                    minLength={2}
+                    maxLength={150}
                     type="text"
                     className="campus-modal-input"
                     placeholder="e.g. North Branch"
@@ -629,6 +674,9 @@ export default function CampusConfigurationPage() {
                   </label>
                   <input
                     id="campusCode"
+                    maxLength={50}
+                    pattern="[A-Za-z0-9][A-Za-z0-9_\-]*"
+                    title="Use letters, numbers, hyphens or underscores; start with a letter or number."
                     type="text"
                     className="campus-modal-input"
                     placeholder="e.g. NORTH"
@@ -717,6 +765,7 @@ export default function CampusConfigurationPage() {
                   <label htmlFor="campusAddress">Address</label>
                   <input
                     id="campusAddress"
+                    maxLength={500}
                     type="text"
                     className="campus-modal-input"
                     placeholder="Full street address..."
@@ -730,18 +779,30 @@ export default function CampusConfigurationPage() {
                     <label htmlFor="campusPhone">Contact Phone</label>
                     <input
                       id="campusPhone"
+                      maxLength={10}
                       type="tel"
+                      inputMode="numeric"
+                      aria-invalid={Boolean(phoneError)}
+                      aria-describedby={phoneError ? "campus-phone-error" : undefined}
                       className="campus-modal-input"
-                      placeholder="+1 555-..."
+                      placeholder="10-digit contact number"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (!/^[0-9]*$/.test(value) || value.length > 10) return;
+                        setFormData((prev) => ({ ...prev, phone: value }));
+                        setPhoneError("");
+                      }}
+                      onBlur={() => setPhoneError(validatePhone(formData.phone))}
                     />
+                    {phoneError && <span id="campus-phone-error" role="alert" className="campus-phone-error">{phoneError}</span>}
                   </div>
 
                   <div className="campus-modal-field">
                     <label htmlFor="campusEmail">Email</label>
                     <input
                       id="campusEmail"
+                      maxLength={150}
                       type="email"
                       className="campus-modal-input"
                       placeholder="campus@domain.com"
@@ -781,7 +842,7 @@ export default function CampusConfigurationPage() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>, document.body
         )}
 
         {/* Custom In-App Delete Confirmation Modal Matching Image 1 */}
