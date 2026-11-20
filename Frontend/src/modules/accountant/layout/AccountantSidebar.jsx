@@ -28,8 +28,8 @@ export default function AccountantSidebar({ open, onClose }) {
       <div className="sp-brand"><CampusBrandImage src={logo} alt="Pirnav Colleges"  /></div>
       <nav>
         {groups.map(([heading, links]) => {
-          const visibleLinks = links.filter(([, , , moduleKey, screenKey]) => {
-            if (!moduleKey || moduleKey === "dashboard") return true;
+          const visibleLinks = links.filter(([, path, , moduleKey, screenKey]) => {
+            if (path === "payroll" || !moduleKey || moduleKey === "dashboard") return true;
             if (authUser?.permissions || authUser?.rolePermissions) {
               return can(moduleKey, ACTIONS.VIEW, authUser?.permissions, authUser, screenKey);
             }
@@ -43,7 +43,7 @@ export default function AccountantSidebar({ open, onClose }) {
               <NavLink
                 key={label}
                 end={!path || path === "payroll"}
-                to={`/accountant-dashboard${path ? `/${path}` : ""}`}
+                to={path === "reimbursement" ? "/accountant-dashboard/reimbursements?tab=claims" : `/accountant-dashboard${path ? `/${path}` : ""}`}
                 onClick={onClose}
                 className={({ isActive }) => isActive ? "is-active" : ""}
               >

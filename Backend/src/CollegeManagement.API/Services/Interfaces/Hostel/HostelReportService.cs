@@ -6,13 +6,15 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
     {
         Task<IEnumerable<HostelOccupancyReportDto>>
             GetOccupancyReportAsync(
-                int? hostelId = null);
+                int? hostelId = null,
+                int? campusId = null);
 
         Task<IEnumerable<HostelStudentReportDto>>
             GetStudentReportAsync(
                 int? hostelId = null,
                 string? status = null,
-                string? search = null);
+                string? search = null,
+                int? campusId = null);
 
         Task<IEnumerable<HostelAttendanceReportDto>>
             GetAttendanceReportAsync(
@@ -21,7 +23,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
                 DateTime? toDate = null,
                 string? session = null,
                 string? attendanceStatus = null,
-                string? search = null);
+                string? search = null,
+                int? campusId = null);
 
         Task<IEnumerable<HostelOutpassLeaveReportDto>>
             GetOutpassLeaveReportAsync(
@@ -30,7 +33,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
                 DateTime? toDate = null,
                 string? requestType = null,
                 string? approvalStatus = null,
-                string? search = null);
+                string? search = null,
+                int? campusId = null);
 
         Task<IEnumerable<HostelTransferVacateReportDto>>
             GetTransferVacateReportAsync(
@@ -40,6 +44,7 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
                 string? requestType = null,
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
-                string? search = null);
+                string? search = null,
+                int? campusId = null);
     }
 }

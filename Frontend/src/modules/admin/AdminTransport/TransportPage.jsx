@@ -40,6 +40,8 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getAllTransportPages, scopeTransportRecords, scopeTransportReport, transportValue } from "./transportContext.js";
 import { normalizeDriver } from "@/modules/transport-manager/data/transportManagerModel.js";
 import "./TransportPage.css";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 const sectionTabs = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
@@ -103,9 +105,12 @@ function TransportPagination({ page, totalRows, pageSize, onPageChange, onPageSi
   const [customSize, setCustomSize] = useState(String(pageSize));
   const pages = Math.max(1, Math.ceil(totalRows / pageSize));
   const current = Math.min(page, pages);
-  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const startRow = totalRows > 0 ? (current - 1) * pageSize + 1 : 0;
+  const endRow = Math.min(current * pageSize, totalRows);
+  const navStyle = { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
   const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
   return <nav aria-label="Transport pagination" style={navStyle}>
+    <span aria-live="polite" style={{ marginRight: "auto" }}>Showing {startRow}–{endRow} of {totalRows} records</span>
     <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
       <select aria-label="Rows per page" value={customMode || !TRANSPORT_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
         if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
@@ -562,6 +567,701 @@ function AddPickupPointsModal({ routes, pickupPoints, isSaving, onCancel, onSave
   );
 }
 
+const routeDistanceCache = new Map();
+
+async function geocodeLocation(query) {
+  const q = String(query || "").trim();
+  if (!q) return null;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`;
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (Array.isArray(data) && data.length > 0) {
+      return {
+        lat: parseFloat(data[0].lat),
+        lon: parseFloat(data[0].lon),
+        name: data[0].display_name ? data[0].display_name.split(",").slice(0, 2).join(", ").trim() : q,
+      };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+async function reverseGeocodeLocation(lat, lon) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.display_name) {
+      const addr = data.address || {};
+      const parts = [
+        addr.suburb || addr.neighbourhood || addr.commercial || addr.amenity || addr.road,
+        addr.city || addr.town || addr.village || addr.county || addr.state_district,
+      ].filter(Boolean);
+      return parts.length ? parts.join(", ") : data.display_name.split(",").slice(0, 2).join(", ").trim();
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 1.30 * 10) / 10;
+}
+
+async function fetchOsrmFullRoute(p1, p2) {
+  try {
+    const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${p1.lon},${p1.lat};${p2.lon},${p2.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(osrmUrl);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.routes && data.routes.length > 0) {
+      const route = data.routes[0];
+      const distanceKm = Math.round((route.distance / 1000) * 10) / 10;
+      const coordinates = (route.geometry?.coordinates || []).map(([lon, lat]) => [lat, lon]);
+      return { distanceKm, coordinates };
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+const createCustomPinIcon = (color, symbol) => {
+  return L.divIcon({
+    className: "cms-route-map-pin-icon",
+    html: `
+      <div style="
+        background: ${color};
+        color: #ffffff;
+        width: 30px;
+        height: 30px;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.35);
+        border: 2px solid #ffffff;
+        cursor: grab;
+      ">
+        <span style="transform: rotate(45deg); font-size: 13px; font-weight: 800;">${symbol}</span>
+      </div>
+    `,
+    iconSize: [30, 30],
+    iconAnchor: [15, 30],
+  });
+};
+
+function RouteFormModal({ title, initial = {}, isSaving, onCancel, onSave }) {
+  const [values, setValues] = useState({
+    routeCode: initial.routeCode || "",
+    status: initial.status || "Active",
+    routeName: initial.routeName || "",
+    routeStart: initial.routeStart || "",
+    routeEnd: initial.routeEnd || "",
+    totalDistanceKm: initial.totalDistanceKm ?? "",
+    estimatedTimeMinutes: initial.estimatedTimeMinutes ?? "",
+    minDistanceKm: initial.minDistanceKm ?? 5,
+    minBaseFare: initial.minBaseFare ?? 1000,
+    ratePerKm: initial.ratePerKm ?? 100,
+    acMinBaseFare: initial.acMinBaseFare ?? 1200,
+    acRatePerKm: initial.acRatePerKm ?? 150,
+    description: initial.description || "",
+  });
+
+  const [errors, setErrors] = useState({});
+  const [calcState, setCalcState] = useState({ loading: false, message: "", success: false });
+  const [activePinMode, setActivePinMode] = useState("start");
+  const [isMapVisible, setIsMapVisible] = useState(true);
+  const [startCoords, setStartCoords] = useState(null);
+  const [endCoords, setEndCoords] = useState(null);
+
+  const mapDivRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const startMarkerRef = useRef(null);
+  const endMarkerRef = useRef(null);
+  const routeLineRef = useRef(null);
+  const isInternalUpdateRef = useRef(false);
+  const debounceTimerRef = useRef(null);
+
+  // Initialize Leaflet map
+  useEffect(() => {
+    if (!isMapVisible || !mapDivRef.current || mapInstanceRef.current) return;
+
+    const defaultCenter = [16.5062, 80.6480];
+    const map = L.map(mapDivRef.current, {
+      center: defaultCenter,
+      zoom: 11,
+      zoomControl: true,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    mapInstanceRef.current = map;
+
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+
+    return () => {
+      clearTimeout(timer);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+        startMarkerRef.current = null;
+        endMarkerRef.current = null;
+        routeLineRef.current = null;
+      }
+    };
+  }, [isMapVisible]);
+
+  // Route drawing helper
+  const drawRoutePolyline = useCallback(async (p1, p2, map) => {
+    if (!map || !p1 || !p2) return;
+    setCalcState({ loading: true, message: "Calculating driving route...", success: false });
+
+    try {
+      const routeData = await fetchOsrmFullRoute({ lat: p1[0], lon: p1[1] }, { lat: p2[0], lon: p2[1] });
+      if (routeData && routeData.coordinates && routeData.coordinates.length > 0) {
+        if (routeLineRef.current) {
+          routeLineRef.current.setLatLngs(routeData.coordinates);
+        } else {
+          routeLineRef.current = L.polyline(routeData.coordinates, {
+            color: "#5c3b9e",
+            weight: 5,
+            opacity: 0.88,
+            lineJoin: "round",
+          }).addTo(map);
+        }
+
+        setValues((prev) => ({ ...prev, totalDistanceKm: routeData.distanceKm }));
+        setCalcState({
+          loading: false,
+          success: true,
+          message: `✓ Auto-calculated road distance: ${routeData.distanceKm} km`,
+        });
+
+        map.fitBounds(L.latLngBounds([p1, p2]).pad(0.18));
+      } else {
+        const dist = haversineDistance(p1[0], p1[1], p2[0], p2[1]);
+        if (routeLineRef.current) {
+          routeLineRef.current.setLatLngs([p1, p2]);
+        } else {
+          routeLineRef.current = L.polyline([p1, p2], {
+            color: "#5c3b9e",
+            weight: 4,
+            dashArray: "6, 6",
+            opacity: 0.8,
+          }).addTo(map);
+        }
+        setValues((prev) => ({ ...prev, totalDistanceKm: dist }));
+        setCalcState({
+          loading: false,
+          success: true,
+          message: `✓ Estimated distance: ${dist} km`,
+        });
+        map.fitBounds(L.latLngBounds([p1, p2]).pad(0.18));
+      }
+    } catch {
+      setCalcState({ loading: false, success: false, message: "Could not calculate driving route." });
+    }
+  }, []);
+
+  // Update or place start marker
+  const updateStartMarker = useCallback((lat, lng, map, currentEndCoords) => {
+    setStartCoords([lat, lng]);
+    if (startMarkerRef.current) {
+      startMarkerRef.current.setLatLng([lat, lng]);
+    } else if (map) {
+      const marker = L.marker([lat, lng], {
+        icon: createCustomPinIcon("#10b981", "A"),
+        draggable: true,
+        title: "Route Start (Drag to change)",
+      }).addTo(map);
+
+      marker.on("dragend", async (ev) => {
+        const pos = ev.target.getLatLng();
+        setStartCoords([pos.lat, pos.lng]);
+        isInternalUpdateRef.current = true;
+        const addr = await reverseGeocodeLocation(pos.lat, pos.lng);
+        const name = addr || `Lat: ${pos.lat.toFixed(4)}, Lng: ${pos.lng.toFixed(4)}`;
+        setValues((prev) => ({ ...prev, routeStart: name }));
+        if (endCoords) {
+          drawRoutePolyline([pos.lat, pos.lng], endCoords, map);
+        }
+      });
+
+      startMarkerRef.current = marker;
+    }
+
+    if (currentEndCoords) {
+      drawRoutePolyline([lat, lng], currentEndCoords, map);
+    }
+  }, [drawRoutePolyline, endCoords]);
+
+  // Update or place end marker
+  const updateEndMarker = useCallback((lat, lng, map, currentStartCoords) => {
+    setEndCoords([lat, lng]);
+    if (endMarkerRef.current) {
+      endMarkerRef.current.setLatLng([lat, lng]);
+    } else if (map) {
+      const marker = L.marker([lat, lng], {
+        icon: createCustomPinIcon("#ef4444", "B"),
+        draggable: true,
+        title: "Route End (Drag to change)",
+      }).addTo(map);
+
+      marker.on("dragend", async (ev) => {
+        const pos = ev.target.getLatLng();
+        setEndCoords([pos.lat, pos.lng]);
+        isInternalUpdateRef.current = true;
+        const addr = await reverseGeocodeLocation(pos.lat, pos.lng);
+        const name = addr || `Lat: ${pos.lat.toFixed(4)}, Lng: ${pos.lng.toFixed(4)}`;
+        setValues((prev) => ({ ...prev, routeEnd: name }));
+        if (startCoords) {
+          drawRoutePolyline(startCoords, [pos.lat, pos.lng], map);
+        }
+      });
+
+      endMarkerRef.current = marker;
+    }
+
+    if (currentStartCoords) {
+      drawRoutePolyline(currentStartCoords, [lat, lng], map);
+    }
+  }, [drawRoutePolyline, startCoords]);
+
+  // Handle map click
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    const onMapClick = async (e) => {
+      const { lat, lng } = e.latlng;
+      if (activePinMode === "start") {
+        updateStartMarker(lat, lng, map, endCoords);
+        isInternalUpdateRef.current = true;
+        const addr = await reverseGeocodeLocation(lat, lng);
+        const name = addr || `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+        setValues((prev) => ({ ...prev, routeStart: name }));
+        setActivePinMode("end");
+      } else {
+        updateEndMarker(lat, lng, map, startCoords);
+        isInternalUpdateRef.current = true;
+        const addr = await reverseGeocodeLocation(lat, lng);
+        const name = addr || `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+        setValues((prev) => ({ ...prev, routeEnd: name }));
+        setActivePinMode("start");
+      }
+    };
+
+    map.on("click", onMapClick);
+    return () => {
+      map.off("click", onMapClick);
+    };
+  }, [activePinMode, startCoords, endCoords, updateStartMarker, updateEndMarker]);
+
+  // Sync from text input if user types instead of clicking map
+  const syncFromTextInput = useCallback(async (origin, destination) => {
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    let p1 = startCoords;
+    let p2 = endCoords;
+
+    if (origin && String(origin).trim().length >= 2) {
+      const geo = await geocodeLocation(origin);
+      if (geo) {
+        p1 = [geo.lat, geo.lon];
+        updateStartMarker(geo.lat, geo.lon, map, null);
+      }
+    }
+    if (destination && String(destination).trim().length >= 2) {
+      const geo = await geocodeLocation(destination);
+      if (geo) {
+        p2 = [geo.lat, geo.lon];
+        updateEndMarker(geo.lat, geo.lon, map, null);
+      }
+    }
+    if (p1 && p2) {
+      drawRoutePolyline(p1, p2, map);
+    } else if (p1) {
+      map.setView(p1, 13);
+    } else if (p2) {
+      map.setView(p2, 13);
+    }
+  }, [startCoords, endCoords, updateStartMarker, updateEndMarker, drawRoutePolyline]);
+
+  // Debounced sync when user types in inputs
+  useEffect(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      syncFromTextInput(values.routeStart, values.routeEnd);
+    }, 450);
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, [values.routeStart, values.routeEnd, syncFromTextInput]);
+
+  // Initial geocoding if initial values exist (e.g. edit mode)
+  useEffect(() => {
+    if (initial.routeStart || initial.routeEnd) {
+      syncFromTextInput(initial.routeStart, initial.routeEnd);
+    }
+  }, []);
+
+  const handleChange = (field, val) => {
+    setValues((prev) => ({ ...prev, [field]: val }));
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: undefined }));
+    }
+  };
+
+  const validate = () => {
+    const nextErrors = {};
+    if (!String(values.routeCode || "").trim()) nextErrors.routeCode = "Route Code is required";
+    if (!String(values.status || "").trim()) nextErrors.status = "Status is required";
+    if (!String(values.routeName || "").trim()) nextErrors.routeName = "Route Name is required";
+    if (values.totalDistanceKm !== "" && values.totalDistanceKm !== undefined && Number(values.totalDistanceKm) < 0) {
+      nextErrors.totalDistanceKm = "Total Distance must be at least 0";
+    }
+    if (values.estimatedTimeMinutes !== "" && values.estimatedTimeMinutes !== undefined && Number(values.estimatedTimeMinutes) < 0) {
+      nextErrors.estimatedTimeMinutes = "Est Time must be at least 0";
+    }
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const submit = async (e) => {
+    if (e) e.preventDefault();
+    if (isSaving || !validate()) return;
+    await onSave(values);
+  };
+
+  return (
+    <Modal
+      title={title}
+      className="cms-transport-form-modal cms-transport-route-modal"
+      onClose={isSaving ? () => {} : onCancel}
+      footer={
+        <>
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={onCancel} disabled={isSaving}>Cancel</button>
+          <button type="button" className="cms-btn cms-btn-primary" onClick={submit} disabled={isSaving}>
+            {isSaving ? (
+              <span className="cms-transport-action-loading">
+                <i aria-hidden="true" />
+                {initial.id ? "Updating..." : "Adding..."}
+              </span>
+            ) : "Save"}
+          </button>
+        </>
+      }
+    >
+      <form onSubmit={submit}>
+        <div className="cms-form-grid">
+          <div className="cms-field">
+            <label>
+              <span>Route Code (Unique) <span className="required-star">*</span></span>
+              <input
+                type="text"
+                placeholder="e.g. R-NORTH-101"
+                value={values.routeCode}
+                onChange={(e) => handleChange("routeCode", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+            {errors.routeCode && <span className="cms-error">{errors.routeCode}</span>}
+          </div>
+
+          <div className="cms-field">
+            <label>
+              <span>Status <span className="required-star">*</span></span>
+              <select
+                value={values.status}
+                onChange={(e) => handleChange("status", e.target.value)}
+                disabled={isSaving}
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </label>
+            {errors.status && <span className="cms-error">{errors.status}</span>}
+          </div>
+
+          <div className="cms-field full">
+            <label>
+              <span>Route Name <span className="required-star">*</span></span>
+              <input
+                type="text"
+                placeholder="Enter route name..."
+                value={values.routeName}
+                onChange={(e) => handleChange("routeName", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+            {errors.routeName && <span className="cms-error">{errors.routeName}</span>}
+          </div>
+
+          {/* Interactive Uber-Style Map Widget */}
+          <div className="cms-route-map-wrapper">
+            <div className="cms-route-map-toolbar">
+              <div className="cms-route-pin-selector">
+                <button
+                  type="button"
+                  className={`cms-route-pin-btn ${activePinMode === "start" ? "active-start" : ""}`}
+                  onClick={() => setActivePinMode("start")}
+                >
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#10b981" }} />
+                  1. Pin Route Start (A)
+                </button>
+                <button
+                  type="button"
+                  className={`cms-route-pin-btn ${activePinMode === "end" ? "active-end" : ""}`}
+                  onClick={() => setActivePinMode("end")}
+                >
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: "#ef4444" }} />
+                  2. Pin Route End (B)
+                </button>
+              </div>
+
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                <div className="cms-route-map-stat-pill">
+                  <span>🛣️ Driving Route: <strong>{values.totalDistanceKm ? `${values.totalDistanceKm} km` : "--"}</strong></span>
+                </div>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-ghost"
+                  style={{ padding: "4px 8px", fontSize: "11px", height: "auto" }}
+                  onClick={() => {
+                    setIsMapVisible(!isMapVisible);
+                    if (!isMapVisible && mapInstanceRef.current) {
+                      setTimeout(() => mapInstanceRef.current?.invalidateSize(), 150);
+                    }
+                  }}
+                >
+                  {isMapVisible ? "Hide Map" : "Show Map"}
+                </button>
+              </div>
+            </div>
+
+            {isMapVisible && (
+              <>
+                <div ref={mapDivRef} className="cms-route-map-canvas" />
+                <small style={{ display: "block", marginTop: 6, color: "#64748b", fontSize: "0.75rem" }}>
+                  💡 <strong>Uber-style Pinning:</strong> Click on the map to set a stop, or drag the green &amp; red markers to fine-tune.
+                </small>
+              </>
+            )}
+          </div>
+
+          <div className="cms-field">
+            <label>
+              <span>Route Start <small style={{ color: "#059669", fontWeight: 600 }}>(📍 Point A)</small></span>
+              <input
+                type="text"
+                placeholder="Click map or type start location..."
+                value={values.routeStart}
+                onChange={(e) => handleChange("routeStart", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+          </div>
+
+          <div className="cms-field">
+            <label>
+              <span>Route End <small style={{ color: "#dc2626", fontWeight: 600 }}>(🏁 Point B)</small></span>
+              <input
+                type="text"
+                placeholder="Click map or type end location..."
+                value={values.routeEnd}
+                onChange={(e) => handleChange("routeEnd", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+          </div>
+
+          <div className="cms-field">
+            <label>
+              <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Total Distance (KM) <small style={{ color: "#2563eb", fontWeight: 600 }}>(Auto-calculated)</small></span>
+                {values.routeStart && values.routeEnd && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (startCoords && endCoords && mapInstanceRef.current) {
+                        drawRoutePolyline(startCoords, endCoords, mapInstanceRef.current);
+                      } else {
+                        syncFromTextInput(values.routeStart, values.routeEnd);
+                      }
+                    }}
+                    disabled={calcState.loading || isSaving}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      color: "#2563eb",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      textDecoration: "underline",
+                    }}
+                    title="Recalculate route distance"
+                  >
+                    <RefreshCw size={11} style={{ animation: calcState.loading ? "spin 1s linear infinite" : "none" }} />
+                    {calcState.loading ? "Calculating..." : "Recalculate"}
+                  </button>
+                )}
+              </span>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                placeholder="e.g. 18.5"
+                value={values.totalDistanceKm}
+                onChange={(e) => handleChange("totalDistanceKm", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+            {calcState.loading && (
+              <span style={{ fontSize: "12px", color: "#2563eb", marginTop: "4px", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                <RefreshCw size={12} style={{ animation: "spin 1s linear infinite" }} /> Calculating driving road distance...
+              </span>
+            )}
+            {!calcState.loading && calcState.message && (
+              <span style={{ fontSize: "12px", color: calcState.success ? "#16a34a" : "#64748b", marginTop: "4px", display: "block" }}>
+                {calcState.message}
+              </span>
+            )}
+            {errors.totalDistanceKm && <span className="cms-error">{errors.totalDistanceKm}</span>}
+          </div>
+
+          <div className="cms-field">
+            <label>
+              <span>Est Time (Minutes) <small style={{ color: "#64748b", fontWeight: 400 }}>(Manual Entry)</small></span>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 45"
+                value={values.estimatedTimeMinutes}
+                onChange={(e) => handleChange("estimatedTimeMinutes", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+            {errors.estimatedTimeMinutes && <span className="cms-error">{errors.estimatedTimeMinutes}</span>}
+          </div>
+
+          <div className="cms-field-group cms-transport-route-slab" style={{ gridColumn: "1 / -1" }}>
+            <h4>Distance &amp; Slab Rate Configuration</h4>
+            <div className="cms-form-grid cols-3">
+              <div className="cms-field">
+                <label>
+                  <span>Min Range (KM)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 5"
+                    value={values.minDistanceKm}
+                    onChange={(e) => handleChange("minDistanceKm", e.target.value)}
+                    disabled={isSaving}
+                  />
+                </label>
+              </div>
+              <div className="cms-field">
+                <label>
+                  <span>Non-AC Base Fare (₹)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 1000"
+                    value={values.minBaseFare}
+                    onChange={(e) => handleChange("minBaseFare", e.target.value)}
+                    disabled={isSaving}
+                  />
+                </label>
+              </div>
+              <div className="cms-field">
+                <label>
+                  <span>Non-AC Rate/Addl KM</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 100"
+                    value={values.ratePerKm}
+                    onChange={(e) => handleChange("ratePerKm", e.target.value)}
+                    disabled={isSaving}
+                  />
+                </label>
+              </div>
+              <div className="cms-field">
+                <label>
+                  <span>AC Base Fare (₹)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 1200"
+                    value={values.acMinBaseFare}
+                    onChange={(e) => handleChange("acMinBaseFare", e.target.value)}
+                    disabled={isSaving}
+                  />
+                </label>
+              </div>
+              <div className="cms-field">
+                <label>
+                  <span>AC Rate/Addl KM (₹)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 150"
+                    value={values.acRatePerKm}
+                    onChange={(e) => handleChange("acRatePerKm", e.target.value)}
+                    disabled={isSaving}
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="cms-field full">
+            <label>
+              <span>Description</span>
+              <textarea
+                placeholder="Enter route description..."
+                rows={3}
+                value={values.description}
+                onChange={(e) => handleChange("description", e.target.value)}
+                disabled={isSaving}
+              />
+            </label>
+          </div>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 function AddAttendantModal({ staff, isSaving, onCancel, onSave }) {
   const [values, setValues] = useState({ staffId: "", employeeId: "", attendantName: "", mobileNumber: "", gender: "", status: "Active" });
   const [error, setError] = useState("");
@@ -993,6 +1693,38 @@ function TransportContextPage({ navigation, onNavigate }) {
     if (!value) closeAction();
   };
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
+
+  const distanceCalcDebounceRef = useRef(null);
+  const handleRouteFieldChange = (name, value, nextValues, setValue) => {
+    if (formConfig?.key !== "routes") return;
+    if (name === "routeStart" || name === "routeEnd") {
+      const start = name === "routeStart" ? value : nextValues?.routeStart;
+      const end = name === "routeEnd" ? value : nextValues?.routeEnd;
+      if (start && end && String(start).trim().length >= 2 && String(end).trim().length >= 2) {
+        if (distanceCalcDebounceRef.current) clearTimeout(distanceCalcDebounceRef.current);
+        distanceCalcDebounceRef.current = setTimeout(async () => {
+          try {
+            const res = await apiClient.get(apiEndpoints.transport.calculateDistance, {
+              params: {
+                startLocation: String(start).trim(),
+                endLocation: String(end).trim(),
+                campusId: selectedCampusId || 1,
+              },
+            });
+            const data = res?.data?.data || res?.data;
+            if (data && data.distanceKm > 0) {
+              setValue("totalDistanceKm", data.distanceKm);
+              if (data.estimatedDurationMinutes > 0) {
+                setValue("estimatedTimeMinutes", data.estimatedDurationMinutes);
+              }
+            }
+          } catch (err) {
+            console.warn("Auto distance calculation error:", err);
+          }
+        }, 400);
+      }
+    }
+  };
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -1088,7 +1820,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         getAllTransportPages(apiClient, apiEndpoints.faculty.list, driverStaffParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.drivers, driverParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}, signal),
-        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}, signal),
+        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, campusParams, signal),
         apiClient.get(apiEndpoints.transport.trips, { signal }),
         apiClient.get(apiEndpoints.transport.gps, { signal }),
         getAllTransportPages(apiClient, apiEndpoints.transport.maintenance, {}, signal),
@@ -3782,12 +4514,20 @@ function TransportContextPage({ navigation, onNavigate }) {
           onCancel={(hasSaved) => { if (!isFormSubmitting) { setFormConfig(null); if (hasSaved) fetchTransportData(); } }}
           onSave={saveForm}
         />
+      ) : formConfig?.key === "routes" ? (
+        <RouteFormModal
+          title={formConfig.title}
+          initial={formConfig.record || {}}
+          isSaving={isFormSubmitting}
+          onCancel={() => { if (!isFormSubmitting) setFormConfig(null); }}
+          onSave={saveForm}
+        />
       ) : formConfig ? (
         <FormModal
           title={formConfig.title}
           fields={formConfig.fields}
           initial={formConfig.record || {}}
-          columns={formConfig.key === "routes" ? 2 : 3}
+          columns={3}
           className={formConfig.key === "pickupPoints"
             ? "cms-transport-form-modal cms-transport-pickup-modal"
             : formConfig.key === "vehicles"
@@ -3797,6 +4537,7 @@ function TransportContextPage({ navigation, onNavigate }) {
           onSave={saveForm}
           awaitSave
           savingLabel={<span className="cms-transport-action-loading"><i aria-hidden="true" />{formConfig.record?.id ? "Updating..." : "Adding..."}</span>}
+          onFieldChange={handleRouteFieldChange}
         />
       ) : null}
 

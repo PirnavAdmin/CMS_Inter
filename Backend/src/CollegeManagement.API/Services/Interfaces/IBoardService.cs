@@ -30,7 +30,7 @@ namespace CollegeManagement.API.Services.Interfaces
         /// <param name="request">Creation details.</param>
         /// <param name="userName">The authenticated admin user initiating the action.</param>
         /// <returns>The created board details.</returns>
-        Task<BoardResponse> CreateBoardAsync(CreateBoardRequest request, string userName);
+        Task<BoardResponse> CreateBoardAsync(CreateBoardRequest request, string userName, int? collegeId = null, int? campusId = null);
 
         /// <summary>
         /// Updates an existing board after validation.
@@ -63,7 +63,7 @@ namespace CollegeManagement.API.Services.Interfaces
         /// </summary>
         /// <param name="request">The validation parameter details.</param>
         /// <returns>The validation response status.</returns>
-        Task<ValidateBoardCodeResponse> ValidateBoardCodeAsync(ValidateBoardCodeRequest request);
+        Task<ValidateBoardCodeResponse> ValidateBoardCodeAsync(ValidateBoardCodeRequest request, int? collegeId = null);
 
         /// <summary>
         /// Retrieves all active countries.

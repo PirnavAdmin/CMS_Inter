@@ -746,11 +746,8 @@ namespace CollegeManagement.API.Controllers.V1
                 return Ok(new List<StudentListItemDto>());
             }
 
-            var students = await _service.GetActiveAsync();
-            if (campusId.HasValue && campusId.Value > 0)
-            {
-                students = students.Where(s => s.CampusId == campusId.Value).ToList();
-            }
+            var collegeId = _jwtTokenHelper.GetCollegeId(User) ?? 1;
+            var students = await _service.GetActiveAsync(collegeId, campusId);
 
             return Ok(students);
         }

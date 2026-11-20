@@ -11,7 +11,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
             DateTime? attendanceDate = null,
             string? session = null,
             string? attendanceStatus = null,
-            string? search = null);
+            string? search = null,
+            int? campusId = null);
 
         Task<HostelAttendanceResponseDto?> GetByIdAsync(
             int attendanceId);

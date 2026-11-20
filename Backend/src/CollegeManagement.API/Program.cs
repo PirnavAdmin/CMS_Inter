@@ -321,6 +321,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ICampusAuthorizationService, CampusAuthorizationService>();
+builder.Services.AddScoped<ITenantSecurityService, TenantSecurityService>();
 builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
@@ -433,6 +434,7 @@ builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
 builder.Services.AddScoped<IEnquiryService, EnquiryService>();
 builder.Services.AddScoped<ILandingPageService, LandingPageService>();
 
+builder.Services.AddHttpClient();
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {

@@ -40,6 +40,11 @@ namespace CollegeManagement.API.DTOs.Hostel
         [Required]
         [StringLength(500)]
         public string Reason { get; set; } = string.Empty;
+
+        public bool AutoApprove { get; set; } = true;
+
+        [StringLength(20)]
+        public string? ApprovalStatus { get; set; }
     }
 
     public class UpdateHostelTransferVacateDto

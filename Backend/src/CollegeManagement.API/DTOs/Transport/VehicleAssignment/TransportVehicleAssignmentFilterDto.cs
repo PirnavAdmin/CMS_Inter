@@ -2,6 +2,9 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleAssignment
 {
     public class TransportVehicleAssignmentFilterDto
     {
+        public int? CampusId { get; set; }
+        public int? CollegeId { get; set; }
+        public int? AcademicYearId { get; set; }
         public string? Search { get; set; }
 
         public long? RouteId { get; set; }

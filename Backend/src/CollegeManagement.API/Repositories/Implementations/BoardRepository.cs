@@ -237,12 +237,12 @@ namespace CollegeManagement.API.Repositories.Implementations
         /// <summary>
         /// Checks duplicate board code via stored procedure.
         /// </summary>
-        public async Task<bool> IsBoardCodeExistsAsync(string boardCode, int? boardId = null)
+        public async Task<bool> IsBoardCodeExistsAsync(string boardCode, int? boardId = null, int? collegeId = null)
         {
             var conn = await GetOpenConnectionAsync();
             var count = await conn.ExecuteScalarAsync<int>(
                 "sp_ValidateBoardCode",
-                new { p_BoardCode = boardCode, p_ExcludeBoardId = boardId },
+                new { p_BoardCode = boardCode, p_ExcludeBoardId = boardId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }

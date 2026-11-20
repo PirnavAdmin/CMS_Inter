@@ -301,24 +301,26 @@ function examCellShieldPlugin(apiBaseUrl) {
             }));
           }
 
+          const hasAuth = Boolean(forwardHeaders.authorization || forwardHeaders.Authorization);
+
           if (isMasterGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_MASTER_GROUPS,
+              data: hasAuth ? [] : CANONICAL_MASTER_GROUPS,
             }));
           }
 
           if (isGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_GROUPS,
+              data: hasAuth ? [] : CANONICAL_GROUPS,
             }));
           }
 
           if (isSections) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_SECTIONS,
+              data: hasAuth ? [] : CANONICAL_SECTIONS,
             }));
           }
 
@@ -1013,7 +1015,7 @@ function examCellShieldPlugin(apiBaseUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://armoire-vastly-sworn.ngrok-free.dev").trim().replace(/\/+$/, "");
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://sterile-retorted-tightness.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {

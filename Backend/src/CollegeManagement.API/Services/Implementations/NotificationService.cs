@@ -17,6 +17,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 
 namespace CollegeManagement.API.Services.Implementations
@@ -31,6 +32,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IHubContext<NotificationHub> _hubContext;
         private readonly IDistributedCache _cache;
         private readonly ILogger<NotificationService> _logger;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
         private sealed class CachedNotificationList
         {
@@ -61,13 +63,15 @@ namespace CollegeManagement.API.Services.Implementations
             AppDbContext context,
             IHubContext<NotificationHub> hubContext,
             IDistributedCache cache,
-            ILogger<NotificationService> logger)
+            ILogger<NotificationService> logger,
+            IHttpContextAccessor? httpContextAccessor = null)
         {
             _notificationRepo = notificationRepo;
             _context = context;
             _hubContext = hubContext;
             _cache = cache;
             _logger = logger;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private static IChangeToken GetUserChangeToken(int userId)
@@ -270,9 +274,17 @@ namespace CollegeManagement.API.Services.Implementations
 
                 // Also notify active Admins scoped to the same college
                 int? eventCollegeId = null;
-                if (calendarEvent.CampusId.HasValue && calendarEvent.CampusId > 0)
+                if (calendarEvent.CampusId.HasValue && calendarEvent.CampusId > 0 && calendarEvent.CampusId.Value != 999999999)
                 {
                     eventCollegeId = await GetCampusCollegeIdAsync(calendarEvent.CampusId.Value);
+                }
+
+                if (!eventCollegeId.HasValue && calendarEvent.CreatedBy > 0)
+                {
+                    eventCollegeId = await _context.Users.AsNoTracking()
+                        .Where(u => u.UserId == calendarEvent.CreatedBy)
+                        .Select(u => u.CollegeId)
+                        .FirstOrDefaultAsync();
                 }
 
                 var adminQuery = _context.Users.AsNoTracking()
@@ -281,11 +293,13 @@ namespace CollegeManagement.API.Services.Implementations
                 if (eventCollegeId.HasValue && eventCollegeId.Value > 0)
                 {
                     int targetCollege = eventCollegeId.Value;
-                    adminQuery = adminQuery.Where(u => (u.CollegeId ?? 1) == targetCollege);
+                    adminQuery = targetCollege == 1
+                        ? adminQuery.Where(u => u.CollegeId == 1 || !u.CollegeId.HasValue)
+                        : adminQuery.Where(u => u.CollegeId == targetCollege);
                 }
                 else
                 {
-                    adminQuery = adminQuery.Where(u => !u.CollegeId.HasValue || u.CollegeId.Value <= 1);
+                    adminQuery = adminQuery.Where(u => false);
                 }
 
                 var adminUserIds = await adminQuery
@@ -319,14 +333,17 @@ namespace CollegeManagement.API.Services.Implementations
 
                 _logger.LogInformation("PublishEventNotificationsAsync: Created {Count} notifications for Event #{EventId}", insertedCount, eventId);
 
-                await _hubContext.Clients.All.SendAsync("AcademicCalendarEventPublished", new
+                if (eventCollegeId.HasValue && eventCollegeId.Value > 0)
                 {
-                    eventId = calendarEvent.EventId,
-                    title = calendarEvent.Title,
-                    eventType = calendarEvent.EventType,
-                    startDate = calendarEvent.StartDate,
-                    endDate = calendarEvent.EndDate
-                });
+                    await _hubContext.Clients.Group($"College_{eventCollegeId.Value}").SendAsync("AcademicCalendarEventPublished", new
+                    {
+                        eventId = calendarEvent.EventId,
+                        title = calendarEvent.Title,
+                        eventType = calendarEvent.EventType,
+                        startDate = calendarEvent.StartDate,
+                        endDate = calendarEvent.EndDate
+                    });
+                }
 
                 return insertedCount;
             }
@@ -603,7 +620,7 @@ namespace CollegeManagement.API.Services.Implementations
                 new { CampusId = campusId });
         }
 
-        private async Task<List<int>> ResolveRoleUserIdsAsync(IEnumerable<string> roles, int? campusId)
+        private async Task<List<int>> ResolveRoleUserIdsAsync(IEnumerable<string> roles, int? campusId, int? explicitCollegeId = null)
         {
             var roleList = (roles ?? Enumerable.Empty<string>())
                 .Where(r => !string.IsNullOrWhiteSpace(r))
@@ -616,10 +633,24 @@ namespace CollegeManagement.API.Services.Implementations
             bool wantsAdmin = roleList.Any(r => r.Contains("admin"));
             var nonAdminRoles = roleList.Where(r => !r.Contains("admin")).ToList();
 
-            int? targetCollegeId = null;
-            if (campusId.HasValue && campusId.Value > 0)
+            int? targetCollegeId = explicitCollegeId;
+            if (!targetCollegeId.HasValue && campusId.HasValue && campusId.Value > 0 && campusId.Value != 999999999)
             {
                 targetCollegeId = await GetCampusCollegeIdAsync(campusId.Value);
+            }
+
+            if (!targetCollegeId.HasValue)
+            {
+                var httpContext = _httpContextAccessor?.HttpContext;
+                if (httpContext?.User != null)
+                {
+                    var collegeClaim = httpContext.User.FindFirst("CollegeId")?.Value 
+                                    ?? httpContext.User.FindFirst("collegeId")?.Value;
+                    if (int.TryParse(collegeClaim, out int cid) && cid > 0)
+                    {
+                        targetCollegeId = cid;
+                    }
+                }
             }
 
             var activeUsers = await _context.Users.AsNoTracking()
@@ -637,6 +668,9 @@ namespace CollegeManagement.API.Services.Implementations
                 })
                 .ToListAsync();
 
+            var callerContext = _httpContextAccessor?.HttpContext;
+            bool isSuperAdminCaller = callerContext?.User?.IsInRole("Super Admin") ?? false;
+
             return activeUsers
                 .Where(u =>
                 {
@@ -650,22 +684,20 @@ namespace CollegeManagement.API.Services.Implementations
 
                     if (!roleMatched) return false;
 
-                    if (campusId.HasValue && campusId.Value > 0)
-                    {
-                        bool sameCollege = targetCollegeId.HasValue && targetCollegeId.Value > 0
-                            ? (u.CollegeId ?? 1) == targetCollegeId.Value
-                            : (!u.CollegeId.HasValue || u.CollegeId.Value <= 1);
+                    int effectiveCollegeId = targetCollegeId.HasValue && targetCollegeId.Value > 0 ? targetCollegeId.Value : 1;
+                    bool sameCollege = effectiveCollegeId == 1
+                        ? (u.CollegeId == 1 || (!u.CollegeId.HasValue && !u.HasAdminId && (u.RoleName != "Super Admin")))
+                        : (u.CollegeId == effectiveCollegeId);
 
+                    if (!sameCollege && !isSuperAdminCaller) return false;
+
+                    if (campusId.HasValue && campusId.Value > 0 && campusId.Value != 999999999)
+                    {
                         bool campusMatched =
                             u.StaffCampusId == campusId.Value ||
                             u.StudentCampusId == campusId.Value ||
-                            (sameCollege && (u.HasAdminId || rLower.Contains("admin") || dLower.Contains("admin") || rLower == "principal" || dLower == "principal" || rLower == "receptionist" || dLower == "receptionist"));
+                            (u.HasAdminId || rLower.Contains("admin") || dLower.Contains("admin") || rLower == "principal" || dLower == "principal" || rLower == "receptionist" || dLower == "receptionist");
                         if (!campusMatched) return false;
-                    }
-                    else
-                    {
-                        // Without a campusId, only notify legacy/default college staff to avoid cross-tenant leaks
-                        if (u.CollegeId.HasValue && u.CollegeId.Value > 1) return false;
                     }
                     return true;
                 })
@@ -675,11 +707,11 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         public async Task<int> SendToRoleAsync(
-            string role, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+            string role, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null, int? collegeId = null)
         {
             try
             {
-                var userIds = await ResolveRoleUserIdsAsync(new[] { role }, campusId);
+                var userIds = await ResolveRoleUserIdsAsync(new[] { role }, campusId, collegeId);
                 if (userIds.Any())
                 {
                     return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
@@ -698,8 +730,18 @@ namespace CollegeManagement.API.Services.Implementations
         {
             try
             {
+                if (campusId <= 0 || campusId == 999999999)
+                {
+                    return 0;
+                }
+
                 var targetCollegeId = await GetCampusCollegeIdAsync(campusId);
-                int resolvedCollege = targetCollegeId.HasValue && targetCollegeId.Value > 0 ? targetCollegeId.Value : 1;
+                if (!targetCollegeId.HasValue || targetCollegeId.Value <= 0)
+                {
+                    _logger.LogWarning("SendToCampusAsync: Campus #{CampusId} has no associated college.", campusId);
+                    return 0;
+                }
+                int resolvedCollege = targetCollegeId.Value;
 
                 var query = _context.Users.AsNoTracking()
                     .Include(u => u.Role)
@@ -708,7 +750,8 @@ namespace CollegeManagement.API.Services.Implementations
                     .Where(u => u.IsActive && (
                         (u.Staff != null && u.Staff.CampusId == campusId) ||
                         (u.Student != null && u.Student.CampusId == campusId) ||
-                        ((u.CollegeId ?? 1) == resolvedCollege && (u.AdminId.HasValue || (u.Role != null && u.Role.RoleName.ToLower().Contains("admin"))))));
+                        (((u.CollegeId == resolvedCollege) || (resolvedCollege == 1 && !u.CollegeId.HasValue)) && 
+                         (u.AdminId.HasValue || (u.Role != null && u.Role.RoleName.ToLower().Contains("admin"))))));
 
                 var userIds = await query.Select(u => u.UserId).Distinct().ToListAsync();
                 if (userIds.Any())
@@ -726,15 +769,35 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         public async Task<int> SendGlobalAsync(
-            string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+            string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null, int? collegeId = null)
         {
             try
             {
-                var userIds = await _context.Users.AsNoTracking()
-                    .Where(u => u.IsActive)
-                    .Select(u => u.UserId)
-                    .ToListAsync();
+                int? targetCollegeId = collegeId;
+                if (!targetCollegeId.HasValue)
+                {
+                    var httpContext = _httpContextAccessor?.HttpContext;
+                    if (httpContext?.User != null && !httpContext.User.IsInRole("Super Admin"))
+                    {
+                        var collegeClaim = httpContext.User.FindFirst("CollegeId")?.Value 
+                                        ?? httpContext.User.FindFirst("collegeId")?.Value;
+                        if (int.TryParse(collegeClaim, out int cid) && cid > 0)
+                        {
+                            targetCollegeId = cid;
+                        }
+                    }
+                }
 
+                var query = _context.Users.AsNoTracking().Where(u => u.IsActive);
+                if (targetCollegeId.HasValue && targetCollegeId.Value > 0)
+                {
+                    int cid = targetCollegeId.Value;
+                    query = cid == 1
+                        ? query.Where(u => u.CollegeId == 1 || !u.CollegeId.HasValue)
+                        : query.Where(u => u.CollegeId == cid);
+                }
+
+                var userIds = await query.Select(u => u.UserId).ToListAsync();
                 if (userIds.Any())
                 {
                     return await SendToUsersAsync(userIds, title, message, type, referenceId, actionUrl);
@@ -750,11 +813,11 @@ namespace CollegeManagement.API.Services.Implementations
         }
 
         public async Task<int> SendToRolesAsync(
-            IEnumerable<string> roles, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null)
+            IEnumerable<string> roles, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null, int? collegeId = null)
         {
             try
             {
-                var distinctUserIds = await ResolveRoleUserIdsAsync(roles, campusId);
+                var distinctUserIds = await ResolveRoleUserIdsAsync(roles, campusId, collegeId);
                 if (!distinctUserIds.Any()) return 0;
                 return await SendToUsersAsync(distinctUserIds, title, message, type, referenceId, actionUrl);
             }

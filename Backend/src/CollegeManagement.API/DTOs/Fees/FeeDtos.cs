@@ -5,6 +5,7 @@ namespace CollegeManagement.API.DTOs.Fees;
 // ========================= FEE TYPE =========================
 public class CreateFeeTypeRequest
 {
+    public int? CollegeId { get; set; }
     [Required, StringLength(100, MinimumLength = 2)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, StringLength(50)] public string Category { get; set; } = "Academic";
     
@@ -29,6 +30,7 @@ public class UpdateFeeTypeRequest
 
 public class FeeTypeResponse
 {
+    public int CollegeId { get; set; }
     public int FeeTypeId { get; set; }
     public string FeeTypeCode { get; set; } = string.Empty;
     public string FeeTypeName { get; set; } = string.Empty;
@@ -46,6 +48,7 @@ public class FeeTypeResponse
 // ========================= FEE STRUCTURE =========================
 public class CreateFeeStructureRequest
 {
+    public int? CollegeId { get; set; }
     public int? CampusId { get; set; }
     [Range(1, int.MaxValue)] public int BoardId { get; set; }
     [Range(1, int.MaxValue)] public int AcademicYearId { get; set; }
@@ -89,6 +92,7 @@ public class UpdateFeeStructureItemRequest
 
 public class FeeStructureResponse
 {
+    public int CollegeId { get; set; }
     public int FeeStructureId { get; set; }
     public int? CampusId { get; set; }
     public string? CampusName { get; set; }
@@ -132,6 +136,7 @@ public class FeeStructureItemResponse
 // ========================= SCHOLARSHIP MASTER =========================
 public class CreateScholarshipRequest
 {
+    public int? CollegeId { get; set; }
     [Required, StringLength(100, MinimumLength = 2)] public string ScholarshipName { get; set; } = string.Empty;
     public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
@@ -160,6 +165,7 @@ public class UpdateScholarshipRequest
 
 public class ScholarshipResponse
 {
+    public int CollegeId { get; set; }
     public int ScholarshipId { get; set; }
     public string ScholarshipName { get; set; } = string.Empty;
     public string? Description { get; set; }

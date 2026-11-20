@@ -28,7 +28,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 int? roomId = null,
                 int? studentId = null,
                 string? status = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             var records =
                 await _allocationRepository.GetAllAsync(
@@ -36,7 +37,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     roomId,
                     studentId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return records.Select(MapToResponseDto);
         }

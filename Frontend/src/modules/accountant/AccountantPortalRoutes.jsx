@@ -58,7 +58,7 @@ export default function AccountantPortalRoutes() {
         <Route index element={<AccountantDashboard />} />
         <Route path="fees" element={<AccountantPermissionRoute moduleKey="fee-management" screenKey="fee-structure" moduleName="Fee Management"><AccountantFees /></AccountantPermissionRoute>} />
         <Route path="payments" element={<AccountantPermissionRoute moduleKey="fee-management" screenKey="fee-collection" moduleName="Reimbursement & Payout History"><AccountantPayments /></AccountantPermissionRoute>} />
-        <Route path="payroll" element={<AccountantPermissionRoute moduleKey="payroll" moduleName="Payroll"><AccountantPayroll /></AccountantPermissionRoute>} />
+        <Route path="payroll" element={<AccountantPayroll />} />
         <Route path="payroll/attendance-impact" element={<AccountantPermissionRoute moduleKey="payroll" screenKey="attendance-impact" moduleName="Attendance Impact"><AccountantAttendanceImpact /></AccountantPermissionRoute>} />
         <Route path="reimbursement" element={<AccountantPermissionRoute moduleKey="reimbursement" moduleName="Staff Reimbursements"><ReimbursementPage isAccountantView={true} /></AccountantPermissionRoute>} />
         <Route path="reimbursements" element={<AccountantPermissionRoute moduleKey="reimbursement" moduleName="Staff Reimbursements"><ReimbursementPage isAccountantView={true} /></AccountantPermissionRoute>} />

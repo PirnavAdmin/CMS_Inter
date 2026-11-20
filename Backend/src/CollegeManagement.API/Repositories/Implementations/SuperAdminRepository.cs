@@ -133,7 +133,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                 p,
                 commandType: CommandType.StoredProcedure);
 
-            return p.Get<int>("p_NewCollegeId");
+            int newCollegeId = p.Get<int>("p_NewCollegeId");
+            if (newCollegeId > 0)
+            {
+                var campusCode = $"{request.Code.Trim().ToUpper()}-MAIN";
+                var campusName = "Main Campus";
+                var campusAddress = !string.IsNullOrWhiteSpace(request.Address) ? request.Address : $"{request.Name.Trim()} Main Campus";
+                await Connection.ExecuteAsync(@"
+                    INSERT INTO Campuses (CampusName, CampusCode, CollegeId, Address, IsActive, IsHQ, CreatedAt)
+                    SELECT @CampusName, @CampusCode, @CollegeId, @Address, 1, 1, UTC_TIMESTAMP()
+                    WHERE NOT EXISTS (SELECT 1 FROM Campuses WHERE CollegeId = @CollegeId);",
+                    new { CampusName = campusName, CampusCode = campusCode, CollegeId = newCollegeId, Address = campusAddress });
+            }
+
+            return newCollegeId;
         }
 
         public async Task<bool> UpdateCollegeAsync(int collegeId, UpdateCollegeRequest request)

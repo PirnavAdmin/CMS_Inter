@@ -18,23 +18,26 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
         public async Task<IEnumerable<HostelOccupancyReportDto>>
             GetOccupancyReportAsync(
-                int? hostelId = null)
+                int? hostelId = null,
+                int? campusId = null)
         {
             return await _reportRepository
-                .GetOccupancyReportAsync(hostelId);
+                .GetOccupancyReportAsync(hostelId, campusId);
         }
 
         public async Task<IEnumerable<HostelStudentReportDto>>
             GetStudentReportAsync(
                 int? hostelId = null,
                 string? status = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             return await _reportRepository
                 .GetStudentReportAsync(
                     hostelId,
                     status,
-                    search);
+                    search,
+                    campusId);
         }
 
         public async Task<IEnumerable<HostelAttendanceReportDto>>
@@ -44,7 +47,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 DateTime? toDate = null,
                 string? session = null,
                 string? attendanceStatus = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             return await _reportRepository
                 .GetAttendanceReportAsync(
@@ -53,7 +57,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     toDate,
                     session,
                     attendanceStatus,
-                    search);
+                    search,
+                    campusId);
         }
 
         public async Task<IEnumerable<HostelOutpassLeaveReportDto>>
@@ -63,7 +68,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 DateTime? toDate = null,
                 string? requestType = null,
                 string? approvalStatus = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             return await _reportRepository
                 .GetOutpassLeaveReportAsync(
@@ -72,7 +78,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     toDate,
                     requestType,
                     approvalStatus,
-                    search);
+                    search,
+                    campusId);
         }
 
         public async Task<IEnumerable<HostelTransferVacateReportDto>>
@@ -83,7 +90,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 string? requestType = null,
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             return await _reportRepository
                 .GetTransferVacateReportAsync(
@@ -93,7 +101,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     requestType,
                     approvalStatus,
                     feeSettlementStatus,
-                    search);
+                    search,
+                    campusId);
         }
     }
 }

@@ -3,6 +3,7 @@ using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using MySqlConnector;
@@ -19,16 +20,26 @@ public class FeeRepository : IFeeRepository
 {
     private readonly AppDbContext _db;
     private readonly CollegeManagement.API.Services.Interfaces.INumberSeriesService _numberSeriesService;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
     private static readonly JsonSerializerOptions _jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true
     };
 
-    public FeeRepository(AppDbContext db, CollegeManagement.API.Services.Interfaces.INumberSeriesService numberSeriesService)
+    public FeeRepository(AppDbContext db, CollegeManagement.API.Services.Interfaces.INumberSeriesService numberSeriesService, IHttpContextAccessor? httpContextAccessor = null)
     {
         _db = db;
         _numberSeriesService = numberSeriesService;
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    private int? ResolveCollegeId()
+    {
+        var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                 ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+        if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+        return null;
     }
 
     private IDbConnection Connection()
@@ -85,13 +96,15 @@ public class FeeRepository : IFeeRepository
     public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
     {
         var c = Connection();
+        var collegeId = ResolveCollegeId();
         return await c.QueryAsync<FeeTypeResponse>(
             "sp_FeeType_GetAll",
             new
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = collegeId
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -186,9 +199,10 @@ public class FeeRepository : IFeeRepository
     public async Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null)
     {
         var c = Connection();
+        var collegeId = ResolveCollegeId();
         using var multi = await c.QueryMultipleAsync(
             "sp_FeeStructure_GetAll",
-            new { p_CampusId = campusId ?? 0 },
+            new { p_CampusId = campusId ?? 0, p_CollegeId = collegeId },
             commandType: CommandType.StoredProcedure);
 
         var structures = (await multi.ReadAsync<FeeStructureResponse>()).ToList();

@@ -11,6 +11,8 @@ namespace CollegeManagement.API.DTOs.AcademicYear
 
         public int? CampusId { get; set; }
 
+        public int? CollegeId { get; set; }
+
         public int? BoardId { get; set; }
 
         [Required]

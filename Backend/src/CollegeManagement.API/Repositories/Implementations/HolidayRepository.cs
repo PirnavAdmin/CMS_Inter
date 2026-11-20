@@ -9,6 +9,7 @@ using CollegeManagement.API.DTOs.Holiday;
 using CollegeManagement.API.Models.Holiday;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -16,10 +17,20 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class HolidayRepository : IHolidayRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public HolidayRepository(AppDbContext context)
+        public HolidayRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
@@ -81,7 +92,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_FromDate = filter.FromDate.HasValue ? filter.FromDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
                     p_ToDate = filter.ToDate.HasValue ? filter.ToDate.Value.ToDateTime(TimeOnly.MinValue) : (DateTime?)null,
                     p_Limit = pageSize,
-                    p_Offset = offset
+                    p_Offset = offset,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 

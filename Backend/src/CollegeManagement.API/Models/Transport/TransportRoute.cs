@@ -29,6 +29,12 @@ public class TransportRoute
     public decimal AcBaseFare { get; set; } = 1200;
     public decimal AcRatePerKm { get; set; } = 150;
 
+    public decimal? StartLatitude { get; set; }
+    public decimal? StartLongitude { get; set; }
+    public decimal? EndLatitude { get; set; }
+    public decimal? EndLongitude { get; set; }
+    public string? RouteGeometryJson { get; set; }
+
     public bool Status { get; set; } = true;
     public bool IsDeleted { get; set; } = false;
     public long? CreatedBy { get; set; }

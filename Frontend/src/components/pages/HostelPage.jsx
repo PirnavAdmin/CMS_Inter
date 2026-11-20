@@ -1,5 +1,3 @@
-import PaginatedTable from "../common/PaginatedTable.jsx";
-import { Pagination as AdminPagination } from "../common/Ui.jsx";
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -47,26 +45,11 @@ import {
   Receipt,
   CreditCard,
 } from "lucide-react";
-import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
-import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
-import campusHeroImg from "@/assets/campus-hero.jpg";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts";
-import { Modal, ConfirmDialog, StatusBadge, Toast } from "@/components/common/Ui.jsx";
+import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import { Modal, ConfirmDialog, StatusBadge, Toast, Skeleton, SkeletonRow, SkeletonInput, SkeletonButton } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
-import { getAuthUser } from "@/features/authStorage.js";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
@@ -91,6 +74,86 @@ const studentSubtabs = [
   { id: "outpasses", label: "Outpass & Leave Management", title: "Outpass & Leave Requests", subtitle: "Manage student gate passes, weekend home permissions, emergency leaves, and warden approvals", icon: ArrowRightLeft },
   { id: "transfers", label: "Transfer & Vacate Student", title: "Hostel Transfers & Bed Vacations", subtitle: "Track inter-block migrations, room swaps, and official bed vacation applications", icon: RotateCcw },
 ];
+
+const hostelViewPaths = {
+  dashboard: "/hostel",
+  setup: { blocks: "/hostel?tab=setup&subtab=blocks", rooms: "/hostel?tab=setup&subtab=rooms", wardens: "/hostel?tab=setup&subtab=wardens" },
+  students: { allocations: "/hostel?tab=students&subtab=allocations", attendance: "/hostel?tab=students&subtab=attendance", outpasses: "/hostel?tab=students&subtab=outpasses", transfers: "/hostel?tab=students&subtab=transfers" },
+  reports: "/hostel?tab=reports",
+};
+const resolveHostelView = (pathname, search = "") => {
+  const path = pathname.toLowerCase().replace(/\/+$/, "");
+  if (!/^\/(?:dashboard\/)?hostel(?:\/|$)/.test(path)) return null;
+  const suffix = path.replace(/^\/(?:dashboard\/)?hostel\/?/, "");
+  const view = { major: "dashboard", setup: "blocks", student: "allocations" };
+  const setup = { "master": "blocks", "master-setup": "blocks", "master-setup/blocks": "blocks", "master-setup/rooms-beds": "rooms", "master-setup/rooms": "rooms", "master-setup/wardens": "wardens" };
+  const students = { "students": "allocations", "students/allocations": "allocations", "student-allocation": "allocations", "attendance": "attendance", "students/attendance": "attendance", "students/outpasses": "outpasses", "students/transfers": "transfers" };
+  const params = new URLSearchParams(search);
+  const tab = params.get("tab");
+  const subtab = params.get("subtab");
+  if (tab === "dashboard") return view;
+  if (tab === "setup") return { ...view, major: "setup", setup: Object.hasOwn(hostelViewPaths.setup, subtab) ? subtab : "blocks" };
+  if (tab === "students") return { ...view, major: "students", student: Object.hasOwn(hostelViewPaths.students, subtab) ? subtab : "allocations" };
+  if (tab === "reports") return { ...view, major: "reports" };
+  if (Object.hasOwn(setup, suffix)) return { ...view, major: "setup", setup: setup[suffix] };
+  if (Object.hasOwn(students, suffix)) return { ...view, major: "students", student: students[suffix] };
+  if (suffix === "reports") return { ...view, major: "reports" };
+  return view;
+};
+
+// Loading presentation reuses the same primitives as Student Management.
+function HostelSkeletonTable({ title, headers, filters = 2 }) {
+  return <section className="cms-card cms-hostel-loading-table">
+    <div className="cms-card-head"><div><h3>{title}</h3><Skeleton style={{ width: 240, maxWidth: "100%", height: 12 }} /></div><SkeletonButton /></div>
+    <div className="cms-card-body cms-hostel-loading-filters">{Array.from({ length: filters }, (_, index) => <SkeletonInput key={index} label={false} />)}</div>
+    <div className="cms-table-wrap"><table className="cms-table"><thead><tr>{headers.map((header, index) => <th key={index}>{header}</th>)}</tr></thead><tbody>{Array.from({ length: 5 }, (_, index) => <SkeletonRow key={index} columns={headers.length} />)}</tbody></table></div>
+    <div className="cms-card-foot"><Skeleton style={{ width: 150, height: 12 }} /><SkeletonButton width={180} /></div>
+  </section>;
+}
+
+function HostelLoadingSkeleton({ section = "dashboard", reportCategory = "Block Report" }) {
+  const blockHeaders = ["Code", "Block Name", "Category", "Floors", "Rooms", "Total Beds", "Occupied / Vacant", "Resident Warden", "Status", "Actions"];
+  const allocationHeaders = ["Student Name", "Admission ID", "Hostel Facility", "Room & Bed", "Joining Date", "Status", "Actions"];
+  const metrics = (count, className = "cms-dash-kpi-grid") => <div className={className}>{Array.from({ length: count }, (_, index) => <div key={index} className="cms-dash-kpi-card"><Skeleton style={{ width: 36, height: 36, flexShrink: 0 }} /><div className="cms-hostel-loading-metric"><Skeleton style={{ width: "70%", height: 12 }} /><Skeleton style={{ width: "40%", height: 26 }} /><Skeleton style={{ width: "85%", height: 12 }} /></div></div>)}</div>;
+  if (section === "dashboard") return <div className="cms-hostel-stack cms-hostel-loading" role="status" aria-label="Loading hostel dashboard" aria-busy="true">
+    <div className="cms-dash-header-row"><div><div className="cms-dash-header-title">Hostel Management Dashboard</div><Skeleton style={{ width: 440, maxWidth: "100%", height: 14, marginTop: 10 }} /></div><SkeletonButton width={240} /></div>
+    <div className="cms-dash-info-banner"><Skeleton style={{ width: "75%", height: 16 }} /></div>
+    {metrics(8)}
+    <div className="cms-dash-quick-bar"><span className="cms-dash-quick-label">Quick Actions</span>{Array.from({ length: 5 }, (_, index) => <SkeletonButton key={index} width={130} />)}</div>
+    <div className="cms-dash-occupancy-card"><Skeleton style={{ width: 220, height: 16 }} /><Skeleton style={{ width: "100%", height: 10, marginTop: 18 }} /><Skeleton style={{ width: "60%", height: 12, marginTop: 12 }} /></div>
+    <HostelSkeletonTable title="Hostel Blocks" headers={blockHeaders.slice(1)} />
+    <div className="cms-dash-split-grid"><HostelSkeletonTable title="Recent Student Allocations" headers={allocationHeaders.slice(0, 4)} filters={0} /><HostelSkeletonTable title="Outpass Requests" headers={["Student", "Reason", "Dates", "Status"]} filters={0} /></div>
+  </div>;
+  const definitions = {
+    blocks: ["Hostel Blocks", blockHeaders],
+    rooms: ["Rooms & Bed Allocation", ["Room No", "Hostel Block", "Floor", "Room Sharing / Type", "Capacity", "Occupied Beds", "Bed Layout", "Monthly Tariff", "Status", "Actions"]],
+    categories: ["Room Categories", ["Category Name", "Tier Type", "Capacity", "Monthly Tariff", "Rooms", "Total Beds", "Available In Blocks", "Status", "Actions"]],
+    wardens: ["Resident Wardens", ["Employee ID", "Warden Name", "Designation", "Assigned Facilities", "Phone", "Email", "Status", "Actions"]],
+    allocations: ["Student Room Allocations", allocationHeaders],
+    students: ["Student Room Allocations", allocationHeaders],
+    attendance: ["Hostel Attendance Register", ["Admission No", "Student Name", "Hostel Block", "Room & Bed", "Morning Shift", "Night Inspection", "Status", "Actions"]],
+    outpasses: ["Outpass & Leave Requests", ["Student", "Hostel Block", "Reason", "From Date", "To Date", "Status", "Actions"]],
+    transfers: ["Hostel Transfers & Bed Vacations", ["Admission No", "Student Name", "Hostel Block", "Room & Bed No", "Status", "Actions"]],
+  };
+  const reportHeaders = {
+    "Block Report": ["Block Code", "Block Name", "Category", "Total Floors", "Warden Name", "Primary Mobile", "Location", "Status"],
+    "Room Report": ["Room No", "Block Name", "Floor", "Category", "Total Beds", "Occupied Beds", "Vacant Beds", "Status"],
+    "Bed Allocation Report": ["Adm No", "Student Name", "Gender", "Hostel Block", "Room & Bed", "Join Date", "Monthly Fee", "Status"],
+    "Student Allocation Report": ["Adm No", "Student Name", "Gender", "Hostel Block", "Room & Bed", "Join Date", "Monthly Fee", "Status"],
+    "Attendance Report": ["Adm No", "Student Name", "Block", "Room & Bed", "Morning Shift", "Night Inspection"],
+    "Outpass & Leave Report": ["Student Name", "Adm No", "Outpass Type", "Hostel & Room", "Departure", "Expected Return", "Status"],
+    "Transfer & Vacate Report": ["Student Name", "Adm No", "Action Type", "Current Room", "Target Room / Fee Adjustment", "Date", "Status"],
+    "Warden Report": ["Emp ID", "Warden Name", "Designation", "Supervised Facilities", "Primary Mobile", "Email", "Status"],
+    "Monthly Revenue & Fee Report": ["Adm No", "Student Name", "Hostel Block", "Room & Bed", "Monthly Fee", "Amount Paid", "Amount Due", "Status", "Receipt & Mode", "Payment Date", "Action"],
+  };
+  const isReport = section === "reports";
+  const [title, headers] = isReport ? [reportCategory, reportHeaders[reportCategory] || ["Student", "Block", "Room & Bed", "Dates", "Reason", "Status", "Actions"]] : definitions[section] || definitions.blocks;
+  return <div className="cms-hostel-stack cms-hostel-loading" role="status" aria-label={isReport ? "Loading hostel reports" : `Loading ${title}`} aria-busy="true">
+    {isReport && <div className="cms-report-filter-card"><div className="cms-report-filter-grid">{Array.from({ length: 3 }, (_, index) => <SkeletonInput key={index} />)}</div><SkeletonInput label={false} /></div>}
+    {(section === "rooms" || section === "attendance" || section === "transfers" || (isReport && reportCategory === "Monthly Revenue & Fee Report")) && metrics(isReport ? 4 : 3, isReport ? "cms-revenue-report-kpis" : "cms-hostel-loading-stats")}
+    <HostelSkeletonTable title={title} headers={headers} filters={isReport ? 0 : 2} />
+  </div>;
+}
 
 // Reference Academic Year Months for Monthly Attendance
 const academicMonthOptions = [
@@ -274,18 +337,87 @@ const DEFAULT_HOSTEL_STAFF = [];
 function HostelPagination({
   currentPage,
   totalItems,
-  pageSize = 5,
+  pageSize = 10,
   onPageChange,
   itemLabel = "records",
-}) { return <AdminPagination className="cms-hostel-pagination-attached" currentPage={currentPage} pageSize={pageSize} totalRecords={totalItems} onPageChange={onPageChange} unit={itemLabel} />; }
+}) {
+  if (!totalItems || totalItems <= 0) return null;
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPageClamped = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (currentPageClamped - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+
+  const visiblePages = (() => {
+    if (totalPages <= 1) return [1];
+    if (totalPages === 2) return [1, 2];
+
+    let blockStart = Math.floor((currentPageClamped - 1) / 2) * 2 + 1;
+    if (blockStart >= totalPages) {
+      blockStart = Math.max(1, totalPages - 1);
+    }
+    const pages = [blockStart];
+    if (blockStart + 1 <= totalPages) {
+      pages.push(blockStart + 1);
+    }
+    return pages;
+  })();
+
+  return (
+    <div className="cms-pagination cms-hostel-pagination-attached">
+      <span className="cms-page-info">
+        Showing <strong>{startIndex + 1}</strong> to <strong>{endIndex}</strong> of <strong>{totalItems}</strong> {itemLabel}
+        {totalPages > 1 && (
+          <span style={{ marginLeft: 6, fontWeight: 500, color: "var(--cms-muted)" }}>
+            (Page {currentPageClamped} of {totalPages})
+          </span>
+        )}
+      </span>
+      <button
+        type="button"
+        className="cms-page-btn"
+        disabled={currentPageClamped <= 1}
+        onClick={() => onPageChange(Math.max(1, currentPageClamped - 1))}
+      >
+        Prev
+      </button>
+      {visiblePages.map((p) => (
+        <button
+          key={p}
+          type="button"
+          className={`cms-page-btn ${p === currentPageClamped ? "is-active" : ""}`}
+          onClick={() => onPageChange(p)}
+        >
+          {p}
+        </button>
+      ))}
+      <button
+        type="button"
+        className="cms-page-btn"
+        disabled={currentPageClamped >= totalPages}
+        onClick={() => onPageChange(Math.min(totalPages, currentPageClamped + 1))}
+      >
+        Next
+      </button>
+    </div>
+  );
+}
 
 // ── Component Definition ──────────────────────────────────────────────
 export default function HostelPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAuthUser();
-  const isWardenRoute = location.pathname.toLowerCase().includes("warden");
+  const { selectedCampus } = useCampusContext();
+  const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
+  const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
+  const adminView = useMemo(() => resolveHostelView(location.pathname, location.search), [location.pathname, location.search]);
+  const isAdminHostelRoute = Boolean(adminView);
+  const isWardenRoute = /^\/warden(?:-|\/|$)/i.test(location.pathname);
   const isWarden = isWardenRole(user?.role, user) || isWardenRoute;
+  // Warden scope is always resolved from the logged-in account, never from a
+  // display name or a user-selectable hostel value.
+  const wardenStaffId = user?.staffId ?? user?.StaffId ?? user?.staff?.staffId ?? "";
   const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
   const canAccessAdminEndpoints = isAdmin && !isWarden;
 
@@ -306,21 +438,41 @@ export default function HostelPage() {
     return "default";
   }, [location.pathname]);
 
-  const isDedicatedView = isWardenRoute || activeSection !== "default";
+  const isDedicatedView = !isAdminHostelRoute && (isWardenRoute || activeSection !== "default");
 
   // ── Navigation Tabs State ───────────────────────────────────────────
-  const [activeMajorTab, setActiveMajorTab] = useState("dashboard");
-  const [activeSetupSubtab, setActiveSetupSubtab] = useState("blocks");
-  const [activeStudentSubtab, setActiveStudentSubtab] = useState("allocations");
+  const [legacyMajorTab, setLegacyMajorTab] = useState("dashboard");
+  const [legacySetupSubtab, setLegacySetupSubtab] = useState("blocks");
+  const [legacyStudentSubtab, setLegacyStudentSubtab] = useState("allocations");
+  const activeMajorTab = adminView?.major ?? legacyMajorTab;
+  const activeSetupSubtab = adminView?.setup ?? legacySetupSubtab;
+  const activeStudentSubtab = adminView?.student ?? legacyStudentSubtab;
+  const lastSetupSubtab = useRef(activeSetupSubtab);
+  const lastStudentSubtab = useRef(activeStudentSubtab);
+  useEffect(() => {
+    if (activeMajorTab === "setup") lastSetupSubtab.current = activeSetupSubtab;
+    if (activeMajorTab === "students") lastStudentSubtab.current = activeStudentSubtab;
+  }, [activeMajorTab, activeSetupSubtab, activeStudentSubtab]);
+  const navigateHostelView = useCallback((major, subtab) => {
+    if (!isAdminHostelRoute) {
+      setLegacyMajorTab(major);
+      if (major === "setup" && subtab) setLegacySetupSubtab(subtab);
+      if (major === "students" && subtab) setLegacyStudentSubtab(subtab);
+      return;
+    }
+    const target = major === "setup" ? hostelViewPaths.setup[subtab === "categories" ? "rooms" : subtab || lastSetupSubtab.current]
+      : major === "students" ? hostelViewPaths.students[subtab || lastStudentSubtab.current]
+      : hostelViewPaths[major];
+    if (target && target !== location.pathname + location.search) navigate(target);
+  }, [isAdminHostelRoute, location.pathname, location.search, navigate]);
+  const setActiveMajorTab = useCallback((major) => navigateHostelView(major), [navigateHostelView]);
+  const setActiveSetupSubtab = useCallback((subtab) => navigateHostelView("setup", subtab), [navigateHostelView]);
+  const setActiveStudentSubtab = useCallback((subtab) => navigateHostelView("students", subtab), [navigateHostelView]);
 
   // ── Dashboard Interactive State ─────────────────────────────────────
   const [dashBlockSearch, setDashBlockSearch] = useState("");
   const [dashSelectedBlockId, setDashSelectedBlockId] = useState("");
   const [dashBlockPage, setDashBlockPage] = useState(1);
-  const [isDashRefreshing, setIsDashRefreshing] = useState(false);
-  const [dashLastUpdated, setDashLastUpdated] = useState(() =>
-    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-  );
 
   // ── API-backed State Initialization ─────────────────────────────────
   const [blocks, setBlocks] = useState([]);
@@ -424,8 +576,8 @@ export default function HostelPage() {
     const matchedBlk = blks.find(
       (b) => Number(b.id) === Number(r.hostelId) || b.code === r.hostelCode || b.name === r.hostelName
     );
-    const resolvedBlockName = (r.hostelName || "").trim() || matchedBlk?.name || r.blockName || r.block || (Number(r.hostelId) === 1 ? "Boys Hostel 1" : (r.hostelId ? `Hostel Block #${r.hostelId}` : "Boys Hostel 1"));
-    const resolvedBlockCode = (r.hostelCode || "").trim() || matchedBlk?.code || r.blockCode || (Number(r.hostelId) === 1 ? "BH-1" : (r.hostelId ? `BLK-${r.hostelId}` : "BH-1"));
+    const resolvedBlockName = (r.hostelName || "").trim() || matchedBlk?.name || r.blockName || r.block || (r.hostelId ? `Hostel Block #${r.hostelId}` : "—");
+    const resolvedBlockCode = (r.hostelCode || "").trim() || matchedBlk?.code || r.blockCode || (r.hostelId ? `BLK-${r.hostelId}` : "—");
 
     const matchedCat = cats.find(
       (c) => Number(c.id) === Number(r.roomTypeId) || c.name === r.roomTypeSpecification || c.specification === r.roomTypeSpecification
@@ -559,7 +711,7 @@ export default function HostelPage() {
     );
     const sName = o.studentName || alloc?.studentName || (o.studentId ? `Student #${o.studentId}` : "Resident Student");
     const admNo = o.admissionNo || alloc?.admissionNo || "-";
-    const bName = o.blockName || o.hostelName || alloc?.blockName || alloc?.hostelName || "Boys Hostel 1";
+    const bName = o.blockName || o.hostelName || alloc?.blockName || alloc?.hostelName || (o.hostelId ? `Block #${o.hostelId}` : "—");
     const rNo = o.roomNumber || o.roomNo || alloc?.roomNumber || alloc?.room || "-";
     const cleanRNo = String(rNo).replace("Room #", "").trim();
 
@@ -598,32 +750,39 @@ export default function HostelPage() {
     );
     const sName = t.studentName || alloc?.studentName || (t.studentId ? `Student #${t.studentId}` : "Resident Student");
     const admNo = t.admissionNo || alloc?.admissionNo || "-";
-    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || "Boys Hostel 1";
+    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || (t.fromHostelId ? `Block #${t.fromHostelId}` : "Hostel");
     const fromR = t.fromRoomNumber || t.currentRoom || alloc?.roomNumber || alloc?.room || "-";
     const cleanFromR = String(fromR).replace("Room #", "").trim();
-    const actType = t.actionType || (t.requestType === "Vacate" ? "Bed Vacate" : "Room Transfer");
+    const isVacate = t.requestType === "Vacate" || t.actionType === "Bed Vacate";
+    const actType = isVacate ? "Bed Vacate" : "Room Transfer";
 
     return {
       id: t.requestId ?? t.id ?? "",
       studentName: sName,
       admissionNo: admNo,
       actionType: actType,
-      requestType: t.requestType || (actType === "Bed Vacate" ? "Vacate" : "Transfer"),
+      requestType: t.requestType || (isVacate ? "Vacate" : "Transfer"),
       currentBlock: fromB,
       fromHostelName: fromB,
       currentRoom: cleanFromR,
       fromRoomNumber: cleanFromR,
       currentRoomDisplay: `${fromB} (#${cleanFromR})`,
-      targetBlock: t.toHostelName ?? t.targetBlock ?? "--",
-      targetRoom: t.toRoomNumber ?? t.targetRoom ?? "--",
-      targetBed: t.toBedNumber ?? t.targetBed ?? "--",
-      targetDisplayTitle: t.toHostelName && t.toRoomNumber ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})` : (t.requestType === "Vacate" || actType === "Bed Vacate" ? "✓ Old Bed Released to Available" : (t.targetDisplayTitle ?? "--")),
-      targetDisplaySub: t.toHostelName && t.fromRoomNumber ? `✓ Old Bed #${t.fromRoomNumber} Released to Available` : (t.targetDisplaySub ?? null),
-      feeAdjustment: (t.requestType === "Vacate" || actType === "Bed Vacate") && t.refundAmount ? `Fee Adjusted: ₹${t.refundAmount.toLocaleString()}` : (t.feeAdjustment ?? null),
-      date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.date ?? ""),
-      requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.requestDate ?? ""),
-      status: t.approvalStatus ?? t.status ?? "Pending",
-      reason: t.reason ?? "",
+      targetBlock: t.toHostelName || t.targetBlock || "--",
+      targetRoom: t.toRoomNumber || t.targetRoom || "--",
+      targetBed: t.toBedNumber || t.targetBed || "--",
+      targetDisplayTitle: !isVacate && t.toHostelName && t.toRoomNumber
+        ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})`
+        : "✓ Old Bed Released to Available",
+      targetDisplaySub: !isVacate && (t.fromRoomNumber || cleanFromR) && cleanFromR !== "-"
+        ? `✓ Old Bed #${cleanFromR} Released to Available`
+        : null,
+      feeAdjustment: isVacate && t.refundAmount
+        ? `Fee Adjusted: ₹${Number(t.refundAmount).toLocaleString()}`
+        : null,
+      date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.date ?? "-"),
+      requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.requestDate ?? "-"),
+      status: t.approvalStatus || t.status || "Completed",
+      reason: t.reason || "",
       allocationId: t.allocationId || alloc?.id,
       studentId: t.studentId || alloc?.studentId,
       fromHostelId: t.fromHostelId || alloc?.hostelId,
@@ -633,8 +792,8 @@ export default function HostelPage() {
       toRoomId: t.toRoomId,
       toBedId: t.toBedId,
       wardenAssignmentId: t.wardenAssignmentId,
-      approvalStatus: t.approvalStatus ?? "",
-      feeSettlementStatus: t.feeSettlementStatus ?? "",
+      approvalStatus: t.approvalStatus || "",
+      feeSettlementStatus: t.feeSettlementStatus || "",
     };
   }, []);
 
@@ -680,42 +839,89 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
+      if (isTenantCollege && !curCampusId) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setCandidateAdmissions([]); setCandidateStudents([]);
+        setDashboardData(null);
+        setIsLoading(false);
+        return;
+      }
+      if (isWarden && !wardenStaffId) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setCandidateAdmissions([]); setCandidateStudents([]);
+        setDashboardData(null);
+        setApiError("Your warden account is not linked to a Staff ID. Please contact Admin.");
+        return;
+      }
       const shouldFetchStaff = canAccessAdminEndpoints;
       const shouldFetchAdmissions = canAccessAdminEndpoints;
       const shouldFetchAllStudents = canAccessAdminEndpoints;
 
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
+
       const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes, attRes] = await Promise.allSettled([
-        hostelApi.getHostelBlocks().catch(() => null),
-        hostelApi.getRoomTypes().catch(() => null),
-        hostelApi.getRooms().catch(() => null),
-        hostelApi.getBeds().catch(() => null),
-        hostelApi.getWardens().catch(() => null),
-        hostelApi.getStudentAllocations().catch(() => null),
-        hostelApi.getOutpassLeave().catch(() => null),
-        hostelApi.getTransferVacate().catch(() => null),
-        hostelApi.getHostelDashboard().catch(() => null),
-        apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
-        apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
-        apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => null),
-        apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)),
-        hostelApi.getAttendance().catch(() => null),
+        hostelApi.getHostelBlocks(campusParams).catch(() => null),
+        hostelApi.getRoomTypes(campusParams).catch(() => null),
+        hostelApi.getRooms(campusParams).catch(() => null),
+        hostelApi.getBeds(campusParams).catch(() => null),
+        hostelApi.getWardens({ ...(campusParams || {}), ...(isWarden ? { staffId: wardenStaffId, status: "Active" } : {}) }).catch(() => null),
+        hostelApi.getStudentAllocations(campusParams).catch(() => null),
+        hostelApi.getOutpassLeave(campusParams).catch(() => null),
+        hostelApi.getTransferVacate(campusParams).catch(() => null),
+        isWarden ? Promise.resolve(null) : hostelApi.getHostelDashboard(campusParams).catch(() => null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
+          : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAdmissions ? apiClient.get("/api/v1/student-admissions", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/certificates/students-dropdown", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => null)
+          : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        hostelApi.getAttendance(campusParams).catch(() => null),
       ]);
+
+      const rawWardenAssignments = wardensRes.status === "fulfilled" ? extractCollection(wardensRes.value?.data) : [];
+      const activeAssignments = isWarden
+        ? rawWardenAssignments.filter((assignment) =>
+          String(assignment?.staffId ?? assignment?.StaffId ?? "") === String(wardenStaffId) &&
+          !/inactive|revoked|deleted/i.test(String(assignment?.status ?? assignment?.Status ?? "Active"))
+        )
+        : rawWardenAssignments;
+
+      if (isWarden && activeAssignments.length === 0) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setDashboardData(null);
+        setApiError("No active hostel block is assigned to your account. Please contact Admin.");
+        return;
+      }
+
+      const assignedBlockIds = new Set(activeAssignments.map((assignment) => assignment?.hostelId ?? assignment?.HostelId ?? assignment?.blockId ?? assignment?.BlockId).filter((id) => id !== undefined && id !== null && id !== "").map(String));
+      const assignedBlockNames = new Set(activeAssignments.flatMap((assignment) => [assignment?.hostelName, assignment?.HostelName, assignment?.blockName, assignment?.BlockName, assignment?.assignedHostels]).filter(Boolean).flatMap((name) => String(name).split(",")).map((name) => name.trim().toLowerCase()).filter(Boolean));
+      const isAssignedBlockRecord = (record) => {
+        if (!isWarden) return true;
+        const id = record?.hostelId ?? record?.HostelId ?? record?.blockId ?? record?.BlockId ?? record?.fromHostelId;
+        if (id !== undefined && id !== null && id !== "" && assignedBlockIds.has(String(id))) return true;
+        const names = [record?.hostelName, record?.HostelName, record?.blockName, record?.BlockName, record?.block, record?.hostelCode, record?.blockCode]
+          .filter(Boolean).map((name) => String(name).trim().toLowerCase());
+        return names.some((name) => assignedBlockNames.has(name));
+      };
 
       let uniqueBlocks = [];
       if (blocksRes.status === "fulfilled") {
-        const rawBlocks = extractCollection(blocksRes.value?.data);
+        const rawBlocks = extractCollection(blocksRes.value?.data).filter(isAssignedBlockRecord);
         const mappedBlocks = Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : [];
         uniqueBlocks = Array.from(new Map(mappedBlocks.map((b) => [String(b.id || b.code), b])).values());
       }
 
       // Discover and preserve all hostel blocks present in rooms and allocations
-      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data) : [];
-      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data) : [];
+      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data).filter(isAssignedBlockRecord) : [];
+      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data).filter(isAssignedBlockRecord) : [];
       const seenBlockKeys = new Set(uniqueBlocks.map((b) => (b.name || b.code || "").toLowerCase()));
 
       if (Array.isArray(rawRoomsList)) {
@@ -783,26 +989,27 @@ export default function HostelPage() {
         setCategories(uniqueCats);
       }
       if (roomsRes.status === "fulfilled") {
-        const rawRooms = extractCollection(roomsRes.value?.data);
+        const rawRooms = rawRoomsList;
         const mappedRooms = Array.isArray(rawRooms) ? rawRooms.map((r) => mapRoom(r, uniqueBlocks, uniqueCats)) : [];
         const uniqueRooms = Array.from(new Map(mappedRooms.map((r) => [String(r.id || `${r.hostelId}-${r.floor || ''}-${r.roomNo}`), r])).values());
         setRooms(uniqueRooms);
       }
       if (bedsRes.status === "fulfilled") {
-        const rawBeds = extractCollection(bedsRes.value?.data);
+        const assignedRoomIds = new Set(rawRoomsList.map((room) => room?.roomId ?? room?.RoomId ?? room?.id).filter(Boolean).map(String));
+        const rawBeds = extractCollection(bedsRes.value?.data).filter((bed) => isAssignedBlockRecord(bed) || assignedRoomIds.has(String(bed?.roomId ?? bed?.RoomId ?? "")));
         const mappedBeds = Array.isArray(rawBeds) ? rawBeds.map(mapBed) : [];
         const uniqueBeds = Array.from(new Map(mappedBeds.map((bd) => [String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd])).values());
         setBeds(uniqueBeds);
       }
       if (wardensRes.status === "fulfilled") {
-        const rawWardens = extractCollection(wardensRes.value?.data);
+        const rawWardens = activeAssignments;
         const mappedWardens = Array.isArray(rawWardens) ? rawWardens.map((w) => mapWarden(w, uniqueBlocks)) : [];
         const uniqueWardens = Array.from(new Map(mappedWardens.map((w) => [String(w.id || `${w.hostelId}-${w.staffId}`), w])).values());
         setWardens(uniqueWardens);
       }
       let derivedStudents = [];
       if (allocsRes.status === "fulfilled") {
-        const rawAllocs = extractCollection(allocsRes.value?.data);
+        const rawAllocs = rawAllocsList;
         const mapped = Array.isArray(rawAllocs) ? rawAllocs.map((a) => mapAllocation(a, uniqueBlocks)) : [];
         const uniqueAllocs = Array.from(new Map(mapped.map((a) => [String(a.id || `${a.studentId}-${a.bedId}`), a])).values());
         setAllocations(uniqueAllocs);
@@ -847,19 +1054,25 @@ export default function HostelPage() {
         }));
       }
       if (outpassRes.status === "fulfilled") {
-        const rawOutpass = extractCollection(outpassRes.value?.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawOutpass = extractCollection(outpassRes.value?.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedOutpass = Array.isArray(rawOutpass) ? rawOutpass.map(mapOutpass) : [];
         const uniqueOutpass = Array.from(new Map(mappedOutpass.map((o) => [String(o.id), o])).values());
         setOutpasses(uniqueOutpass);
       }
       if (transferRes.status === "fulfilled") {
-        const rawTransfer = extractCollection(transferRes.value?.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawTransfer = extractCollection(transferRes.value?.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedTransfer = Array.isArray(rawTransfer) ? rawTransfer.map(mapTransfer) : [];
         const uniqueTransfer = Array.from(new Map(mappedTransfer.map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-      if (dashRes.status === "fulfilled") {
+      if (!isWarden && dashRes.status === "fulfilled") {
         setDashboardData(dashRes.value?.data?.data ?? dashRes.value?.data ?? null);
+      } else if (isWarden) {
+        // The generic dashboard endpoint is campus-wide. Warden totals below
+        // are calculated exclusively from the assignment-filtered collections.
+        setDashboardData(null);
       }
       let loadedStaff = [];
       if (hostelStaffRes?.status === "fulfilled" && hostelStaffRes.value?.data) {
@@ -944,7 +1157,8 @@ export default function HostelPage() {
       }
       if (loadedStudents.length > 0) setCandidateStudents(loadedStudents);
       if (attRes?.status === "fulfilled" && attRes.value?.data) {
-        const rawAtt = extractCollection(attRes.value.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawAtt = extractCollection(attRes.value.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedAtt = Array.isArray(rawAtt) ? rawAtt.map(mapAttendanceRecord).filter(Boolean) : [];
         setAttendanceRecords(mappedAtt);
       }
@@ -953,12 +1167,9 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canAccessAdminEndpoints, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
+  }, [canAccessAdminEndpoints, isWarden, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord, wardenStaffId, curCampusId, isTenantCollege]);
 
-  const hasFetchedInitialRef = useRef(false);
   useEffect(() => {
-    if (hasFetchedInitialRef.current) return;
-    hasFetchedInitialRef.current = true;
     fetchHostelData();
   }, [fetchHostelData]);
 
@@ -1102,7 +1313,7 @@ export default function HostelPage() {
 
   const refreshAttendance = useCallback(async () => {
     try {
-      const res = await hostelApi.getAttendance();
+      const res = await hostelApi.getAttendance(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setAttendanceRecords(raw.map(mapAttendanceRecord).filter(Boolean));
     } catch (_) { /* Intentionally ignored. */ }
@@ -1110,36 +1321,37 @@ export default function HostelPage() {
 
   // ── Synchronize route location with initial tab ──────────────────────
   useEffect(() => {
+    if (isAdminHostelRoute) return;
     const path = location.pathname.toLowerCase();
     if (path.includes("master") || path.includes("block")) {
-      setActiveMajorTab("setup");
-      if (path.includes("category") || path.includes("room")) setActiveSetupSubtab("rooms");
-      else if (path.includes("warden")) setActiveSetupSubtab("wardens");
-      else setActiveSetupSubtab("blocks");
+      setLegacyMajorTab("setup");
+      if (path.includes("category") || path.includes("room")) setLegacySetupSubtab("rooms");
+      else if (path.includes("warden")) setLegacySetupSubtab("wardens");
+      else setLegacySetupSubtab("blocks");
     } else if (path.includes("room") || path.includes("bed")) {
-      setActiveMajorTab("setup");
-      setActiveSetupSubtab("rooms");
+      setLegacyMajorTab("setup");
+      setLegacySetupSubtab("rooms");
     } else if (path.includes("allocat")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("allocations");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("allocations");
     } else if (path.includes("attendance")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("attendance");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("attendance");
     } else if (path.includes("outpass") || path.includes("leave")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("outpasses");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("outpasses");
     } else if (path.includes("transfer") || path.includes("vacat")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("transfers");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("transfers");
     } else if (path.includes("students") || path.includes("student-allocation")) {
-      setActiveMajorTab("students");
-      setActiveStudentSubtab("allocations");
+      setLegacyMajorTab("students");
+      setLegacyStudentSubtab("allocations");
     } else if (path.includes("report")) {
-      setActiveMajorTab("reports");
+      setLegacyMajorTab("reports");
     } else if (path.includes("hostel") || path.includes("warden")) {
-      setActiveMajorTab("dashboard");
+      setLegacyMajorTab("dashboard");
     }
-  }, [location.pathname]);
+  }, [location.pathname, isAdminHostelRoute]);
 
   // ── Search & Filter State ───────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
@@ -1308,7 +1520,7 @@ export default function HostelPage() {
   const [reportCategoryFilter, setReportCategoryFilter] = useState("");
   const [reportSearch, setReportSearch] = useState("");
   const [reportPage, setReportPage] = useState(1);
-  const [reportPageSize, setReportPageSize] = useState(5);
+  const [reportPageSize, setReportPageSize] = useState(10);
 
   useEffect(() => {
     setReportPage(1);
@@ -1580,6 +1792,10 @@ export default function HostelPage() {
 
   // Students who opted for hostel during admission or registration and await room allocation
   const unallocatedHostelStudents = useMemo(() => {
+    if (isTenantCollege && !curCampusId) {
+      return [];
+    }
+
     const activeAllocStudentIds = new Set();
     allocations.forEach((a) => {
       if (String(a.status || "").toLowerCase() === "active") {
@@ -1593,6 +1809,14 @@ export default function HostelPage() {
 
     const considerStudent = (st) => {
       if (!st) return;
+      if (curCampusId) {
+        const studentCampusId = st.campusId ?? st.CampusId;
+        if (studentCampusId && Number(studentCampusId) !== Number(curCampusId)) return;
+      }
+      if (isTenantCollege && user?.collegeId) {
+        const studentCollegeId = st.collegeId ?? st.CollegeId;
+        if (studentCollegeId && Number(studentCollegeId) !== Number(user.collegeId)) return;
+      }
       const sId = st.studentId || st.id || st.admissionId;
       const admNo = String(st.admissionNo || st.admissionNumber || "").trim();
       const sName = st.studentName || [st.firstName, st.middleName, st.lastName].filter(Boolean).join(" ") || st.name || "";
@@ -1640,18 +1864,20 @@ export default function HostelPage() {
     if (Array.isArray(candidateStudents)) candidateStudents.forEach(considerStudent);
     if (Array.isArray(candidateAdmissions)) candidateAdmissions.forEach(considerStudent);
 
-    try {
-      const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
-      if (Array.isArray(localAdms)) {
-        localAdms.forEach((entry) => {
-          const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
-          considerStudent(x);
-        });
-      }
-    } catch (_) { /* Intentionally ignored. */ }
+    if (!isTenantCollege) {
+      try {
+        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+        if (Array.isArray(localAdms)) {
+          localAdms.forEach((entry) => {
+            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+            considerStudent(x);
+          });
+        }
+      } catch (_) { /* Intentionally ignored. */ }
+    }
 
     return list;
-  }, [allocations, candidateStudents, candidateAdmissions, blocks]);
+  }, [allocations, candidateStudents, candidateAdmissions, blocks, isTenantCollege, curCampusId, user?.collegeId]);
 
   // ── Block CRUD ──────────────────────────────────────────────────────
   const handleSaveBlock = async (blockData) => {
@@ -2025,8 +2251,7 @@ export default function HostelPage() {
       });
 
       // Instantly switch tabs and clear filters so rooms are visible in real time
-      setActiveMajorTab("setup");
-      setActiveSetupSubtab("rooms");
+      navigateHostelView("setup", "rooms");
       setSearchQuery("");
       setFilterHostelRooms("all");
       setFilterFloor("all");
@@ -2810,7 +3035,12 @@ export default function HostelPage() {
         )
       );
 
-      await hostelApi.deleteStudentAllocation(alloc.id, { skipErrorLog: true });
+            const allocId = alloc.id || alloc.allocationId;
+      try {
+        await hostelApi.vacateStudentAllocation(allocId, { reason: reason || "Vacated bed" }, { skipErrorLog: true });
+      } catch (_) {
+        await hostelApi.deleteStudentAllocation(allocId, { skipErrorLog: true });
+      }
       closeModal();
       showToast(`Bed vacated for ${alloc.studentName}.`);
       (async () => {
@@ -3086,42 +3316,109 @@ export default function HostelPage() {
   const handleSaveTransfer = async (transData) => {
     try {
       const isVacate = transData.actionType === "Bed Vacate";
-      const fromBlk = blocks.find((b) => b.name === transData.currentBlock);
-      const toBlk = blocks.find((b) => b.name === transData.destinationBlock);
-      const alloc = allocations.find((a) => a.admissionNo === transData.admissionNo || a.studentName === transData.studentName);
+      const fromBlk = blocks.find((b) => b.name === transData.currentBlock || String(b.id) === String(transData.fromHostelId));
+      const toBlk = blocks.find((b) => b.name === transData.destinationBlock || String(b.id) === String(transData.toHostelId));
+      const alloc = allocations.find(
+        (a) =>
+          (transData.allocationId && Number(a.id || a.allocationId) === Number(transData.allocationId)) ||
+          (transData.studentId && Number(a.studentId) === Number(transData.studentId)) ||
+          a.admissionNo === transData.admissionNo ||
+          a.studentName === transData.studentName
+      );
 
       const payload = {
-        allocationId: transData.allocationId || (alloc ? alloc.id : 1),
-        studentId: transData.studentId || alloc?.studentId || 1,
+        allocationId: transData.allocationId || alloc?.id,
+        studentId: transData.studentId || alloc?.studentId,
         studentName: transData.studentName || alloc?.studentName || "Resident Student",
         admissionNo: transData.admissionNo || alloc?.admissionNo || "ADM-001",
         requestType: isVacate ? "Vacate" : "Transfer",
         actionType: transData.actionType || (isVacate ? "Bed Vacate" : "Room Transfer"),
-        fromHostelId: transData.fromHostelId || (fromBlk ? fromBlk.id : 1),
-        fromHostelName: transData.currentBlock || alloc?.blockName || fromBlk?.name || "Boys Hostel 1",
-        currentBlock: transData.currentBlock || alloc?.blockName || fromBlk?.name || "Boys Hostel 1",
-        fromRoomId: transData.fromRoomId || alloc?.roomId || 1,
-        fromRoomNumber: transData.currentRoom || alloc?.roomNumber || alloc?.room || "101",
-        currentRoom: transData.currentRoom || alloc?.roomNumber || alloc?.room || "101",
-        fromBedId: transData.fromBedId || alloc?.bedId || 1,
-        toHostelId: isVacate ? null : (transData.toHostelId || (toBlk ? toBlk.id : null)),
-        toHostelName: isVacate ? null : (transData.destinationBlock || toBlk?.name || null),
-        toRoomId: isVacate ? null : (transData.toRoomId || 1),
-        toRoomNumber: isVacate ? null : (transData.destinationRoom || "102"),
-        toBedId: isVacate ? null : (transData.toBedId || 1),
-        toBedNumber: isVacate ? null : (transData.destinationBed || "102-B"),
+        fromHostelId: transData.fromHostelId || fromBlk?.id,
+        fromHostelName: transData.currentBlock || alloc?.blockName || fromBlk?.name,
+        currentBlock: transData.currentBlock || alloc?.blockName || fromBlk?.name,
+        fromRoomId: transData.fromRoomId || alloc?.roomId,
+        fromRoomNumber: transData.currentRoom || alloc?.roomNumber || alloc?.room,
+        currentRoom: transData.currentRoom || alloc?.roomNumber || alloc?.room,
+        fromBedId: transData.fromBedId || alloc?.bedId,
+        toHostelId: isVacate ? null : (transData.toHostelId || toBlk?.id),
+        toHostelName: isVacate ? null : (transData.destinationBlock || toBlk?.name),
+        toRoomId: isVacate ? null : transData.toRoomId,
+        toRoomNumber: isVacate ? null : transData.destinationRoom,
+        toBedId: isVacate ? null : transData.toBedId,
+        toBedNumber: isVacate ? null : transData.destinationBed,
         requestDate: new Date().toISOString(),
         effectiveDate: new Date(Date.now() + 86400000).toISOString(),
         reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
-        refundAmount: isVacate ? (transData.refundAmount || 2000) : null,
+        refundAmount: isVacate ? (transData.refundAmount || 0) : null,
+        autoApprove: true,
+        approvalStatus: "Approved",
       };
 
-      await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
+      // 1. Submit transaction to backend API
+      const res = await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
+      const createdData = res?.data?.data || res?.data;
+      const createdId = createdData?.requestId || createdData?.id;
+
+      // 2. Fallback approval/completion invocation if created in Pending state
+      if (createdId && (!createdData?.approvalStatus || createdData.approvalStatus === "Pending")) {
+        try {
+          await hostelApi.approveTransferVacate(
+            createdId,
+            {
+              approvalStatus: "Approved",
+              approvalRemarks: isVacate ? "Vacate approved and bed released" : "Transfer approved and new bed assigned",
+            },
+            { skipErrorLog: true }
+          );
+          await hostelApi.completeTransferVacate(createdId, { skipErrorLog: true });
+        } catch (_) {}
+      }
+
+      // 3. Update local storage cache for vacated students
+      if (isVacate) {
+        try {
+          const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+          const record = {
+            studentId: payload.studentId,
+            admissionNo: payload.admissionNo,
+            studentName: payload.studentName,
+            allocationId: payload.allocationId,
+            reason: payload.reason,
+            vacatedAt: new Date().toISOString(),
+          };
+          const filtered = (Array.isArray(stored) ? stored : []).filter(
+            (s) => String(s.studentId) !== String(record.studentId) && s.admissionNo !== record.admissionNo
+          );
+          filtered.push(record);
+          localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+        } catch (_) {}
+
+        setAllocations((prev) =>
+          prev.map((a) =>
+            (payload.allocationId && Number(a.id || a.allocationId) === Number(payload.allocationId)) ||
+            (payload.studentId && Number(a.studentId) === Number(payload.studentId))
+              ? { ...a, status: "Vacated", isActive: false, isVacated: true }
+              : a
+          )
+        );
+      }
+
       closeModal();
-      showToast(`${isVacate ? "Bed vacate request" : "Room transfer request"} submitted for ${payload.studentName}.`);
-      (async () => {
-        try { await refreshTransfers(); } catch (_) { /* Intentionally ignored. */ }
-      })();
+      showToast(
+        isVacate
+          ? `Bed vacated and released successfully for ${payload.studentName}.`
+          : `Room transfer approved and bed allocated for ${payload.studentName}.`,
+        "success"
+      );
+
+      // 4. Refetch all dependent state in parallel
+      await Promise.allSettled([
+        refreshTransfers(),
+        refreshAllocations(),
+        refreshRooms(),
+        refreshBlocks(),
+        refreshDashboard(),
+      ]);
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     }
@@ -3228,6 +3525,39 @@ export default function HostelPage() {
       }
       const sessionLabel = attendanceShift === "morning" ? "Morning" : "Night";
       const attDate = attendanceDate ? new Date(`${attendanceDate}T00:00:00Z`).toISOString() : new Date().toISOString();
+
+            // Try atomic bulk save first for maximum performance
+      const bulkItems = markedIds.map((stId) => {
+        const record = currentMap[stId];
+        const student = attendanceStudents.find((s) => s.id === stId || s.admissionNo === stId || String(s.studentId) === String(stId));
+        const alloc = allocations.find((a) => String(a.studentId) === String(student?.studentId) || a.admissionNo === student?.admissionNo || a.admissionNo === stId || String(a.id) === String(stId));
+        const blk = blocks.find((b) => b.name === student?.block || b.code === student?.blockCode || String(b.id) === String(alloc?.hostelId));
+
+        return {
+          studentId: Number(alloc?.studentId || student?.studentId || 1),
+          hostelId: Number(alloc?.hostelId || blk?.id || 1),
+          roomId: Number(alloc?.roomId || student?.roomId || 1),
+          bedId: Number(alloc?.bedId || student?.bedId || 1),
+          wardenAssignmentId: alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null,
+          attendanceStatus: record.status || "Present",
+          remarks: record.remarks || `Recorded during ${sessionLabel} session`,
+        };
+      });
+
+      try {
+        const bulkRes = await hostelApi.bulkSaveAttendance({
+          hostelId: Number((attendanceBlock !== "all" && attendanceBlock) || bulkItems[0]?.hostelId || 1),
+          attendanceDate: attDate,
+          session: sessionLabel,
+          records: bulkItems,
+        }, { skipErrorLog: true });
+        const count = bulkRes?.data?.savedCount || bulkItems.length;
+        showToast(`Attendance log saved successfully! (${count} records)`, "success");
+        await refreshAttendance();
+        return;
+      } catch (_) {
+        // Fallback to sequential save if bulk endpoint unavailable
+      }
 
       let savedCount = 0;
       let lastError = null;
@@ -3879,7 +4209,7 @@ export default function HostelPage() {
       return String(b.id) === String(dashBlockSearch) || b.code === dashBlockSearch;
     });
 
-    const pageSize = 5;
+    const pageSize = 10;
     const totalPages = Math.ceil(filteredDashBlocks.length / pageSize) || 1;
     const currentBlocksPage = filteredDashBlocks.slice(
       (dashBlockPage - 1) * pageSize,
@@ -3907,7 +4237,7 @@ export default function HostelPage() {
         <div className="cms-dash-header-row">
           <div>
             <div className="cms-dash-header-title">
-              <ThreeDIcon name="building" size={24} />
+              <Building2 size={24} style={{ color: "var(--cms-primary)" }} />
               <span>Hostel Management Dashboard</span>
             </div>
             <p className="cms-dash-header-sub">
@@ -3915,8 +4245,11 @@ export default function HostelPage() {
             </p>
           </div>
           <div className="cms-dash-live-badge">
-            <span className="cms-dash-live-dot" />
-            <span>Live Status • All Blocks Operational</span>
+            <span
+              className="cms-dash-live-dot"
+              style={{ background: blocks.length > 0 ? "var(--cms-green)" : "var(--cms-muted)" }}
+            />
+            <span>{blocks.length > 0 ? "Live Status • All Blocks Operational" : "No Active Blocks Registered"}</span>
           </div>
         </div>
 
@@ -3933,7 +4266,7 @@ export default function HostelPage() {
           {/* Card 1: TOTAL HOSTELS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <ThreeDIcon name="building" size={20} />
+              <Building2 size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3950,7 +4283,7 @@ export default function HostelPage() {
           {/* Card 2: TOTAL CAPACITY */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <ThreeDIcon name="hostel" size={20} />
+              <BedDouble size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3967,7 +4300,7 @@ export default function HostelPage() {
           {/* Card 3: OCCUPANCY RATE */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-primary-soft)", color: "var(--cms-primary)" }}>
-              <ThreeDIcon name="timetable" size={20} />
+              <Clock size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -3984,7 +4317,7 @@ export default function HostelPage() {
           {/* Card 4: OCCUPIED BEDS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-amber-soft)", color: "var(--cms-amber)" }}>
-              <ThreeDIcon name="students" size={20} />
+              <Users size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4018,7 +4351,7 @@ export default function HostelPage() {
           {/* Card 6: HOSTELLERS */}
           <div className="cms-dash-kpi-card">
             <div className="cms-dash-kpi-icon" style={{ background: "var(--cms-info-soft)", color: "var(--cms-info)" }}>
-              <ThreeDIcon name="staff" size={20} />
+              <UserCheck size={20} />
             </div>
             <div className="cms-dash-kpi-info">
               <div className="cms-dash-kpi-top">
@@ -4091,8 +4424,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/rooms");
               } else {
-                setActiveMajorTab("setup");
-                setActiveSetupSubtab("blocks");
+                navigateHostelView("setup", "blocks");
               }
             }}
           >
@@ -4106,8 +4438,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/students");
               } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("allocations");
+                navigateHostelView("students", "allocations");
               }
             }}
           >
@@ -4121,8 +4452,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/allocations");
               } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("allocations");
+                navigateHostelView("students", "allocations");
               }
               setModal({ isOpen: true, type: "allocation", mode: "add", data: null });
             }}
@@ -4137,8 +4467,7 @@ export default function HostelPage() {
               if (isWardenRoute) {
                 navigate("/warden-dashboard/attendance");
               } else {
-                setActiveMajorTab("students");
-                setActiveStudentSubtab("attendance");
+                navigateHostelView("students", "attendance");
               }
             }}
           >
@@ -4175,13 +4504,13 @@ export default function HostelPage() {
           <div className="cms-dash-progress-track">
             <div
               className="cms-dash-progress-fill"
-              style={{ width: `${Math.max(3, occupancyRate)}%` }}
+              style={{ width: `${totalBeds > 0 ? Math.max(3, occupancyRate) : 0}%` }}
             />
           </div>
           <div className="cms-dash-occ-footer">
             <div style={{ display: "flex", gap: 18 }}>
-              <span>Occupied Beds ({occupancyRate}%)</span>
-              <span>Vacant Beds ({100 - occupancyRate}%)</span>
+              <span>Occupied Beds ({totalBeds > 0 ? occupancyRate : 0}%)</span>
+              <span>Vacant Beds ({totalBeds > 0 ? (100 - occupancyRate) : 0}%)</span>
             </div>
             <span style={{ fontWeight: 600 }}>Live Status</span>
           </div>
@@ -4366,8 +4695,7 @@ export default function HostelPage() {
                   if (isWardenRoute) {
                     navigate("/warden-dashboard/allocations");
                   } else {
-                    setActiveMajorTab("students");
-                    setActiveStudentSubtab("allocations");
+                    navigateHostelView("students", "allocations");
                   }
                 }}
               >
@@ -4430,8 +4758,7 @@ export default function HostelPage() {
                   if (isWardenRoute) {
                     navigate("/warden-dashboard/leave-requests");
                   } else {
-                    setActiveMajorTab("students");
-                    setActiveStudentSubtab("outpasses");
+                    navigateHostelView("students", "outpasses");
                   }
                 }}
               >
@@ -4557,7 +4884,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 blocks per page)
-    const blocksPerPage = 5;
+    const blocksPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / blocksPerPage));
     const currentPageClamped = Math.min(Math.max(1, blocksCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * blocksPerPage;
@@ -4578,7 +4905,7 @@ export default function HostelPage() {
             className="cms-btn cms-btn-primary"
             onClick={() => setModal({ isOpen: true, type: "block", mode: "add", data: null })}
           >
-            <ThreeDIcon name="add" size={16} /> Add Block
+            <Plus size={15} /> Add Block
           </button>
         </div>
         <div className="cms-card-body">
@@ -4629,7 +4956,7 @@ export default function HostelPage() {
                   ]);
                 }}
               >
-                <ThreeDIcon name="download" size={16} /> Export
+                <Download size={15} /> Export
               </button>
             </div>
           </div>
@@ -4720,7 +5047,7 @@ export default function HostelPage() {
                               title="View details"
                               onClick={() => setModal({ isOpen: true, type: "block", mode: "view", data: b })}
                             >
-                              <ThreeDIcon name="view" size={16} />
+                              <Eye size={14} />
                             </button>
                             <button
                               type="button"
@@ -4728,7 +5055,7 @@ export default function HostelPage() {
                               title="Edit block"
                               onClick={() => setModal({ isOpen: true, type: "block", mode: "edit", data: b })}
                             >
-                              <ThreeDIcon name="edit" size={16} />
+                              <Edit3 size={14} />
                             </button>
                             <button
                               type="button"
@@ -4736,7 +5063,7 @@ export default function HostelPage() {
                               title="Delete block"
                               onClick={() => handleDeleteBlock(b)}
                             >
-                              <ThreeDIcon name="delete" size={16} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -4784,7 +5111,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 categories per page)
-    const categoriesPerPage = 5;
+    const categoriesPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / categoriesPerPage));
     const currentPageClamped = Math.min(Math.max(1, categoriesCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * categoriesPerPage;
@@ -4812,7 +5139,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "roomType", mode: "add", data: null })}
             style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
           >
-            <ThreeDIcon name="add" size={16} /> Add Room Type
+            <Plus size={16} /> Add Room Type
           </button>
         </div>
 
@@ -4876,7 +5203,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => setModal({ isOpen: true, type: "category", mode: "view", data: cat })}
                   >
-                    <ThreeDIcon name="view" size={16} />
+                    <Eye size={13} />
                   </button>
                   <button
                     type="button"
@@ -4885,7 +5212,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => setModal({ isOpen: true, type: "category", mode: "edit", data: cat })}
                   >
-                    <ThreeDIcon name="edit" size={16} />
+                    <Edit3 size={13} />
                   </button>
                   <button
                     type="button"
@@ -4894,7 +5221,7 @@ export default function HostelPage() {
                     style={{ width: 26, height: 26 }}
                     onClick={() => handleDeleteCategory(cat)}
                   >
-                    <ThreeDIcon name="delete" size={16} />
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>
@@ -4965,7 +5292,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <ThreeDIcon name="download" size={16} /> Export
+                <Download size={14} /> Export
               </button>
             </div>
           </div>
@@ -5049,7 +5376,7 @@ export default function HostelPage() {
                           title="View category"
                           onClick={() => setModal({ isOpen: true, type: "category", mode: "view", data: cat })}
                         >
-                          <ThreeDIcon name="view" size={16} />
+                          <Eye size={14} />
                         </button>
                         <button
                           type="button"
@@ -5057,7 +5384,7 @@ export default function HostelPage() {
                           title="Edit category"
                           onClick={() => setModal({ isOpen: true, type: "category", mode: "edit", data: cat })}
                         >
-                          <ThreeDIcon name="edit" size={16} />
+                          <Edit3 size={14} />
                         </button>
                         <button
                           type="button"
@@ -5065,7 +5392,7 @@ export default function HostelPage() {
                           title="Delete category"
                           onClick={() => handleDeleteCategory(cat)}
                         >
-                          <ThreeDIcon name="delete" size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -5201,7 +5528,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 records per page as requested)
-    const roomsPerPage = 5;
+    const roomsPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / roomsPerPage));
     const currentPageClamped = Math.min(Math.max(1, roomsCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * roomsPerPage;
@@ -5231,7 +5558,7 @@ export default function HostelPage() {
               onClick={() => setModal({ isOpen: true, type: "room", mode: "add", data: null })}
               style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 20px", boxShadow: "0 4px 12px rgba(82, 110, 52, 0.2)" }}
             >
-              <ThreeDIcon name="add" size={16} /> Add New Room
+              <Plus size={16} /> Add New Room
             </button>
           </div>
         </div>
@@ -5529,7 +5856,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <ThreeDIcon name="download" size={16} /> Export
+                <Download size={14} /> Export
               </button>
             </div>
           </div>
@@ -5718,7 +6045,7 @@ export default function HostelPage() {
                             title="View details"
                             onClick={() => setModal({ isOpen: true, type: "room", mode: "view", data: { ...room, roomBeds, roomAllocs } })}
                           >
-                            <ThreeDIcon name="view" size={16} />
+                            <Eye size={14} />
                           </button>
                           <button
                             type="button"
@@ -5726,7 +6053,7 @@ export default function HostelPage() {
                             title="Edit room"
                             onClick={() => setModal({ isOpen: true, type: "room", mode: "edit", data: room })}
                           >
-                            <ThreeDIcon name="edit" size={16} />
+                            <Edit3 size={14} />
                           </button>
                           <button
                             type="button"
@@ -5734,7 +6061,7 @@ export default function HostelPage() {
                             title="Delete room"
                             onClick={() => handleDeleteRoom(room)}
                           >
-                            <ThreeDIcon name="delete" size={16} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
@@ -5787,7 +6114,7 @@ export default function HostelPage() {
     const isHostelSelected = !filterHostelWarden || filterHostelWarden === "all" || Boolean(filterHostelWarden);
 
     // Pagination (10 wardens per page)
-    const wardensPerPage = 5;
+    const wardensPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / wardensPerPage));
     const currentPageClamped = Math.min(Math.max(1, wardensCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * wardensPerPage;
@@ -5811,7 +6138,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "warden", mode: "add", data: null })}
             style={{ borderRadius: 12, display: "inline-flex", alignItems: "center", gap: 7, fontWeight: 700, padding: "8px 18px" }}
           >
-            <ThreeDIcon name="add" size={16} /> Assign Warden
+            <Plus size={16} /> Assign Warden
           </button>
         </div>
 
@@ -5885,7 +6212,7 @@ export default function HostelPage() {
                   ])
                 }
               >
-                <ThreeDIcon name="download" size={16} /> Export
+                <Download size={14} /> Export
               </button>
             </div>
           </div>
@@ -6039,7 +6366,7 @@ export default function HostelPage() {
                           title="View details"
                           onClick={() => setModal({ isOpen: true, type: "warden", mode: "view", data: w })}
                         >
-                          <ThreeDIcon name="view" size={16} />
+                          <Eye size={14} />
                         </button>
                         <button
                           type="button"
@@ -6047,7 +6374,7 @@ export default function HostelPage() {
                           title="Edit warden"
                           onClick={() => setModal({ isOpen: true, type: "warden", mode: "edit", data: w })}
                         >
-                          <ThreeDIcon name="edit" size={16} />
+                          <Edit3 size={14} />
                         </button>
                         <button
                           type="button"
@@ -6055,7 +6382,7 @@ export default function HostelPage() {
                           title="Remove warden"
                           onClick={() => handleDeleteWarden(w)}
                         >
-                          <ThreeDIcon name="delete" size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </td>
@@ -6180,7 +6507,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 records per page as requested: Previous, 1, 2, Next)
-    const allocsPerPage = 5;
+    const allocsPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / allocsPerPage));
     const currentPageClamped = Math.min(Math.max(1, allocCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * allocsPerPage;
@@ -6205,7 +6532,7 @@ export default function HostelPage() {
             onClick={() => setModal({ isOpen: true, type: "allocation", mode: "add", data: null })}
             style={{ borderRadius: 9999, height: 36, padding: "0 18px", fontSize: 13, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}
           >
-            <ThreeDIcon name="add" size={16} /> Allocate Room &amp; Bed
+            <Plus size={16} /> Allocate Room &amp; Bed
           </button>
         </div>
 
@@ -6559,7 +6886,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 requests per page)
-    const outpassPerPage = 5;
+    const outpassPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / outpassPerPage));
     const currentPageClamped = Math.min(Math.max(1, outpassCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * outpassPerPage;
@@ -6589,7 +6916,7 @@ export default function HostelPage() {
               gap: 6,
             }}
           >
-            <ThreeDIcon name="add" size={16} /> Apply Outpass / Leave
+            <Plus size={16} /> Apply Outpass / Leave
           </button>
         </div>
 
@@ -6653,7 +6980,7 @@ export default function HostelPage() {
                 ])
               }
             >
-              <ThreeDIcon name="download" size={16} /> Export
+              <Download size={14} /> Export
             </button>
           </div>
         </div>
@@ -6771,7 +7098,7 @@ export default function HostelPage() {
                               className="cms-outpass-action-btn view"
                               title="View details"
                             >
-                              <ThreeDIcon name="view" size={16} />
+                              <Eye size={15} />
                             </button>
                             <button
                               type="button"
@@ -6779,7 +7106,7 @@ export default function HostelPage() {
                               className="cms-outpass-action-btn delete"
                               title="Delete Record"
                             >
-                              <ThreeDIcon name="delete" size={16} />
+                              <Trash2 size={15} />
                             </button>
                           </div>
                         </td>
@@ -6834,7 +7161,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 requests per page)
-    const transferPerPage = 5;
+    const transferPerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / transferPerPage));
     const currentPageClamped = Math.min(Math.max(1, transferCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * transferPerPage;
@@ -6859,7 +7186,7 @@ export default function HostelPage() {
             className="cms-transfer-btn-pill"
             onClick={() => setModal({ isOpen: true, type: "transfer", mode: "add", data: null })}
           >
-            <ThreeDIcon name="add" size={16} /> Request Transfer / Vacate
+            <Plus size={16} /> Request Transfer / Vacate
           </button>
         </div>
 
@@ -7071,7 +7398,7 @@ export default function HostelPage() {
                             className="cms-outpass-action-btn view"
                             title="View details"
                           >
-                            <ThreeDIcon name="view" size={16} />
+                            <Eye size={15} />
                           </button>
                           <button
                             type="button"
@@ -7079,7 +7406,7 @@ export default function HostelPage() {
                             title="Delete Record"
                             onClick={() => handleDeleteTransfer(t)}
                           >
-                            <ThreeDIcon name="delete" size={16} />
+                            <Trash2 size={15} />
                           </button>
                         </div>
                       </td>
@@ -7138,7 +7465,7 @@ export default function HostelPage() {
     });
 
     // Pagination (10 students per page)
-    const attendancePerPage = 5;
+    const attendancePerPage = 10;
     const totalPages = Math.max(1, Math.ceil(filtered.length / attendancePerPage));
     const currentPageClamped = Math.min(Math.max(1, attendanceCurrentPage), totalPages);
     const startIndex = (currentPageClamped - 1) * attendancePerPage;
@@ -7778,7 +8105,7 @@ export default function HostelPage() {
                                 className="cms-att-view-action-btn"
                                 title="View Student Attendance Log"
                               >
-                                <ThreeDIcon name="view" size={16} /> View
+                                <Eye size={13} /> View
                               </button>
                             </td>
                           </tr>
@@ -7872,7 +8199,7 @@ export default function HostelPage() {
                                 className="cms-att-view-action-btn"
                                 title="View detailed logs"
                               >
-                                <ThreeDIcon name="view" size={16} /> {attendanceFrequency === "monthly" ? "View Month" : "View Range"}
+                                <Eye size={13} /> {attendanceFrequency === "monthly" ? "View Month" : "View Range"}
                               </button>
                             </td>
                           </tr>
@@ -7998,7 +8325,10 @@ export default function HostelPage() {
         if (cFilter === "non-ac") return catOrType.includes("non-ac");
         if (cFilter === "pending") return iStatus === "pending" || catOrType === "pending";
         if (cFilter === "approved") return iStatus === "approved" || catOrType === "approved";
+        if (cFilter === "completed") return iStatus === "completed" || catOrType === "completed";
         if (cFilter === "rejected") return iStatus === "rejected" || catOrType === "rejected";
+        if (cFilter === "room transfer" || cFilter === "transfer") return catOrType.includes("transfer");
+        if (cFilter === "bed vacate" || cFilter === "vacate") return catOrType.includes("vacate");
 
         const matchStatus = iStatus.includes(cFilter);
         const matchCat = catOrType.includes(cFilter);
@@ -8349,7 +8679,7 @@ export default function HostelPage() {
               className="cms-report-btn-print"
               onClick={handlePrintReport}
             >
-              <ThreeDIcon name="print" size={16} /> Print
+              <Printer size={15} /> Print
             </button>
             <button
               type="button"
@@ -8363,7 +8693,7 @@ export default function HostelPage() {
               className="cms-report-btn-download"
               onClick={handleDownloadReport}
             >
-              <ThreeDIcon name="download" size={16} /> Download
+              <Download size={15} /> Download
             </button>
           </div>
         </div>
@@ -8463,11 +8793,21 @@ export default function HostelPage() {
                     <option value="Non-AC">Non-AC</option>
                   </>
                 )}
-                {(reportCategory === "Outpass & Leave Report" || reportCategory === "Transfer & Vacate Report") && (
+                {reportCategory === "Outpass & Leave Report" && (
                   <>
                     <option value="Pending">Pending</option>
                     <option value="Approved">Approved</option>
                     <option value="Rejected">Rejected</option>
+                  </>
+                )}
+                {reportCategory === "Transfer & Vacate Report" && (
+                  <>
+                    <option value="Completed">Completed</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Room Transfer">Room Transfer</option>
+                    <option value="Bed Vacate">Bed Vacate</option>
                   </>
                 )}
               </select>
@@ -8569,7 +8909,7 @@ export default function HostelPage() {
                 style={{ height: 32, fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 8 }}
                 onClick={() => setModal({ isOpen: true, type: "feePayment", mode: "add", data: revenueStudentRecords[0] || null })}
               >
-                <ThreeDIcon name="add" size={16} />
+                <Plus size={14} />
                 Record Fee Payment
               </button>
             )}
@@ -8940,9 +9280,11 @@ export default function HostelPage() {
           );
         })}
       </div>
+      {isLoading ? <HostelLoadingSkeleton section={activeSetupSubtab} /> : <>
       {activeSetupSubtab === "blocks" && renderHostelBlocks()}
       {(activeSetupSubtab === "rooms" || activeSetupSubtab === "categories") && renderRooms()}
       {activeSetupSubtab === "wardens" && renderWardens()}
+      </>}
     </div>
   );
 
@@ -8972,27 +9314,34 @@ export default function HostelPage() {
           );
         })}
       </div>
+      {isLoading ? <HostelLoadingSkeleton section={activeStudentSubtab} /> : <>
       {activeStudentSubtab === "allocations" && renderAllocations()}
       {activeStudentSubtab === "attendance" && renderAttendance()}
       {activeStudentSubtab === "outpasses" && renderOutpasses()}
       {activeStudentSubtab === "transfers" && renderTransfers()}
+      </>}
     </div>
   );
 
   const renderReportsSection = () => renderReports();
+  const renderLoading = () => {
+    const section = isDedicatedView ? activeSection : activeMajorTab;
+    if (section === "setup") return renderSetupMasters();
+    if (section === "students" && !isDedicatedView) return renderStudentManagement();
+    return <HostelLoadingSkeleton section={section} reportCategory={reportCategory} />;
+  };
 
   // ═════════════════════════════════════════════════════════════════════
   // MAIN RENDER WITH DASHBOARDLAYOUT
   // ═════════════════════════════════════════════════════════════════════
   return (
     <DashboardLayout
-      title={isWardenRoute ? "Hostel Warden Portal" : "Hostel Management"}
+      title={isWardenRoute ? undefined : "Hostel Management"}
       subtitle={
-        isWardenRoute
-          ? "Resident student oversight, room & bed allocations, daily attendance, outpass approvals, and hostel analytics."
-          : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+        isWardenRoute ? undefined : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
       }
       breadcrumb={isWardenRoute ? undefined : ["Hostel Management"]}
+      hidePageHeader={isWardenRoute}
     >
       <div className="cms-hostel-page">
         {/* Toast Notification */}
@@ -9007,17 +9356,14 @@ export default function HostelPage() {
         {/* If viewing a dedicated sidebar field (like Warden portal routes), render ONLY that view */}
         {isDedicatedView ? (
           isLoading ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320, padding: 40 }}>
-              <div style={{ width: 40, height: 40, border: "3px solid var(--cms-border)", borderTopColor: "var(--cms-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-              <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }} />
-              <p style={{ marginTop: 14, color: "var(--cms-muted)", fontSize: 13.5, fontWeight: 600 }}>Loading Hostel records from server...</p>
-            </div>
+            renderLoading()
           ) : (
             <div className="cms-hostel-stack">
               {apiError && (
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", marginBottom: 16 }}>
                   <AlertCircle size={18} />
                   <span style={{ fontSize: 13, fontWeight: 600 }}>{apiError}</span>
+                  <button type="button" className="cms-btn cms-btn-ghost" onClick={fetchHostelData}>Retry</button>
                 </div>
               )}
               {activeSection === "dashboard" && renderDashboard()}
@@ -9068,17 +9414,14 @@ export default function HostelPage() {
 
             {/* Active Tab Screen */}
             {isLoading ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 320, padding: 40 }}>
-                <div style={{ width: 40, height: 40, border: "3px solid var(--cms-border)", borderTopColor: "var(--cms-primary)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                <style dangerouslySetInnerHTML={{ __html: '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }' }} />
-                <p style={{ marginTop: 14, color: "var(--cms-muted)", fontSize: 13.5, fontWeight: 600 }}>Loading Hostel records from server...</p>
-              </div>
+              renderLoading()
             ) : (
               <>
                 {apiError && (
                   <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 8, background: "#fef2f2", color: "#991b1b", border: "1px solid #fecaca", marginBottom: 16 }}>
                     <AlertCircle size={18} />
                     <span style={{ fontSize: 13, fontWeight: 600 }}>{apiError}</span>
+                  <button type="button" className="cms-btn cms-btn-ghost" onClick={fetchHostelData}>Retry</button>
                   </div>
                 )}
                 {activeMajorTab === "dashboard" && renderDashboard()}
@@ -9096,8 +9439,7 @@ export default function HostelPage() {
             modal={modal}
             closeModal={closeModal}
             handleSaveBlock={handleSaveBlock}
-            setActiveMajorTab={setActiveMajorTab}
-            setActiveSetupSubtab={setActiveSetupSubtab}
+            onViewRooms={() => navigateHostelView("setup", "rooms")}
             setFilterHostelRooms={setFilterHostelRooms}
             blocks={blocks}
             isWardenRoute={isWardenRoute}
@@ -9143,6 +9485,8 @@ export default function HostelPage() {
             blocks={blocks}
             wardens={wardens}
             candidateStaff={candidateStaff}
+            isTenantCollege={isTenantCollege}
+            curCampusId={curCampusId}
             handleSaveWarden={handleSaveWarden}
             showToast={showToast}
           />
@@ -9159,6 +9503,8 @@ export default function HostelPage() {
             candidateAdmissions={candidateAdmissions}
             candidateStudents={candidateStudents}
             canAccessAdminEndpoints={canAccessAdminEndpoints}
+            isTenantCollege={isTenantCollege}
+            curCampusId={curCampusId}
             handleSaveAllocation={handleSaveAllocation}
             showToast={showToast}
           />
@@ -9681,7 +10027,7 @@ function StudentAttendanceModal({
 
         {/* Detailed Records Table */}
         <div className="cms-hostel-compact-card" style={{ maxHeight: 320, overflowY: "auto" }}>
-          <PaginatedTable className="cms-hostel-compact-table">
+          <table className="cms-hostel-compact-table">
             <thead>
               <tr>
                 <th>DATE</th>
@@ -9773,7 +10119,7 @@ function StudentAttendanceModal({
                 })
               )}
             </tbody>
-          </PaginatedTable>
+          </table>
         </div>
 
         {/* Modal Footer */}
@@ -9785,7 +10131,7 @@ function StudentAttendanceModal({
               className="cms-btn cms-btn-primary"
               style={{ borderRadius: 8, height: 34, fontSize: 12.5, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}
             >
-              <ThreeDIcon name="check" size={14} /> Save Active Changes
+              <Save size={14} /> Save Active Changes
             </button>
           )}
           <button
@@ -9803,7 +10149,7 @@ function StudentAttendanceModal({
 }
 
 // Block Modal
-function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, setActiveSetupSubtab, setFilterHostelRooms, blocks = [] }) {
+function BlockModal({ modal, closeModal, handleSaveBlock, onViewRooms, setFilterHostelRooms, blocks = [] }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [form, setForm] = useState(
@@ -9947,13 +10293,12 @@ function BlockModal({ modal, closeModal, handleSaveBlock, setActiveMajorTab, set
             <button type="button" className="cms-btn cms-btn-ghost" onClick={closeModal} disabled={isSubmitting}>
               {isView ? "Close" : "Cancel"}
             </button>
-            {isView && setActiveMajorTab && setActiveSetupSubtab && (
+            {isView && onViewRooms && (
               <button
                 type="button"
                 className="cms-btn cms-btn-primary"
                 onClick={() => {
-                  setActiveMajorTab("setup");
-                  setActiveSetupSubtab("rooms");
+                  onViewRooms();
                   if (setFilterHostelRooms) setFilterHostelRooms(String(form.id || form.code || ""));
                   closeModal();
                 }}
@@ -10651,7 +10996,7 @@ function RoomSharingConfigModal({ modal, blocks, closeModal, handleSaveRoomShari
                                     title="Delete category"
                                     onClick={() => handleRemoveCustomCategory(fc.floorIndex, ca.id)}
                                   >
-                                    <ThreeDIcon name="delete" size={16} />
+                                    <Trash2 size={16} />
                                   </button>
                                 </div>
                               ))}
@@ -13587,7 +13932,7 @@ function RoomModal({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    <ThreeDIcon name="add" size={16} /> + Add Room
+                    <Plus size={16} /> + Add Room
                   </button>
                 </div>
               </div>
@@ -13839,7 +14184,7 @@ function RoomModal({
                             boxShadow: "0 1px 4px rgba(82, 110, 52, 0.2)",
                           }}
                         >
-                          <ThreeDIcon name="add" size={16} /> Add
+                          <Plus size={14} /> Add
                         </button>
                       </div>
                     </div>
@@ -13861,7 +14206,7 @@ function RoomModal({
                       </div>
                     ) : (
                       <div style={{ overflowX: "auto", borderRadius: 8, border: "1px solid var(--cms-border)" }}>
-                        <PaginatedTable style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
                           <thead>
                             <tr style={{ background: "var(--cms-subtle)", borderBottom: "1px solid var(--cms-border)" }}>
                               <th style={{ padding: "7px 10px", fontWeight: 700, color: "var(--cms-muted)", width: 28 }}>#</th>
@@ -14118,14 +14463,14 @@ function RoomModal({
                                         alignItems: "center",
                                       }}
                                     >
-                                      <ThreeDIcon name="delete" size={16} />
+                                      <Trash2 size={15} />
                                     </button>
                                   </td>
                                 </tr>
                               );
                             })}
                           </tbody>
-                        </PaginatedTable>
+                        </table>
                       </div>
                     )}
 
@@ -14320,7 +14665,7 @@ function RoomModal({
 }
 
 // Warden Modal (Matching Screenshot 2: exactly 3 fields)
-function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handleSaveWarden, showToast }) {
+function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, isTenantCollege = false, curCampusId = null, handleSaveWarden, showToast }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -14328,9 +14673,14 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
     const [hostelStaff, setHostelStaff] = useState([]);
     useEffect(() => {
       let isMounted = true;
+      if (isTenantCollege && !curCampusId) {
+        setHostelStaff([]);
+        return;
+      }
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
       // Fetch fresh Hostel department staff
-      apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-        .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }))
+      apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+        .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }))
         .then((res) => {
           if (isMounted && res?.data) {
             const items = extractCollection(res.data);
@@ -14339,7 +14689,7 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
         })
         .catch(() => {});
       return () => { isMounted = false; };
-    }, []);
+    }, [isTenantCollege, curCampusId]);
 
     const effectiveStaff = useMemo(() => {
       const merged = [];
@@ -14635,6 +14985,8 @@ function AllocationModal({
   candidateAdmissions,
   candidateStudents,
   canAccessAdminEndpoints = false,
+  isTenantCollege = false,
+  curCampusId = null,
   handleSaveAllocation,
   showToast,
 }) {
@@ -14753,17 +15105,23 @@ function AllocationModal({
 
     useEffect(() => {
       let cancelled = false;
+      if (isTenantCollege && !curCampusId) {
+        setModalAdmissions([]);
+        setModalStudents([]);
+        return;
+      }
       const needAdm = !candidateAdmissions || candidateAdmissions.length === 0;
       const needStu = !candidateStudents || candidateStudents.length === 0;
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
       if (canAccessAdminEndpoints && (needAdm || needStu)) {
         Promise.allSettled([
-          needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+          needAdm ? apiClient.get("/api/v1/student-admissions", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
+            apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
           ) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
+            apiClient.get("/api/v1/certificates/students-dropdown", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
           ) : Promise.resolve(null),
         ]).then(([admR, stuActiveR, stuCertR]) => {
           if (cancelled) return;
@@ -14808,6 +15166,10 @@ function AllocationModal({
 
     // Student candidate suggestions: prioritized by Hostel opt-in during admission
     const allCandidates = useMemo(() => {
+      if (isTenantCollege && !curCampusId) {
+        return [];
+      }
+
       const admissionsMap = new Map();
       const registerAdmission = (ca) => {
         if (!ca) return;
@@ -14831,18 +15193,20 @@ function AllocationModal({
 
       let localAdmissionsList = [];
       let localAssignments = null;
-      try {
-        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
-        if (Array.isArray(localAdms) && localAdms.length > 0) {
-          localAdmissionsList = localAdms;
-          localAdms.forEach((entry) => {
-            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
-            registerAdmission(x);
-          });
+      if (!isTenantCollege) {
+        try {
+          const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+          if (Array.isArray(localAdms) && localAdms.length > 0) {
+            localAdmissionsList = localAdms;
+            localAdms.forEach((entry) => {
+              const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+              registerAdmission(x);
+            });
+          }
+          localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
+        } catch {
+          // ignore storage errors
         }
-        localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
-      } catch {
-        // ignore storage errors
       }
 
       const checkHostelOpted = (student, admission) => {
@@ -15088,7 +15452,7 @@ function AllocationModal({
       }
 
       return hostelCandidates;
-    }, [effectiveStudents, effectiveAdmissions, activeAllocationsMap, modal.mode, modal.data, blocks]);
+    }, [effectiveStudents, effectiveAdmissions, activeAllocationsMap, modal.mode, modal.data, blocks, isTenantCollege, curCampusId]);
 
     // Handle student select change - matching Warden selection behavior
     const handleStudentChange = (selectedVal) => {
@@ -16171,9 +16535,10 @@ function TransferModal({
         ...beds.filter((b) => String(b.roomId) === String(destRoomObj.id)),
         ...(Array.isArray(destRoomObj.beds) ? destRoomObj.beds : [])
       ];
-      const avail = rawBeds.filter(
-        (b) => (b.bedStatus || "").toLowerCase() === "available" || (!b.bedStatus && (b.status || "").toLowerCase() === "active")
-      );
+      const avail = rawBeds.filter((b) => {
+        const bStatus = (b.bedStatus || b.status || "").toLowerCase();
+        return (bStatus === "available" || b.bedStatus === "Available") && !b.isOccupied;
+      });
       const unique = [];
       const seen = new Set();
       for (const b of avail) {
@@ -16714,7 +17079,7 @@ function TransferModal({
                 color: "#fff",
               }}
             >
-              <ThreeDIcon name="check" size={14} />
+              <Save size={14} />
               {isSubmitting ? "Saving..." : "Save Payment Receipt"}
             </button>
           </div>
@@ -16722,3 +17087,4 @@ function TransferModal({
       </Modal>
     );
   }
+

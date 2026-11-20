@@ -11,7 +11,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
             string? approvalStatus = null,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            string? search = null);
+            string? search = null,
+            int? campusId = null);
 
         Task<HostelOutpassLeaveResponseDto?> GetByIdAsync(
             int requestId);
