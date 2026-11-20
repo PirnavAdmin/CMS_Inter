@@ -698,7 +698,7 @@ export const apiEndpoints = {
     update: (id) => `/api/v1/holidays/${id}`,
     delete: (id) => `/api/v1/holidays/${id}`,
   },
- 
+
   transport: {
     studentOptions: "/api/v1/transport/student/options",
     studentDetails: "/api/v1/transport/student/details",
