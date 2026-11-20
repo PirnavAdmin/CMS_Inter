@@ -37,9 +37,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return conn;
         }
 
-        public async Task<IEnumerable<Designation>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
+        public async Task<IEnumerable<Designation>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null, int? collegeId = null)
         {
-            var dtos = await GetAllDtosAsync(includeInactive, staffType, departmentId, campusId);
+            var dtos = await GetAllDtosAsync(includeInactive, staffType, departmentId, campusId, collegeId);
             return dtos.Select(d => new Designation
             {
                 Id = d.Id,
@@ -49,11 +49,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
                 UpdatedAt = d.UpdatedAt,
-                CampusId = campusId
+                CampusId = campusId,
+                CollegeId = d.CollegeId ?? collegeId
             }).ToList();
         }
 
-        public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
+        public async Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null, int? collegeId = null)
         {
             if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
             {
@@ -74,7 +75,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_IncludeInactive = includeInactive ? 1 : 0,
                     p_StaffType = normalizedStaffType,
                     p_DepartmentId = departmentId ?? 0,
-                    p_CampusId = campusId
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -180,7 +182,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
                     p_StaffType = designation.StaffType ?? "Both",
                     p_IsActive = designation.IsActive ? 1 : 0,
-                    p_CampusId = designation.CampusId
+                    p_CampusId = designation.CampusId,
+                    p_CollegeId = designation.CollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -200,7 +203,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
                     p_StaffType = designation.StaffType ?? "Both",
                     p_IsActive = designation.IsActive ? 1 : 0,
-                    p_CampusId = designation.CampusId
+                    p_CampusId = designation.CampusId,
+                    p_CollegeId = designation.CollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -216,7 +220,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null)
+        public async Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null)
         {
             if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
             {
@@ -226,7 +230,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             var summary = await conn.QueryFirstOrDefaultAsync<DesignationSummaryDto>(
                 "sp_GetDesignationSummary",
-                new { p_CampusId = campusId },
+                new { p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             return summary ?? new DesignationSummaryDto();

@@ -7,17 +7,22 @@ namespace CollegeManagement.API.DTOs.Enquiry
     {
         public int? CampusId { get; set; }
 
-        [Required(ErrorMessage = "Full Name is required.")]
+        [Required(ErrorMessage = "Please enter a valid name.")]
         [StringLength(150, MinimumLength = 2, ErrorMessage = "Full Name must be between 2 and 150 characters.")]
+        [RegularExpression(@"^[a-zA-Z\s.'-]+$", ErrorMessage = "Please enter a valid name.")]
         public string FullName { get; set; } = string.Empty;
+
+        [StringLength(150, ErrorMessage = "Parent / Guardian Name cannot exceed 150 characters.")]
+        [RegularExpression(@"^[a-zA-Z\s.'-]+$", ErrorMessage = "Please enter a valid parent / guardian name.")]
+        public string? GuardianName { get; set; }
 
         [Required(ErrorMessage = "Email Address is required.")]
         [EmailAddress(ErrorMessage = "Please provide a valid email address.")]
         [StringLength(150)]
         public string Email { get; set; } = string.Empty;
 
-        [Required(ErrorMessage = "Mobile Number is required.")]
-        [RegularExpression(@"^\+?[\d\s()-]{7,20}$", ErrorMessage = "Please enter a valid mobile number.")]
+        [Required(ErrorMessage = "Please enter a valid 10-digit mobile number.")]
+        [RegularExpression(@"^(\+91[\-\s]?)?[0-9]{10}$", ErrorMessage = "Please enter a valid 10-digit mobile number.")]
         [StringLength(30)]
         public string Mobile { get; set; } = string.Empty;
 
