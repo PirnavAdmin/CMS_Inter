@@ -837,13 +837,16 @@ const normalizeFeeStructureRows = (rows, feeTypes = [], lookups = {}) => {
     const existing = grouped.get(key);
     const row = existing || {
       id: structureId,
+      collegeId: read(item, "collegeId", "CollegeId") ?? null,
       campusId: read(item, "campusId", "CampusId") ?? null,
       structureName: textValue(item, "structureName", "StructureName", "name", "Name"),
       description: textValue(item, "description", "Description"),
       boardId: textValue(item, "boardId", "BoardId") || textValue(itemBoard, "boardId", "BoardId", "id", "Id"),
-      board: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "boardId", "BoardId"),
+      board: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "board", "Board") || textValue(item, "boardId", "BoardId"),
+      boardName: textValue(item, "boardName", "BoardName") || textValue(itemBoard, "boardName", "BoardName", "name", "Name") || textValue(item, "board", "Board"),
       academicYearId,
       academicYear,
+      academicYearName: textValue(item, "academicYearName", "AcademicYearName") || textValue(itemAcademicYear, "academicYearName", "AcademicYearName") || academicYear,
       academicLevelId,
       academicLevelName,
       yearFeeMode,
@@ -4892,9 +4895,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     setStructureError("");
     setMasterErrors({});
     const [typesResult, structuresResult, scholarshipsResult, yearsResult, levelsResult, groupsResult, programsResult, transportRoutesResult, hostelFeesResult, hostelBlocksResult, hostelRoomTypesResult, fineRulesResult] = await Promise.allSettled([
-      apiClient.get(apiEndpoints.fee.feeTypes),
-      apiClient.get(apiEndpoints.fee.getStructures, { params: cleanParams({ campusId: selectedCampusValue }) }),
-      apiClient.get(apiEndpoints.fee.scholarships),
+      apiClient.get(apiEndpoints.fee.feeTypes, { params: cleanParams({ campusId: selectedCampusValue, boardId: selectedBoardId, academicYearId: selectedAcademicYearId }) }),
+      apiClient.get(apiEndpoints.fee.getStructures, { params: cleanParams({ campusId: selectedCampusValue, boardId: selectedBoardId, academicYearId: selectedAcademicYearId }) }),
+      apiClient.get(apiEndpoints.fee.scholarships, { params: cleanParams({ campusId: selectedCampusValue, boardId: selectedBoardId, academicYearId: selectedAcademicYearId }) }),
       apiClient.get(apiEndpoints.academicYears.getAll),
       apiClient.get(apiEndpoints.boards.getAcademicLevels),
       apiClient.get(apiEndpoints.groups.getAll, { params: { isActive: true } }).catch(() => apiClient.get(apiEndpoints.groups.dropdown)),
@@ -4995,13 +4998,25 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         const [normalized] = normalizeFeeStructureRows([
           {
             ...stripFeeItemCollections(structure),
+            boardId: structure.boardId,
+            board: structure.board,
+            boardName: structure.boardName || structure.board,
+            academicYearId: structure.academicYearId,
+            academicYear: structure.academicYear,
+            academicYearName: structure.academicYearName || structure.academicYear,
             items: itemRows.map((item) => ({
               ...item,
               feeStructureId: read(item, "feeStructureId", "FeeStructureId") ?? structure.id,
             })),
           },
         ], normalizedFeeTypes, structureLookups);
-        return normalized || { ...structure, feeDetailsError: "Unable to read saved fee details." };
+        return normalized ? {
+          ...normalized,
+          board: structure.board,
+          boardName: structure.boardName || structure.board,
+          academicYear: structure.academicYear,
+          academicYearName: structure.academicYearName || structure.academicYear,
+        } : { ...structure, feeDetailsError: "Unable to read saved fee details." };
       });
       setApiStructures(structuresWithItems);
     } else {

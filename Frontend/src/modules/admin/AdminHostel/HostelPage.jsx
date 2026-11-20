@@ -1301,7 +1301,9 @@ export default function HostelPage() {
         const uniqueTransfer = Array.from(new Map(raw.map(mapTransfer).map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-    } catch (_) { /* Intentionally ignored. */ }
+    } catch (err) {
+      console.error("Failed to refresh transfers:", err);
+    }
   }, [mapTransfer]);
 
   const refreshDashboard = useCallback(async () => {
@@ -3349,17 +3351,15 @@ export default function HostelPage() {
         requestDate: new Date().toISOString(),
         effectiveDate: new Date(Date.now() + 86400000).toISOString(),
         reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
-        refundAmount: isVacate ? (transData.refundAmount || 0) : null,
+        refundAmount: isVacate ? (transData.refundAmount || 2000) : null,
         autoApprove: true,
         approvalStatus: "Approved",
       };
 
-      // 1. Submit transaction to backend API
       const res = await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
       const createdData = res?.data?.data || res?.data;
       const createdId = createdData?.requestId || createdData?.id;
 
-      // 2. Fallback approval/completion invocation if created in Pending state
       if (createdId && (!createdData?.approvalStatus || createdData.approvalStatus === "Pending")) {
         try {
           await hostelApi.approveTransferVacate(
@@ -3371,10 +3371,9 @@ export default function HostelPage() {
             { skipErrorLog: true }
           );
           await hostelApi.completeTransferVacate(createdId, { skipErrorLog: true });
-        } catch (_) {}
+        } catch (_) { /* Intentionally ignored if already completed by server */ }
       }
 
-      // 3. Update local storage cache for vacated students
       if (isVacate) {
         try {
           const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
@@ -3387,7 +3386,11 @@ export default function HostelPage() {
             vacatedAt: new Date().toISOString(),
           };
           const filtered = (Array.isArray(stored) ? stored : []).filter(
-            (s) => String(s.studentId) !== String(record.studentId) && s.admissionNo !== record.admissionNo
+            (s) =>
+              !(
+                (record.studentId && String(s.studentId) === String(record.studentId)) ||
+                (record.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(record.admissionNo).trim().toLowerCase())
+              )
           );
           filtered.push(record);
           localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
@@ -3396,7 +3399,8 @@ export default function HostelPage() {
         setAllocations((prev) =>
           prev.map((a) =>
             (payload.allocationId && Number(a.id || a.allocationId) === Number(payload.allocationId)) ||
-            (payload.studentId && Number(a.studentId) === Number(payload.studentId))
+            (payload.studentId && Number(a.studentId) === Number(payload.studentId)) ||
+            (payload.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(payload.admissionNo).trim().toLowerCase())
               ? { ...a, status: "Vacated", isActive: false, isVacated: true }
               : a
           )
@@ -3411,7 +3415,6 @@ export default function HostelPage() {
         "success"
       );
 
-      // 4. Refetch all dependent state in parallel
       await Promise.allSettled([
         refreshTransfers(),
         refreshAllocations(),
