@@ -49,7 +49,16 @@ namespace CollegeManagement.API.Controllers.V1
             if (User?.Identity?.IsAuthenticated != true) return null;
             if (User.IsInRole("Super Admin") || string.Equals(_jwtTokenHelper.GetRole(User), "Super Admin", System.StringComparison.OrdinalIgnoreCase))
                 return null;
-            return _jwtTokenHelper.GetCollegeId(User);
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 0) return collegeId.Value;
+            var userId = _jwtTokenHelper.GetUserId(User);
+            if (userId.HasValue && userId.Value > 0)
+            {
+                var conn = _db.Database.GetDbConnection();
+                if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+                return Dapper.SqlMapper.QueryFirstOrDefault<int?>(conn, "SELECT CollegeId FROM Users WHERE UserId = @UserId;", new { UserId = userId.Value });
+            }
+            return null;
         }
 
         private async Task<HashSet<int>?> GetOwnedCampusIdsAsync(int? collegeId, CancellationToken ct)

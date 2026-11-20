@@ -37,7 +37,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Search = filter.Search ?? "",
                     p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
                     p_BusType = busTypeFilter,
-                    p_CampusId = filter.CampusId
+                    p_CampusId = filter.CampusId,
+                    p_CollegeId = filter.CollegeId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
 
@@ -148,9 +149,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 new
                 {
                     p_Search = search ?? "",
-                    p_BusType = busType ?? "",
-                    p_Limit = limit > 0 ? limit : 100,
-                    p_CampusId = (int?)null
+                    p_Limit = limit > 0 ? limit : 100
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -169,7 +168,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var all = await c.QueryAsync<TransportRouteDto>(
                 "sp_GetTransportRoutes",
-                new { p_Search = search, p_Status = (byte?)null, p_BusType = (string?)null, p_CampusId = (int?)null },
+                new { p_Search = search, p_Status = (byte?)null, p_BusType = (string?)null, p_CampusId = (int?)null, p_CollegeId = (int?)null },
                 commandType: CommandType.StoredProcedure);
 
             return all.FirstOrDefault(r =>

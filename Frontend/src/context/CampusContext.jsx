@@ -79,8 +79,8 @@ export function CampusProvider({ children }) {
     if (!u) return;
 
     const roleStr = String(u.role || "").trim().toLowerCase();
-    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
-    if (isAdmin) return; // Admins have full access to all campuses
+    const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
+    if (isSuperAdmin) return; // SuperAdmin has access to all campuses across all colleges
 
     if (Array.isArray(u.assignedCampusIds) && u.assignedCampusIds.length > 0) {
       setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
@@ -124,9 +124,16 @@ export function CampusProvider({ children }) {
     try {
       const data = await campusApi.getCampuses();
       if (Array.isArray(data)) {
-        setCampuses(data);
+        const u = getAuthUser();
+        const roleStr = String(u?.role || "").trim().toLowerCase();
+        const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
+        const userCollegeId = Number(u?.collegeId || u?.CollegeId || 0);
+        const scopedData = (!isSuperAdmin && userCollegeId > 0)
+          ? data.filter((c) => Number(c.collegeId ?? c.CollegeId ?? 0) === userCollegeId)
+          : data;
+        setCampuses(scopedData);
         setSelectedCampusId((prev) => {
-          const exists = data.some(
+          const exists = scopedData.some(
             (c) => String(c.id) === String(prev) || String(c.campusId) === String(prev)
           );
           if (exists) return prev;
@@ -185,10 +192,28 @@ export function CampusProvider({ children }) {
 
     const u = getAuthUser();
     const roleStr = String(u?.role || "").trim().toLowerCase();
-    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
+    const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
 
-    if (isAdmin) {
+    if (isSuperAdmin) {
       return allActive;
+    }
+
+    // College scoping for college admins and staff
+    const userCollegeId = Number(u?.collegeId || u?.CollegeId || 0);
+    if (userCollegeId > 0) {
+      const collegeCampuses = allActive.filter((c) => Number(c.collegeId ?? c.CollegeId ?? 0) === userCollegeId);
+      if (collegeCampuses.length > 0) {
+        const assignedIds = principalAssignedCampusIds || 
+          (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0 
+            ? u.assignedCampusIds.map(Number) 
+            : null);
+        if (Array.isArray(assignedIds) && assignedIds.length > 0) {
+          const allowedSet = new Set(assignedIds);
+          const subFiltered = collegeCampuses.filter((c) => allowedSet.has(Number(c.id ?? c.campusId)));
+          if (subFiltered.length > 0) return subFiltered;
+        }
+        return collegeCampuses;
+      }
     }
 
     const assignedIds = principalAssignedCampusIds || 
