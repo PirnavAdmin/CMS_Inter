@@ -39,6 +39,63 @@ namespace CollegeManagement.API.Controllers
             }
         }
 
+        [HttpGet("calculate-distance")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+        [ProducesResponseType(typeof(DistanceCalculationResultDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> CalculateDistance(
+            [FromQuery] string? origin,
+            [FromQuery] string? destination,
+            [FromQuery] string? startLocation = null,
+            [FromQuery] string? endLocation = null,
+            CancellationToken ct = default)
+        {
+            var orig = !string.IsNullOrWhiteSpace(origin) ? origin : startLocation;
+            var dest = !string.IsNullOrWhiteSpace(destination) ? destination : endLocation;
+
+            if (string.IsNullOrWhiteSpace(orig) || string.IsNullOrWhiteSpace(dest))
+            {
+                return BadRequest(new { success = false, message = "Both origin and destination are required." });
+            }
+
+            var result = await _service.CalculateDistanceAsync(orig, dest, ct);
+            return Ok(result);
+        }
+
+        [HttpGet("route-preview")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+        [ProducesResponseType(typeof(RoutePreviewResultDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> RoutePreviewGet(
+            [FromQuery] double originLat,
+            [FromQuery] double originLng,
+            [FromQuery] double destLat,
+            [FromQuery] double destLng,
+            CancellationToken ct = default)
+        {
+            if (originLat < -90 || originLat > 90 || originLng < -180 || originLng > 180 ||
+                destLat < -90 || destLat > 90 || destLng < -180 || destLng > 180)
+            {
+                return BadRequest(new { success = false, message = "Invalid latitude or longitude coordinates provided." });
+            }
+
+            var result = await _service.PreviewRouteAsync(originLat, originLng, destLat, destLng, ct);
+            return Ok(result);
+        }
+
+        [HttpPost("route-preview")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+        [ProducesResponseType(typeof(RoutePreviewResultDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> RoutePreviewPost(
+            [FromBody] RoutePreviewRequestDto dto,
+            CancellationToken ct = default)
+        {
+            if (dto == null)
+            {
+                return BadRequest(new { success = false, message = "Request body is required." });
+            }
+
+            return await RoutePreviewGet(dto.OriginLat, dto.OriginLng, dto.DestLat, dto.DestLng, ct);
+        }
+
         [HttpGet("{routeIdOrCode}")]
         [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal,Driver,Bus Driver")]
         [ProducesResponseType(typeof(TransportRouteDto), StatusCodes.Status200OK)]

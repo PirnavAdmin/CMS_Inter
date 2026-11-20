@@ -1148,7 +1148,8 @@ BEGIN
 
     -- Mark request completed
     UPDATE `hostel_transfer_vacate`
-    SET `CompletedAt` = UTC_TIMESTAMP(),
+    SET `ApprovalStatus` = 'Completed',
+        `CompletedAt` = UTC_TIMESTAMP(),
         `UpdatedAt` = UTC_TIMESTAMP()
     WHERE `RequestId` = p_RequestId;
 

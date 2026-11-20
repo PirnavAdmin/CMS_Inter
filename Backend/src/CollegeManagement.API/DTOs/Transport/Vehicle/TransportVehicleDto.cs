@@ -10,6 +10,9 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
         [JsonPropertyName("vehicleId")]
         public long VehicleId { get; set; }
 
+        [JsonPropertyName("collegeId")]
+        public int CollegeId { get; set; }
+
         [JsonPropertyName("vehicleNumber")]
         public string VehicleNumber { get; set; } = string.Empty;
 

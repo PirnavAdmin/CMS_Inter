@@ -55,7 +55,8 @@ export function scopeTransportRecords(records, context) {
     const owners = new Set(linkedCampuses.get(id(transportValue(row, 'vehicleId', 'id'))) || []);
     const routeCampus = routeCampuses.get(id(transportValue(row, 'routeId', 'assignedRouteId')));
     if (routeCampus) owners.add(routeCampus);
-    return owners.size === 1 && owners.has(campus);
+    if (explicit == null && owners.size === 0) return true;
+    return owners.has(campus);
   });
 
   const vehicleIds = ids(vehicles, 'vehicleId', 'id');

@@ -245,8 +245,12 @@ export function useForm(fields, initial) {
   return { values, errors, setValue, validate, setValues, setErrors };
 }
 
-export function FormModal({ title, fields, initial, columns = 2, onCancel, onSave, awaitSave = false, savingLabel = "Saving...", className = "" }) {
-  const { values, errors, setValue, validate } = useForm(fields, initial);
+export function FormModal({ title, fields, initial, columns = 2, onCancel, onSave, awaitSave = false, savingLabel = "Saving...", className = "", onFieldChange }) {
+  const { values, errors, setValue, validate, setValues } = useForm(fields, initial);
+  const handleFieldChange = (name, val) => {
+    setValue(name, val);
+    onFieldChange?.(name, val, { ...values, [name]: val }, setValue, setValues);
+  };
   const [saving, setSaving] = useState(false);
   const submit = async () => {
     if (saving || !validate()) return;
@@ -285,12 +289,12 @@ export function FormModal({ title, fields, initial, columns = 2, onCancel, onSav
               {f.title ? <h4>{f.title}</h4> : null}
               <div className={`cms-form-grid ${f.columns === 3 ? "cols-3" : ""}`}>
                 {(f.fields || []).map((groupField) => (
-                  <Field key={groupField.name} field={groupField} value={values[groupField.name]} error={errors[groupField.name]} onChange={setValue} />
+                  <Field key={groupField.name} field={groupField} value={values[groupField.name]} error={errors[groupField.name]} onChange={handleFieldChange} />
                 ))}
               </div>
             </div>
           ) : (
-            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={setValue} />
+            <Field key={f.name} field={f} value={values[f.name]} error={errors[f.name]} onChange={handleFieldChange} />
           )
         ))}
       </div>

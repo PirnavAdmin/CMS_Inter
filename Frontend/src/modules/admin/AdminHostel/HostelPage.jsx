@@ -750,32 +750,39 @@ export default function HostelPage() {
     );
     const sName = t.studentName || alloc?.studentName || (t.studentId ? `Student #${t.studentId}` : "Resident Student");
     const admNo = t.admissionNo || alloc?.admissionNo || "-";
-    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || (t.fromHostelId ? `Block #${t.fromHostelId}` : "—");
+    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || (t.fromHostelId ? `Block #${t.fromHostelId}` : "Hostel");
     const fromR = t.fromRoomNumber || t.currentRoom || alloc?.roomNumber || alloc?.room || "-";
     const cleanFromR = String(fromR).replace("Room #", "").trim();
-    const actType = t.actionType || (t.requestType === "Vacate" ? "Bed Vacate" : "Room Transfer");
+    const isVacate = t.requestType === "Vacate" || t.actionType === "Bed Vacate";
+    const actType = isVacate ? "Bed Vacate" : "Room Transfer";
 
     return {
       id: t.requestId ?? t.id ?? "",
       studentName: sName,
       admissionNo: admNo,
       actionType: actType,
-      requestType: t.requestType || (actType === "Bed Vacate" ? "Vacate" : "Transfer"),
+      requestType: t.requestType || (isVacate ? "Vacate" : "Transfer"),
       currentBlock: fromB,
       fromHostelName: fromB,
       currentRoom: cleanFromR,
       fromRoomNumber: cleanFromR,
       currentRoomDisplay: `${fromB} (#${cleanFromR})`,
-      targetBlock: t.toHostelName ?? t.targetBlock ?? "--",
-      targetRoom: t.toRoomNumber ?? t.targetRoom ?? "--",
-      targetBed: t.toBedNumber ?? t.targetBed ?? "--",
-      targetDisplayTitle: t.toHostelName && t.toRoomNumber ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})` : (t.requestType === "Vacate" || actType === "Bed Vacate" ? "✓ Old Bed Released to Available" : (t.targetDisplayTitle ?? "--")),
-      targetDisplaySub: t.toHostelName && t.fromRoomNumber ? `✓ Old Bed #${t.fromRoomNumber} Released to Available` : (t.targetDisplaySub ?? null),
-      feeAdjustment: (t.requestType === "Vacate" || actType === "Bed Vacate") && t.refundAmount ? `Fee Adjusted: ₹${t.refundAmount.toLocaleString()}` : (t.feeAdjustment ?? null),
-      date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.date ?? ""),
-      requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.requestDate ?? ""),
-      status: t.approvalStatus ?? t.status ?? "Pending",
-      reason: t.reason ?? "",
+      targetBlock: t.toHostelName || t.targetBlock || "--",
+      targetRoom: t.toRoomNumber || t.targetRoom || "--",
+      targetBed: t.toBedNumber || t.targetBed || "--",
+      targetDisplayTitle: !isVacate && t.toHostelName && t.toRoomNumber
+        ? `New Bed: ${t.toHostelName} (#${t.toRoomNumber})`
+        : "✓ Old Bed Released to Available",
+      targetDisplaySub: !isVacate && (t.fromRoomNumber || cleanFromR) && cleanFromR !== "-"
+        ? `✓ Old Bed #${cleanFromR} Released to Available`
+        : null,
+      feeAdjustment: isVacate && t.refundAmount
+        ? `Fee Adjusted: ₹${Number(t.refundAmount).toLocaleString()}`
+        : null,
+      date: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.date ?? "-"),
+      requestDate: t.requestDate ? (typeof t.requestDate === "string" ? t.requestDate.split("T")[0] : String(t.requestDate).split("T")[0]) : (t.requestDate ?? "-"),
+      status: t.approvalStatus || t.status || "Completed",
+      reason: t.reason || "",
       allocationId: t.allocationId || alloc?.id,
       studentId: t.studentId || alloc?.studentId,
       fromHostelId: t.fromHostelId || alloc?.hostelId,
@@ -785,8 +792,8 @@ export default function HostelPage() {
       toRoomId: t.toRoomId,
       toBedId: t.toBedId,
       wardenAssignmentId: t.wardenAssignmentId,
-      approvalStatus: t.approvalStatus ?? "",
-      feeSettlementStatus: t.feeSettlementStatus ?? "",
+      approvalStatus: t.approvalStatus || "",
+      feeSettlementStatus: t.feeSettlementStatus || "",
     };
   }, []);
 
@@ -1294,7 +1301,9 @@ export default function HostelPage() {
         const uniqueTransfer = Array.from(new Map(raw.map(mapTransfer).map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-    } catch (_) { /* Intentionally ignored. */ }
+    } catch (err) {
+      console.error("Failed to refresh transfers:", err);
+    }
   }, [mapTransfer]);
 
   const refreshDashboard = useCallback(async () => {
@@ -3309,42 +3318,110 @@ export default function HostelPage() {
   const handleSaveTransfer = async (transData) => {
     try {
       const isVacate = transData.actionType === "Bed Vacate";
-      const fromBlk = blocks.find((b) => b.name === transData.currentBlock);
-      const toBlk = blocks.find((b) => b.name === transData.destinationBlock);
-      const alloc = allocations.find((a) => a.admissionNo === transData.admissionNo || a.studentName === transData.studentName);
+      const fromBlk = blocks.find((b) => b.name === transData.currentBlock || String(b.id) === String(transData.fromHostelId));
+      const toBlk = blocks.find((b) => b.name === transData.destinationBlock || String(b.id) === String(transData.toHostelId));
+      const alloc = allocations.find(
+        (a) =>
+          (transData.allocationId && Number(a.id || a.allocationId) === Number(transData.allocationId)) ||
+          (transData.studentId && Number(a.studentId) === Number(transData.studentId)) ||
+          a.admissionNo === transData.admissionNo ||
+          a.studentName === transData.studentName
+      );
 
       const payload = {
-        allocationId: transData.allocationId || (alloc ? alloc.id : 1),
-        studentId: transData.studentId || alloc?.studentId || 1,
+        allocationId: transData.allocationId || alloc?.id,
+        studentId: transData.studentId || alloc?.studentId,
         studentName: transData.studentName || alloc?.studentName || "Resident Student",
         admissionNo: transData.admissionNo || alloc?.admissionNo || "ADM-001",
         requestType: isVacate ? "Vacate" : "Transfer",
         actionType: transData.actionType || (isVacate ? "Bed Vacate" : "Room Transfer"),
-        fromHostelId: transData.fromHostelId || (fromBlk ? fromBlk.id : 1),
-        fromHostelName: transData.currentBlock || alloc?.blockName || fromBlk?.name || "Boys Hostel 1",
-        currentBlock: transData.currentBlock || alloc?.blockName || fromBlk?.name || "Boys Hostel 1",
-        fromRoomId: transData.fromRoomId || alloc?.roomId || 1,
-        fromRoomNumber: transData.currentRoom || alloc?.roomNumber || alloc?.room || "101",
-        currentRoom: transData.currentRoom || alloc?.roomNumber || alloc?.room || "101",
-        fromBedId: transData.fromBedId || alloc?.bedId || 1,
-        toHostelId: isVacate ? null : (transData.toHostelId || (toBlk ? toBlk.id : null)),
-        toHostelName: isVacate ? null : (transData.destinationBlock || toBlk?.name || null),
-        toRoomId: isVacate ? null : (transData.toRoomId || 1),
-        toRoomNumber: isVacate ? null : (transData.destinationRoom || "102"),
-        toBedId: isVacate ? null : (transData.toBedId || 1),
-        toBedNumber: isVacate ? null : (transData.destinationBed || "102-B"),
+        fromHostelId: transData.fromHostelId || fromBlk?.id,
+        fromHostelName: transData.currentBlock || alloc?.blockName || fromBlk?.name,
+        currentBlock: transData.currentBlock || alloc?.blockName || fromBlk?.name,
+        fromRoomId: transData.fromRoomId || alloc?.roomId,
+        fromRoomNumber: transData.currentRoom || alloc?.roomNumber || alloc?.room,
+        currentRoom: transData.currentRoom || alloc?.roomNumber || alloc?.room,
+        fromBedId: transData.fromBedId || alloc?.bedId,
+        toHostelId: isVacate ? null : (transData.toHostelId || toBlk?.id),
+        toHostelName: isVacate ? null : (transData.destinationBlock || toBlk?.name),
+        toRoomId: isVacate ? null : transData.toRoomId,
+        toRoomNumber: isVacate ? null : transData.destinationRoom,
+        toBedId: isVacate ? null : transData.toBedId,
+        toBedNumber: isVacate ? null : transData.destinationBed,
         requestDate: new Date().toISOString(),
         effectiveDate: new Date(Date.now() + 86400000).toISOString(),
         reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
         refundAmount: isVacate ? (transData.refundAmount || 2000) : null,
+        autoApprove: true,
+        approvalStatus: "Approved",
       };
 
-      await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
+      const res = await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
+      const createdData = res?.data?.data || res?.data;
+      const createdId = createdData?.requestId || createdData?.id;
+
+      if (createdId && (!createdData?.approvalStatus || createdData.approvalStatus === "Pending")) {
+        try {
+          await hostelApi.approveTransferVacate(
+            createdId,
+            {
+              approvalStatus: "Approved",
+              approvalRemarks: isVacate ? "Vacate approved and bed released" : "Transfer approved and new bed assigned",
+            },
+            { skipErrorLog: true }
+          );
+          await hostelApi.completeTransferVacate(createdId, { skipErrorLog: true });
+        } catch (_) { /* Intentionally ignored if already completed by server */ }
+      }
+
+      if (isVacate) {
+        try {
+          const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+          const record = {
+            studentId: payload.studentId,
+            admissionNo: payload.admissionNo,
+            studentName: payload.studentName,
+            allocationId: payload.allocationId,
+            reason: payload.reason,
+            vacatedAt: new Date().toISOString(),
+          };
+          const filtered = (Array.isArray(stored) ? stored : []).filter(
+            (s) =>
+              !(
+                (record.studentId && String(s.studentId) === String(record.studentId)) ||
+                (record.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(record.admissionNo).trim().toLowerCase())
+              )
+          );
+          filtered.push(record);
+          localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+        } catch (_) {}
+
+        setAllocations((prev) =>
+          prev.map((a) =>
+            (payload.allocationId && Number(a.id || a.allocationId) === Number(payload.allocationId)) ||
+            (payload.studentId && Number(a.studentId) === Number(payload.studentId)) ||
+            (payload.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(payload.admissionNo).trim().toLowerCase())
+              ? { ...a, status: "Vacated", isActive: false, isVacated: true }
+              : a
+          )
+        );
+      }
+
       closeModal();
-      showToast(`${isVacate ? "Bed vacate request" : "Room transfer request"} submitted for ${payload.studentName}.`);
-      (async () => {
-        try { await refreshTransfers(); } catch (_) { /* Intentionally ignored. */ }
-      })();
+      showToast(
+        isVacate
+          ? `Bed vacated and released successfully for ${payload.studentName}.`
+          : `Room transfer approved and bed allocated for ${payload.studentName}.`,
+        "success"
+      );
+
+      await Promise.allSettled([
+        refreshTransfers(),
+        refreshAllocations(),
+        refreshRooms(),
+        refreshBlocks(),
+        refreshDashboard(),
+      ]);
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     }
@@ -8251,7 +8328,10 @@ export default function HostelPage() {
         if (cFilter === "non-ac") return catOrType.includes("non-ac");
         if (cFilter === "pending") return iStatus === "pending" || catOrType === "pending";
         if (cFilter === "approved") return iStatus === "approved" || catOrType === "approved";
+        if (cFilter === "completed") return iStatus === "completed" || catOrType === "completed";
         if (cFilter === "rejected") return iStatus === "rejected" || catOrType === "rejected";
+        if (cFilter === "room transfer" || cFilter === "transfer") return catOrType.includes("transfer");
+        if (cFilter === "bed vacate" || cFilter === "vacate") return catOrType.includes("vacate");
 
         const matchStatus = iStatus.includes(cFilter);
         const matchCat = catOrType.includes(cFilter);
@@ -8716,11 +8796,21 @@ export default function HostelPage() {
                     <option value="Non-AC">Non-AC</option>
                   </>
                 )}
-                {(reportCategory === "Outpass & Leave Report" || reportCategory === "Transfer & Vacate Report") && (
+                {reportCategory === "Outpass & Leave Report" && (
                   <>
                     <option value="Pending">Pending</option>
                     <option value="Approved">Approved</option>
                     <option value="Rejected">Rejected</option>
+                  </>
+                )}
+                {reportCategory === "Transfer & Vacate Report" && (
+                  <>
+                    <option value="Completed">Completed</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Rejected">Rejected</option>
+                    <option value="Room Transfer">Room Transfer</option>
+                    <option value="Bed Vacate">Bed Vacate</option>
                   </>
                 )}
               </select>
@@ -16448,9 +16538,10 @@ function TransferModal({
         ...beds.filter((b) => String(b.roomId) === String(destRoomObj.id)),
         ...(Array.isArray(destRoomObj.beds) ? destRoomObj.beds : [])
       ];
-      const avail = rawBeds.filter(
-        (b) => (b.bedStatus || "").toLowerCase() === "available" || (!b.bedStatus && (b.status || "").toLowerCase() === "active")
-      );
+      const avail = rawBeds.filter((b) => {
+        const bStatus = (b.bedStatus || b.status || "").toLowerCase();
+        return (bStatus === "available" || b.bedStatus === "Available") && !b.isOccupied;
+      });
       const unique = [];
       const seen = new Set();
       for (const b of avail) {

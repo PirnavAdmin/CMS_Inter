@@ -1693,6 +1693,38 @@ function TransportContextPage({ navigation, onNavigate }) {
     if (!value) closeAction();
   };
   const [isFormSubmitting, setIsFormSubmitting] = useState(false);
+
+  const distanceCalcDebounceRef = useRef(null);
+  const handleRouteFieldChange = (name, value, nextValues, setValue) => {
+    if (formConfig?.key !== "routes") return;
+    if (name === "routeStart" || name === "routeEnd") {
+      const start = name === "routeStart" ? value : nextValues?.routeStart;
+      const end = name === "routeEnd" ? value : nextValues?.routeEnd;
+      if (start && end && String(start).trim().length >= 2 && String(end).trim().length >= 2) {
+        if (distanceCalcDebounceRef.current) clearTimeout(distanceCalcDebounceRef.current);
+        distanceCalcDebounceRef.current = setTimeout(async () => {
+          try {
+            const res = await apiClient.get(apiEndpoints.transport.calculateDistance, {
+              params: {
+                startLocation: String(start).trim(),
+                endLocation: String(end).trim(),
+                campusId: selectedCampusId || 1,
+              },
+            });
+            const data = res?.data?.data || res?.data;
+            if (data && data.distanceKm > 0) {
+              setValue("totalDistanceKm", data.distanceKm);
+              if (data.estimatedDurationMinutes > 0) {
+                setValue("estimatedTimeMinutes", data.estimatedDurationMinutes);
+              }
+            }
+          } catch (err) {
+            console.warn("Auto distance calculation error:", err);
+          }
+        }, 400);
+      }
+    }
+  };
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -1788,7 +1820,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         getAllTransportPages(apiClient, apiEndpoints.faculty.list, driverStaffParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.drivers, driverParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}, signal),
-        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}, signal),
+        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, campusParams, signal),
         apiClient.get(apiEndpoints.transport.trips, { signal }),
         apiClient.get(apiEndpoints.transport.gps, { signal }),
         getAllTransportPages(apiClient, apiEndpoints.transport.maintenance, {}, signal),
@@ -4505,6 +4537,7 @@ function TransportContextPage({ navigation, onNavigate }) {
           onSave={saveForm}
           awaitSave
           savingLabel={<span className="cms-transport-action-loading"><i aria-hidden="true" />{formConfig.record?.id ? "Updating..." : "Adding..."}</span>}
+          onFieldChange={handleRouteFieldChange}
         />
       ) : null}
 

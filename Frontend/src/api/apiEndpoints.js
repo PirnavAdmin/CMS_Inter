@@ -704,7 +704,11 @@ export const apiEndpoints = {
     studentDetails: "/api/v1/transport/student/details",
     routes: "/api/v1/transport/routes",
     routeById: (id) => `/api/v1/transport/routes/${id}`,
+<<<<<<< HEAD
+    calculateDistance: "/api/v1/transport/routes/calculate-distance",
+=======
     calculateRouteDistance: "/api/v1/transport/routes/calculate-distance",
+>>>>>>> ffda7eac9e1fa762cc19e9956ead11bd4a0f485e
     pickupPoints: "/api/v1/transport/pickup-points",
     pickupPointById: (id) => `/api/v1/transport/pickup-points/${id}`,
     vehicles: "/api/v1/transport/vehicles",

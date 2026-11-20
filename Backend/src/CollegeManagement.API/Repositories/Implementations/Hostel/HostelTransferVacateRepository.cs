@@ -21,6 +21,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? feeSettlementStatus = null,
             DateTime? requestDate = null,
             string? search = null,
+            int? allocationId = null,
             int? campusId = null)
         {
             return await _dbConnection.QueryAsync<HostelTransferVacate>(
@@ -28,6 +29,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 new
                 {
                     p_StudentId = studentId,
+                    p_AllocationId = allocationId,
                     p_RequestType = string.IsNullOrWhiteSpace(requestType) ? null : requestType.Trim(),
                     p_ApprovalStatus = string.IsNullOrWhiteSpace(approvalStatus) ? null : approvalStatus.Trim(),
                     p_FeeSettlementStatus = string.IsNullOrWhiteSpace(feeSettlementStatus) ? null : feeSettlementStatus.Trim(),

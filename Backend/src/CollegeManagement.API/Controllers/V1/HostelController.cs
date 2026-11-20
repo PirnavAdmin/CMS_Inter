@@ -1237,7 +1237,8 @@ namespace CollegeManagement.API.Controllers.V1
                     feeSettlementStatus,
                     requestDate,
                     search,
-                    campusId);
+                    allocationId: null,
+                    campusId: campusId);
 
             return Ok(new
             {
@@ -1620,7 +1621,7 @@ namespace CollegeManagement.API.Controllers.V1
                     approvalStatus,
                     feeSettlementStatus,
                     search,
-                    campusId);
+                    campusId: campusId);
 
             return Ok(new
             {

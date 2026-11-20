@@ -27,5 +27,22 @@ namespace CollegeManagement.API.Services.Interfaces
 
         Task<IEnumerable<TransportRouteLookupDto>>
             GetLookupAsync(string? search, string? busType, int limit);
+
+        Task<RouteDistanceCalculationResultDto> CalculateDistanceAsync(
+            string startLocation,
+            string endLocation,
+            int? campusId = null);
+
+        Task<DistanceCalculationResultDto> CalculateDistanceAsync(
+            string origin,
+            string destination,
+            CancellationToken cancellationToken = default);
+
+        Task<RoutePreviewResultDto> PreviewRouteAsync(
+            double originLat,
+            double originLng,
+            double destLat,
+            double destLng,
+            CancellationToken cancellationToken = default);
     }
 }

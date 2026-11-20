@@ -784,9 +784,10 @@ namespace CollegeManagement.API.Services.Implementations
                         commandType: CommandType.StoredProcedure);
                 }
 
-                // 4c. Transactionally provision transport attendant profile if role is Attendant / Bus Attendant
-                bool effectiveIsAttendant = string.Equals(assignedRole?.RoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
+                // 4c. Transactionally provision transport attendant profile if role or designation is Bus Attendant / Bus Attender
+                bool effectiveIsAttendant = string.Equals(assignedRole?.RoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && (resolvedDesignationName.Contains("Bus Attendant", StringComparison.OrdinalIgnoreCase) || resolvedDesignationName.Contains("Bus Attender", StringComparison.OrdinalIgnoreCase)))
+                    || (resolvedDepartmentId == 79 && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Attendant", StringComparison.OrdinalIgnoreCase));
                 if (effectiveIsAttendant)
                 {
                     await connection.ExecuteAsync(
@@ -1226,8 +1227,11 @@ namespace CollegeManagement.API.Services.Implementations
                     transaction: dbTransaction,
                     commandType: CommandType.StoredProcedure);
 
-                bool isAttendant = string.Equals(effectiveRoleName?.Trim(), "Attendant", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(effectiveRoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase);
+                bool isAttendant = string.Equals(effectiveRoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dto.RoleName?.Trim(), "Bus Attendant", StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && (resolvedDesignationName.Contains("Bus Attendant", StringComparison.OrdinalIgnoreCase) || resolvedDesignationName.Contains("Bus Attender", StringComparison.OrdinalIgnoreCase)))
+                    || (!string.IsNullOrWhiteSpace(existingStaff.Designation) && (existingStaff.Designation.Contains("Bus Attendant", StringComparison.OrdinalIgnoreCase) || existingStaff.Designation.Contains("Bus Attender", StringComparison.OrdinalIgnoreCase)))
+                    || (existingStaff.DepartmentId == 79 && !string.IsNullOrWhiteSpace(resolvedDesignationName ?? existingStaff.Designation) && (resolvedDesignationName ?? existingStaff.Designation)!.Contains("Attendant", StringComparison.OrdinalIgnoreCase));
                 await connection.ExecuteAsync(
                     "sp_SyncTransportAttendantFromStaff",
                     new { p_StaffId = id, p_IsAttendantRole = isAttendant ? (byte)1 : (byte)0 },

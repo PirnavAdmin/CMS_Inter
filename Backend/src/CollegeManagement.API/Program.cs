@@ -434,6 +434,7 @@ builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
 builder.Services.AddScoped<IEnquiryService, EnquiryService>();
 builder.Services.AddScoped<ILandingPageService, LandingPageService>();
 
+builder.Services.AddHttpClient();
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {

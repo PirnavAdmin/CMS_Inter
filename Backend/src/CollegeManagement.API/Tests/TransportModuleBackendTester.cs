@@ -502,6 +502,11 @@ namespace CollegeManagement.API.Tests
 
                 var studentTransport = await studentTransportService.GetStudentTransportDetailsAsync(99999);
                 AssertTrue(studentTransport != null && !studentTransport.HasTransportAccess, "Student Transport Service: GetStudentTransportDetailsAsync cleanly handled unassigned student via repository delegation");
+
+                var assignedStudentTransport = await studentTransportService.GetStudentTransportDetailsAsync(944);
+                var endpointJsonResponse = System.Text.Json.JsonSerializer.Serialize(new { success = true, data = assignedStudentTransport });
+                AssertTrue(endpointJsonResponse.Contains("\"academicLevel\":\"Intermediate 2nd Year - MPC\""), "Student Transport Details JSON response contains academicLevel with preserved value");
+                AssertTrue(!endpointJsonResponse.Contains("\"className\""), "Student Transport Details JSON response no longer contains className");
             }
             catch (Exception ex)
             {
@@ -585,6 +590,11 @@ namespace CollegeManagement.API.Tests
                 var sta29 = allStas.FirstOrDefault(s => s.AssignmentId == 29);
                 AssertTrue(sta29 != null && sta29.StudentName == "tina r" && sta29.AdmissionNo == "MADM-0098",
                     "Student Transport Assignment 29: Resolves studentName='tina r' and admissionNo='MADM-0098'");
+
+                // Regression Test 6.5: Route Distance Calculation (sp_GetRouteDistanceLookup and Calculation)
+                var distResult = await routeService!.CalculateDistanceAsync("Miyapur", "Madhapur", 1);
+                AssertTrue(distResult != null && distResult.DistanceKm > 0 && distResult.EstimatedDurationMinutes > 0,
+                    $"Route Distance Calculation (Miyapur -> Madhapur): Distance={distResult?.DistanceKm}km, Time={distResult?.EstimatedDurationMinutes}m, Source={distResult?.Source}");
             }
             catch (Exception ex)
             {
