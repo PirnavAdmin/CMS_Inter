@@ -87,7 +87,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Description = dto.Description,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_CreatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1
+                    p_CampusId = dto.CampusId ?? 1,
+                    p_StartLatitude = dto.StartLatitude,
+                    p_StartLongitude = dto.StartLongitude,
+                    p_EndLatitude = dto.EndLatitude,
+                    p_EndLongitude = dto.EndLongitude,
+                    p_RouteGeometryJson = dto.RouteGeometry
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -115,7 +120,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Description = dto.Description,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1
+                    p_CampusId = dto.CampusId ?? 1,
+                    p_StartLatitude = dto.StartLatitude,
+                    p_StartLongitude = dto.StartLongitude,
+                    p_EndLatitude = dto.EndLatitude,
+                    p_EndLongitude = dto.EndLongitude,
+                    p_RouteGeometryJson = dto.RouteGeometry
                 },
                 commandType: CommandType.StoredProcedure) > 0;
         }
@@ -193,6 +203,50 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 "sp_CheckTransportRouteNameExists",
                 new { p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId },
                 commandType: CommandType.StoredProcedure) > 0;
+        }
+
+        public async Task<RouteDistanceLookupResult?> GetRouteDistanceLookupAsync(string startLocation, string endLocation, int? campusId = null)
+        {
+            var c = Connection;
+            using var multi = await c.QueryMultipleAsync(
+                "sp_GetRouteDistanceLookup",
+                new
+                {
+                    p_StartLocation = startLocation?.Trim() ?? string.Empty,
+                    p_EndLocation = endLocation?.Trim() ?? string.Empty,
+                    p_CampusId = campusId ?? 0
+                },
+                commandType: CommandType.StoredProcedure);
+
+            var exactRoute = await multi.ReadFirstOrDefaultAsync<RouteDistanceLookupResult>();
+            var pickupPoint = await multi.ReadFirstOrDefaultAsync<RouteDistanceLookupResult>();
+            var campus = await multi.ReadFirstOrDefaultAsync<RouteDistanceLookupResult>();
+
+            if (exactRoute != null && exactRoute.DistanceKm.HasValue && exactRoute.DistanceKm.Value > 0)
+            {
+                if (campus != null)
+                {
+                    exactRoute.CampusId = campus.CampusId;
+                    exactRoute.CampusName = campus.CampusName;
+                    exactRoute.CampusCode = campus.CampusCode;
+                    exactRoute.Address = campus.Address;
+                }
+                return exactRoute;
+            }
+
+            if (pickupPoint != null && pickupPoint.DistanceKm.HasValue && pickupPoint.DistanceKm.Value > 0)
+            {
+                if (campus != null)
+                {
+                    pickupPoint.CampusId = campus.CampusId;
+                    pickupPoint.CampusName = campus.CampusName;
+                    pickupPoint.CampusCode = campus.CampusCode;
+                    pickupPoint.Address = campus.Address;
+                }
+                return pickupPoint;
+            }
+
+            return campus;
         }
     }
 }

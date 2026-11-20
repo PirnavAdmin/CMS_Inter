@@ -676,6 +676,7 @@ export const apiEndpoints = {
     studentDetails: "/api/v1/transport/student/details",
     routes: "/api/v1/transport/routes",
     routeById: (id) => `/api/v1/transport/routes/${id}`,
+    calculateDistance: "/api/v1/transport/routes/calculate-distance",
     pickupPoints: "/api/v1/transport/pickup-points",
     pickupPointById: (id) => `/api/v1/transport/pickup-points/${id}`,
     vehicles: "/api/v1/transport/vehicles",

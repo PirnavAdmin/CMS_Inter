@@ -391,6 +391,7 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
 
+builder.Services.AddHttpClient();
 // Location Service
 builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
