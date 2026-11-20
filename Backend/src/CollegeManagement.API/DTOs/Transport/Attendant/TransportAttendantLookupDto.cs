@@ -19,6 +19,12 @@ namespace CollegeManagement.API.Dtos.Transport.Attendant
         [JsonPropertyName("mobileNumber")]
         public string MobileNumber { get; set; } = string.Empty;
 
+        [JsonPropertyName("employeeId")]
+        public string? EmployeeId { get; set; }
+
+        [JsonPropertyName("branchName")]
+        public string? BranchName { get; set; }
+
         [JsonPropertyName("displayName")]
         public string DisplayName { get; set; } = string.Empty;
 

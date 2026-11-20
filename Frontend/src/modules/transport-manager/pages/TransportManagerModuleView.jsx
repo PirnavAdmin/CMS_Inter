@@ -1135,6 +1135,38 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
   const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const distanceCalcDebounceRef = useRef(null);
+  const handleRouteFieldChange = (name, value, nextValues, setValue) => {
+    if (formConfig?.key !== "routes") return;
+    if (name === "routeStart" || name === "routeEnd") {
+      const start = name === "routeStart" ? value : nextValues?.routeStart;
+      const end = name === "routeEnd" ? value : nextValues?.routeEnd;
+      if (start && end && String(start).trim().length >= 2 && String(end).trim().length >= 2) {
+        if (distanceCalcDebounceRef.current) clearTimeout(distanceCalcDebounceRef.current);
+        distanceCalcDebounceRef.current = setTimeout(async () => {
+          try {
+            const res = await apiClient.get(apiEndpoints.transport.calculateDistance, {
+              params: {
+                startLocation: String(start).trim(),
+                endLocation: String(end).trim(),
+                campusId: effectiveCampusId || 1,
+              },
+            });
+            const data = res?.data?.data || res?.data;
+            if (data && data.distanceKm > 0) {
+              setValue("totalDistanceKm", data.distanceKm);
+              if (data.estimatedDurationMinutes > 0) {
+                setValue("estimatedTimeMinutes", data.estimatedDurationMinutes);
+              }
+            }
+          } catch (err) {
+            console.warn("Auto distance calculation error:", err);
+          }
+        }, 400);
+      }
+    }
+  };
+
   const [routes, setRoutes] = useState(() => tmContext?.routes || []);
   const [pickupPoints, setPickupPoints] = useState(() => tmContext?.pickupPoints || []);
   const [vehicles, setVehicles] = useState(() => tmContext?.vehicles || []);
@@ -5029,6 +5061,7 @@ export default function TransportManagerModuleView({ defaultSection = "setup", d
           onSave={saveForm}
           awaitSave
           savingLabel={<span className="cms-transport-action-loading"><i aria-hidden="true" />{formConfig.record?.id ? "Updating..." : "Adding..."}</span>}
+          onFieldChange={handleRouteFieldChange}
         />
       ) : null}
 

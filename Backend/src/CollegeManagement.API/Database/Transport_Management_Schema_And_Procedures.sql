@@ -1416,7 +1416,7 @@ BEGIN
     SELECT 
         s.StudentId,
         s.StudentName,
-        'Intermediate 2nd Year - MPC' AS ClassName,
+        'Intermediate 2nd Year - MPC' AS AcademicLevel,
         s.AdmissionNo,
         'Non-Residential' AS StudentType,
         0 AS IsHosteller,

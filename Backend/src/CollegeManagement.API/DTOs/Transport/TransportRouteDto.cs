@@ -95,5 +95,20 @@ namespace CollegeManagement.API.Dtos.Transport
 
         [JsonPropertyName("campusName")]
         public string? CampusName { get; set; }
+
+        [JsonPropertyName("startLatitude")]
+        public decimal? StartLatitude { get; set; }
+
+        [JsonPropertyName("startLongitude")]
+        public decimal? StartLongitude { get; set; }
+
+        [JsonPropertyName("endLatitude")]
+        public decimal? EndLatitude { get; set; }
+
+        [JsonPropertyName("endLongitude")]
+        public decimal? EndLongitude { get; set; }
+
+        [JsonPropertyName("routeGeometry")]
+        public string? RouteGeometry { get; set; }
     }
 }

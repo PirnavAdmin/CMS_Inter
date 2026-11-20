@@ -35,6 +35,11 @@ CREATE TABLE IF NOT EXISTS `TransportRoutes` (
     `AcBaseFare` DECIMAL(10,2) NOT NULL DEFAULT 1200.00,
     `AcRatePerKm` DECIMAL(10,2) NOT NULL DEFAULT 150.00,
     `Description` VARCHAR(500) NULL,
+    `StartLatitude` DECIMAL(10,8) NULL DEFAULT NULL,
+    `StartLongitude` DECIMAL(11,8) NULL DEFAULT NULL,
+    `EndLatitude` DECIMAL(10,8) NULL DEFAULT NULL,
+    `EndLongitude` DECIMAL(11,8) NULL DEFAULT NULL,
+    `RouteGeometryJson` LONGTEXT NULL DEFAULT NULL,
     `Status` TINYINT(1) NOT NULL DEFAULT 1,
     `IsDeleted` TINYINT(1) NOT NULL DEFAULT 0,
     `CreatedBy` BIGINT NULL,
@@ -275,6 +280,11 @@ BEGIN
         r.Description,
         r.Status,
         CASE WHEN r.Status = 1 THEN 'Active' ELSE 'Inactive' END AS StatusText,
+        r.StartLatitude,
+        r.StartLongitude,
+        r.EndLatitude,
+        r.EndLongitude,
+        r.RouteGeometryJson AS RouteGeometry,
         (SELECT COUNT(*) FROM PickupPoints p WHERE p.RouteId = r.RouteId AND p.IsDeleted = 0) AS PickupPointCount,
         a.VehicleId,
         v.VehicleNumber,
@@ -334,6 +344,11 @@ BEGIN
         CASE WHEN r.Status = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
         CASE WHEN r.Status = 1 THEN 'Active' ELSE 'Inactive' END AS StatusText,
         r.Status AS IsActive,
+        r.StartLatitude,
+        r.StartLongitude,
+        r.EndLatitude,
+        r.EndLongitude,
+        r.RouteGeometryJson AS RouteGeometry,
         (SELECT COUNT(*) FROM PickupPoints p WHERE p.RouteId = r.RouteId AND p.IsDeleted = 0) AS PickupPointCount,
         a.VehicleId,
         v.VehicleNumber,
@@ -366,7 +381,12 @@ CREATE PROCEDURE `sp_CreateTransportRoute`(
     IN p_Description VARCHAR(500),
     IN p_Status TINYINT(1),
     IN p_CreatedBy BIGINT,
-    IN p_CampusId INT
+    IN p_CampusId INT,
+    IN p_StartLatitude DECIMAL(10,8),
+    IN p_StartLongitude DECIMAL(11,8),
+    IN p_EndLatitude DECIMAL(10,8),
+    IN p_EndLongitude DECIMAL(11,8),
+    IN p_RouteGeometryJson LONGTEXT
 )
 BEGIN
     DECLARE v_RouteNum VARCHAR(50);
@@ -375,12 +395,14 @@ BEGIN
     INSERT INTO `TransportRoutes` (
         `RouteCode`, `RouteNumber`, `RouteName`, `StartLocation`, `EndLocation`, `Distance`,
         `EstimatedDurationMinutes`, `DefaultMonthlyFee`, `MinRangeKm`, `NonAcBaseFare`, `NonAcRatePerKm`,
-        `AcBaseFare`, `AcRatePerKm`, `Description`, `Status`, `IsActive`, `IsDeleted`, `CreatedBy`, `CreatedAt`, `CampusId`
+        `AcBaseFare`, `AcRatePerKm`, `Description`, `Status`, `IsActive`, `IsDeleted`, `CreatedBy`, `CreatedAt`, `CampusId`,
+        `StartLatitude`, `StartLongitude`, `EndLatitude`, `EndLongitude`, `RouteGeometryJson`
     ) VALUES (
         p_RouteCode, v_RouteNum, p_RouteName, p_StartLocation, p_EndLocation, COALESCE(p_Distance, 0.00),
         COALESCE(p_EstimatedDurationMinutes, 30), COALESCE(p_DefaultMonthlyFee, 0.00), COALESCE(p_MinRangeKm, 5.00),
         COALESCE(p_NonAcBaseFare, 1000.00), COALESCE(p_NonAcRatePerKm, 100.00), COALESCE(p_AcBaseFare, 1200.00),
-        COALESCE(p_AcRatePerKm, 150.00), p_Description, COALESCE(p_Status, 1), COALESCE(p_Status, 1), 0, p_CreatedBy, NOW(), COALESCE(p_CampusId, 1)
+        COALESCE(p_AcRatePerKm, 150.00), p_Description, COALESCE(p_Status, 1), COALESCE(p_Status, 1), 0, p_CreatedBy, NOW(), COALESCE(p_CampusId, 1),
+        p_StartLatitude, p_StartLongitude, p_EndLatitude, p_EndLongitude, p_RouteGeometryJson
     );
     SELECT LAST_INSERT_ID() AS RouteId;
 END //
@@ -405,7 +427,12 @@ CREATE PROCEDURE `sp_UpdateTransportRoute`(
     IN p_Description VARCHAR(500),
     IN p_Status TINYINT(1),
     IN p_UpdatedBy BIGINT,
-    IN p_CampusId INT
+    IN p_CampusId INT,
+    IN p_StartLatitude DECIMAL(10,8),
+    IN p_StartLongitude DECIMAL(11,8),
+    IN p_EndLatitude DECIMAL(10,8),
+    IN p_EndLongitude DECIMAL(11,8),
+    IN p_RouteGeometryJson LONGTEXT
 )
 BEGIN
     UPDATE `TransportRoutes`
@@ -427,6 +454,11 @@ BEGIN
         `Status` = COALESCE(p_Status, `Status`),
         `IsActive` = COALESCE(p_Status, `IsActive`),
         `CampusId` = COALESCE(p_CampusId, `CampusId`),
+        `StartLatitude` = COALESCE(p_StartLatitude, `StartLatitude`),
+        `StartLongitude` = COALESCE(p_StartLongitude, `StartLongitude`),
+        `EndLatitude` = COALESCE(p_EndLatitude, `EndLatitude`),
+        `EndLongitude` = COALESCE(p_EndLongitude, `EndLongitude`),
+        `RouteGeometryJson` = COALESCE(p_RouteGeometryJson, `RouteGeometryJson`),
         `UpdatedBy` = p_UpdatedBy,
         `UpdatedAt` = NOW()
     WHERE `RouteId` = p_RouteId AND `IsDeleted` = 0;
@@ -1422,7 +1454,7 @@ BEGIN
     SELECT 
         s.StudentId,
         s.StudentName,
-        'Intermediate 2nd Year - MPC' AS ClassName,
+        'Intermediate 2nd Year - MPC' AS AcademicLevel,
         s.AdmissionNo,
         'Non-Residential' AS StudentType,
         0 AS IsHosteller,

@@ -23,6 +23,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public int? ReportsToDesignationId { get; set; }
         public string? ReportsToDesignationName { get; set; }
         public bool IsActive { get; set; } = true;
+        public int? CampusId { get; set; }
+        public int? CollegeId { get; set; }
         public string Status => IsActive ? "Active" : "Inactive";
         public int AssignedStaffCount { get; set; }
         public DateTime CreatedAt { get; set; }
@@ -52,6 +54,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public int? ReportsToDesignationId { get; set; }
 
         public bool IsActive { get; set; } = true;
+        public int? CampusId { get; set; }
+        public int? CollegeId { get; set; }
     }
 
     public class UpdateDesignationDto
@@ -77,6 +81,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public int? ReportsToDesignationId { get; set; }
 
         public bool IsActive { get; set; } = true;
+        public int? CampusId { get; set; }
+        public int? CollegeId { get; set; }
     }
 
     public class DesignationSummaryDto

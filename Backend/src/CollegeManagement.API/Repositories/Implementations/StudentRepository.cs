@@ -659,12 +659,17 @@ namespace CollegeManagement.API.Repositories
             return result.ToList();
         }
 
-        public async Task<List<StudentListItemDto>> GetActiveAsync()
+        public async Task<List<StudentListItemDto>> GetActiveAsync(int? collegeId = null, int? campusId = null)
         {
             var connection = Connection;
 
             var result = await connection.QueryAsync<StudentListItemDto>(
                 "sp_GetActiveStudents",
+                new
+                {
+                    p_CollegeId = collegeId,
+                    p_CampusId = campusId
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result.ToList();

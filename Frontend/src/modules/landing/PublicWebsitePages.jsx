@@ -417,11 +417,15 @@ function AboutSection({ content, onNavigate }) {
             </motion.button>
             <motion.a
               href={`tel:${(content.contactPhone || "+919908364909").replace(/[^+\d]/g, "")}`}
-              className="public-btn is-outline"
+              className="public-btn is-outline public-call-us-action"
+              aria-label={`Call Pirnav College admissions at ${content.contactPhone || "+91 9908364909"}`}
               whileHover={shouldReduce ? {} : { scale: 1.04, y: -2 }}
               whileTap={shouldReduce ? {} : { scale: 0.97 }}
             >
-              <Phone size={16} /> Call Us: {content.contactPhone || "+91 9908364909"}
+              <span className="call-us-icon-badge" aria-hidden="true">
+                <Phone size={15} strokeWidth={2.4} />
+              </span>
+              <span>Call Us: {content.contactPhone || "+91 9908364909"}</span>
             </motion.a>
           </div>
         </motion.div>
@@ -490,7 +494,13 @@ function AcademicsSection({ onNavigate }) {
               <motion.button
                 type="button"
                 className="public-btn is-outline prog-enquire-btn"
-                onClick={() => onNavigate("contact")}
+                onClick={() => {
+              onNavigate("contact");
+              setTimeout(() => {
+                const nameInput = document.getElementById("get-touch-name");
+                nameInput?.focus();
+              }, 400);
+            }}
                 whileHover={shouldReduce ? {} : { scale: 1.02 }}
                 whileTap={shouldReduce ? {} : { scale: 0.98 }}
               >
@@ -604,7 +614,13 @@ function AdmissionsSection({ content, onNavigate }) {
           <motion.button
             type="button"
             className="public-btn is-white"
-            onClick={() => onNavigate("contact")}
+            onClick={() => {
+              onNavigate("contact");
+              setTimeout(() => {
+                const nameInput = document.getElementById("get-touch-name");
+                nameInput?.focus();
+              }, 400);
+            }}
             whileHover={shouldReduce ? {} : { scale: 1.04 }}
             whileTap={shouldReduce ? {} : { scale: 0.97 }}
           >
