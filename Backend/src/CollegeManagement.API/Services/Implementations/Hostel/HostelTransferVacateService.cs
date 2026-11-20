@@ -26,7 +26,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
                 DateTime? requestDate = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             var records = await _repository.GetAllAsync(
                 studentId,
@@ -34,7 +35,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 approvalStatus,
                 feeSettlementStatus,
                 requestDate,
-                search);
+                search,
+                campusId);
 
             return records.Select(MapToResponseDto);
         }

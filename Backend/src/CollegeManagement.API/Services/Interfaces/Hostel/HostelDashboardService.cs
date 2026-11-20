@@ -5,6 +5,7 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
     public interface IHostelDashboardService
     {
         Task<HostelDashboardResponseDto> GetDashboardAsync(
-            int? hostelId = null);
+            int? hostelId = null,
+            int? campusId = null);
     }
 }

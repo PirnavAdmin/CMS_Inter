@@ -5,6 +5,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations.Payroll
@@ -13,10 +14,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
     {
         private readonly AppDbContext? _context;
         private readonly IDbConnection? _rawConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public PayrollRepository(AppDbContext context)
+        public PayrollRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public PayrollRepository(IDbConnection dbConnection)
@@ -24,10 +27,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             _rawConnection = dbConnection;
         }
 
-        public PayrollRepository(AppDbContext context, IDbConnection dbConnection)
+        public PayrollRepository(AppDbContext context, IDbConnection dbConnection, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
             _rawConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<IDbConnection> GetOpenConnectionAsync()
@@ -144,10 +156,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 return Enumerable.Empty<SalaryStructureDto>();
             }
 
+            var collegeId = ResolveCollegeId();
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffType", staffType);
             parameters.Add("p_Search", search);
+            parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
             var list = (await QueryAsync<SalaryStructureDto>(
                 "sp_PayrollSalaryStructure_GetAll",

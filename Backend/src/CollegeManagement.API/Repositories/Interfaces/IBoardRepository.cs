@@ -50,7 +50,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         /// <summary>
         /// Checks duplicate board code.
         /// </summary>
-        Task<bool> IsBoardCodeExistsAsync(string boardCode, int? boardId = null);
+        Task<bool> IsBoardCodeExistsAsync(string boardCode, int? boardId = null, int? collegeId = null);
 
         /// <summary>
         /// Retrieves active countries.

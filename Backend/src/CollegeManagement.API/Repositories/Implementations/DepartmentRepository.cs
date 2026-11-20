@@ -9,6 +9,7 @@ using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -16,10 +17,20 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class DepartmentRepository : IDepartmentRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public DepartmentRepository(AppDbContext context)
+        public DepartmentRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -67,13 +78,15 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
+            var collegeId = ResolveCollegeId();
             var depts = await conn.QueryAsync<DepartmentResponseDto>(
                 "sp_GetDepartments",
                 new
                 {
                     p_StaffType = staffType ?? "",
                     p_IncludeInactive = includeInactive ? 1 : 0,
-                    p_CampusId = campusId
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -117,7 +130,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             var conn = await GetOpenConnectionAsync();
             int resolvedCollegeId = department.CollegeId.HasValue && department.CollegeId.Value > 0 
                 ? department.CollegeId.Value 
-                : (department.CampusId.HasValue ? await conn.ExecuteScalarAsync<int>("SELECT COALESCE((SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId), 1);", new { CampusId = department.CampusId }) : 1);
+                : (department.CampusId.HasValue 
+                    ? await conn.ExecuteScalarAsync<int>("SELECT COALESCE((SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId), 1);", new { CampusId = department.CampusId }) 
+                    : (ResolveCollegeId() ?? 1));
             department.CollegeId = resolvedCollegeId;
 
             var id = await conn.ExecuteScalarAsync<int>(

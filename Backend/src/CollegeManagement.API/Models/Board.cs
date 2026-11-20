@@ -18,6 +18,8 @@ namespace CollegeManagement.API.Models
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int BoardId { get; set; }
 
+        public int? CollegeId { get; set; } = 1;
+
         /// <summary>
         /// Gets or sets the unique board code.
         /// </summary>
