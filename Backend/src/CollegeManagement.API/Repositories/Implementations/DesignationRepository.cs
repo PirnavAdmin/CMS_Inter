@@ -9,6 +9,7 @@ using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -16,10 +17,20 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class DesignationRepository : IDesignationRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public DesignationRepository(AppDbContext context)
+        public DesignationRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -67,6 +78,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
+            var collegeId = ResolveCollegeId();
             var designations = await conn.QueryAsync<DesignationResponseDto>(
                 "sp_GetDesignations",
                 new
@@ -74,7 +86,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_IncludeInactive = includeInactive ? 1 : 0,
                     p_StaffType = normalizedStaffType,
                     p_DepartmentId = departmentId ?? 0,
-                    p_CampusId = campusId
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -172,6 +185,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Designation> AddAsync(Designation designation)
         {
             var conn = await GetOpenConnectionAsync();
+            int resolvedCollegeId = designation.CollegeId.HasValue && designation.CollegeId.Value > 0 
+                ? designation.CollegeId.Value 
+                : (designation.CampusId.HasValue ? await conn.ExecuteScalarAsync<int>("SELECT COALESCE((SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId), 1);", new { CampusId = designation.CampusId }) : 1);
+            designation.CollegeId = resolvedCollegeId;
+
             var id = await conn.ExecuteScalarAsync<int>(
                 "sp_CreateDesignation",
                 new
@@ -180,7 +198,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_DepartmentId = designation.DepartmentId > 0 ? designation.DepartmentId : 0,
                     p_StaffType = designation.StaffType ?? "Both",
                     p_IsActive = designation.IsActive ? 1 : 0,
-                    p_CampusId = designation.CampusId
+                    p_CampusId = designation.CampusId,
+                    p_CollegeId = resolvedCollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 

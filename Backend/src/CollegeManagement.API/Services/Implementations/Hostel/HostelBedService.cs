@@ -19,14 +19,16 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
             int? roomId = null,
             string? bedStatus = null,
             string? status = null,
-            string? search = null)
+            string? search = null,
+            int? campusId = null)
         {
             var beds = await _repository.GetAllAsync(
                 hostelId,
                 roomId,
                 bedStatus,
                 status,
-                search);
+                search,
+                campusId);
 
             return beds.Select(MapToResponse);
         }

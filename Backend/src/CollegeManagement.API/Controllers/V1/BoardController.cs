@@ -77,7 +77,11 @@ namespace CollegeManagement.API.Controllers.V1
                 @"SELECT DISTINCT cb.BoardId
                   FROM CampusBoards cb
                   INNER JOIN Campuses c ON cb.CampusId = c.CampusId
-                  WHERE c.CollegeId = @CollegeId AND cb.IsActive = 1 AND c.IsActive = 1;",
+                  WHERE c.CollegeId = @CollegeId AND cb.IsActive = 1 AND c.IsActive = 1
+                  UNION
+                  SELECT DISTINCT b.BoardId
+                  FROM Boards b
+                  WHERE b.CollegeId = @CollegeId;",
                 new { CollegeId = collegeId.Value });
 
             return new HashSet<int>(boardIds);
@@ -201,7 +205,17 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Creating board with code: {BoardCode}", request.BoardCode);
             var userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "System";
-            var createdBoard = await _boardService.CreateBoardAsync(request, userName);
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            int? campusId = null;
+            if (int.TryParse(User.FindFirst("CampusId")?.Value, out var cid) && cid > 0)
+            {
+                campusId = cid;
+            }
+            else if (Request.Headers.TryGetValue("X-Campus-Id", out var hVal) && int.TryParse(hVal.FirstOrDefault(), out var hCid) && hCid > 0)
+            {
+                campusId = hCid;
+            }
+            var createdBoard = await _boardService.CreateBoardAsync(request, userName, collegeId, campusId);
             return CreatedAtAction(
                 nameof(GetBoardById),
                 new
@@ -467,7 +481,8 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<ValidateBoardCodeResponse>> ValidateBoardCode([FromBody] ValidateBoardCodeRequest request)
         {
-            var result = await _boardService.ValidateBoardCodeAsync(request);
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            var result = await _boardService.ValidateBoardCodeAsync(request, collegeId);
             return Ok(result);
         }
 

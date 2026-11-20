@@ -55,6 +55,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly INumberSeriesService _numberSeriesService;
         private readonly INotificationService _notificationService;
         private readonly IAuditLoggingService _auditLogger;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
         private const decimal HoursPerClassPeriod = 1.0m;
         private const long MaxPhotoFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -80,7 +81,8 @@ namespace CollegeManagement.API.Services.Implementations
             ILogger<StaffService> logger,
             INumberSeriesService numberSeriesService,
             INotificationService notificationService,
-            IAuditLoggingService auditLogger)
+            IAuditLoggingService auditLogger,
+            Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _staffRepository = staffRepository;
             _allocationRepository = allocationRepository;
@@ -100,6 +102,15 @@ namespace CollegeManagement.API.Services.Implementations
             _numberSeriesService = numberSeriesService;
             _notificationService = notificationService;
             _auditLogger = auditLogger;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCallerCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         public async Task<PagedResult<StaffResponseDto>> GetPagedStaffAsync(StaffQueryParams queryParams)
@@ -315,13 +326,27 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto)
         {
+            var callerCollegeId = ResolveCallerCollegeId();
+            if (!dto.CampusId.HasValue || dto.CampusId.Value <= 0)
+            {
+                throw new Exceptions.ValidationException("CampusId is required. Please configure an active Campus before adding staff.");
+            }
+            if (callerCollegeId.HasValue)
+            {
+                var campusBelongs = await _context.Campuses.AnyAsync(c => c.CampusId == dto.CampusId.Value && c.CollegeId == callerCollegeId.Value && c.IsActive);
+                if (!campusBelongs)
+                {
+                    throw new Exceptions.ValidationException("The selected Campus does not exist, is inactive, or does not belong to your college.");
+                }
+            }
+            var targetCampusId = dto.CampusId.Value;
+
             var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? "Teaching" : dto.StaffType.Trim();
 
             // Auto generate Employee ID if not supplied, or advance series sequence if supplied ID matches series
             string employeeId = dto.EmployeeId?.Trim() ?? string.Empty;
             var isTeachingStaff = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var activeSeriesCode = isTeachingStaff ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-            var targetCampusId = dto.CampusId ?? 1;
 
             if (string.IsNullOrWhiteSpace(employeeId))
             {

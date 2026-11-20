@@ -301,24 +301,26 @@ function examCellShieldPlugin(apiBaseUrl) {
             }));
           }
 
+          const hasAuth = Boolean(forwardHeaders.authorization || forwardHeaders.Authorization);
+
           if (isMasterGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_MASTER_GROUPS,
+              data: hasAuth ? [] : CANONICAL_MASTER_GROUPS,
             }));
           }
 
           if (isGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_GROUPS,
+              data: hasAuth ? [] : CANONICAL_GROUPS,
             }));
           }
 
           if (isSections) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_SECTIONS,
+              data: hasAuth ? [] : CANONICAL_SECTIONS,
             }));
           }
 

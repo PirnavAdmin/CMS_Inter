@@ -163,6 +163,16 @@ export const getPayslips = async (params = {}) => {
   }
 };
 
+export const getMyPayrollSummary = async (params = {}) => {
+  const res = await apiClient.get("/api/v1/Payroll/my-summary", { params });
+  return unwrapResponse(res);
+};
+
+export const downloadPayslipPdfBlob = async (id) => {
+  const res = await apiClient.get(`/api/v1/Payroll/payslips/${encodeURIComponent(id)}/pdf`, { responseType: "blob" });
+  return res.data;
+};
+
 export const getMyPayslips = async (params = {}) => {
   try {
     const res = await apiClient.get(apiEndpoints.payroll.myPayslips, { params });

@@ -17,10 +17,10 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
         }
 
         public async Task<HostelDashboardResponseDto>
-            GetDashboardAsync(int? hostelId = null)
+            GetDashboardAsync(int? hostelId = null, int? campusId = null)
         {
             return await _dashboardRepository
-                .GetDashboardAsync(hostelId);
+                .GetDashboardAsync(hostelId, campusId);
         }
     }
 }

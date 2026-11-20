@@ -21,7 +21,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? approvalStatus = null,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            string? search = null)
+            string? search = null,
+            int? campusId = null)
         {
             var parameters = new
             {
@@ -31,7 +32,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_ApprovalStatus = approvalStatus,
                 p_FromDate = fromDate?.Date,
                 p_ToDate = toDate?.Date,
-                p_Search = search
+                p_Search = search,
+                p_CampusId = campusId
             };
 
             return await _dbConnection.QueryAsync<HostelOutpassLeave>(

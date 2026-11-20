@@ -265,8 +265,13 @@ export function AcademicProvider({ children }) {
     const effectiveBoardId = selectedBoardId || boardIdOf(selectedBoard) || (isTenantCollege ? undefined : "1");
     setAcademicYearsLoading(true);
     setAcademicYearsError("");
+    const effectiveCampusId = selectedCampus?.campusId || selectedCampus?.id;
     const loadYears = async () => {
-      const params = { isActive: true, ...(effectiveBoardId ? { boardId: effectiveBoardId } : {}) };
+      const params = {
+        isActive: true,
+        ...(effectiveBoardId ? { boardId: effectiveBoardId } : {}),
+        ...(effectiveCampusId ? { campusId: effectiveCampusId } : {})
+      };
       try {
         return await apiClient.get(apiEndpoints.academicYears.active, { params });
       } catch {
@@ -280,8 +285,11 @@ export function AcademicProvider({ children }) {
       if (!active) return;
       const fetched = uniqueById(asList(response).filter((year) => {
         const boardId = valueOf(year, "boardId", "BoardId");
+        const campusId = valueOf(year, "campusId", "CampusId");
         const name = String(valueOf(year, "academicYearName", "AcademicYearName", "yearName", "YearName", "name", "Name", "code", "Code") || "");
-        return (!effectiveBoardId || boardId == null || String(boardId) === String(effectiveBoardId)) && isActive(year) && !name.includes("2028") && !name.includes("2029");
+        const matchesCampus = !effectiveCampusId || campusId == null || String(campusId) === String(effectiveCampusId);
+        const matchesBoard = !effectiveBoardId || boardId == null || String(boardId) === String(effectiveBoardId);
+        return matchesCampus && matchesBoard && isActive(year) && !name.includes("2028") && !name.includes("2029");
       }).map(mapYear));
       setAcademicYears(fetched);
       persist(getTenantKey("cms_cached_academic_years"), fetched);
@@ -302,7 +310,7 @@ export function AcademicProvider({ children }) {
       });
     }).finally(() => active && setAcademicYearsLoading(false));
     return () => { active = false; };
-  }, [isAuthenticated, selectedBoardId, selectedBoard, refreshToken]);
+  }, [isAuthenticated, selectedBoardId, selectedBoard, selectedCampus, refreshToken]);
 
   const value = useMemo(() => ({
     boards,

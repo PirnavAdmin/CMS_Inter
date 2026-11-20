@@ -96,6 +96,14 @@ namespace CollegeManagement.API.Services
             int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
+            if (request == null)
+                throw new System.ArgumentNullException(nameof(request));
+
+            if (request.BoardId <= 0)
+            {
+                throw new Exceptions.ValidationException("BoardId is required. Please select an active Board before creating a group.");
+            }
+
             var res = await _groupRepository.CreateAsync(request, collegeId, cancellationToken);
             _cache.RemoveByPrefix("lookup:groups");
             return res;

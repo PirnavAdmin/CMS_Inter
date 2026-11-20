@@ -327,7 +327,8 @@ namespace CollegeManagement.API.Controllers.V1
                     hostelId,
                     roomTypeId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -459,7 +460,8 @@ namespace CollegeManagement.API.Controllers.V1
                     roomId,
                     bedStatus,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -590,7 +592,8 @@ namespace CollegeManagement.API.Controllers.V1
                     hostelId,
                     staffId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -725,7 +728,8 @@ namespace CollegeManagement.API.Controllers.V1
                     roomId,
                     studentId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -882,7 +886,7 @@ namespace CollegeManagement.API.Controllers.V1
             var result =
                 await _hostelAttendanceService.GetAllAsync(
                     hostelId, roomId, studentId, attendanceDate,
-                    session, attendanceStatus, search);
+                    session, attendanceStatus, search, campusId);
 
             return Ok(new
             {
@@ -1043,7 +1047,8 @@ namespace CollegeManagement.API.Controllers.V1
                     approvalStatus,
                     fromDate,
                     toDate,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1231,7 +1236,8 @@ namespace CollegeManagement.API.Controllers.V1
                     approvalStatus,
                     feeSettlementStatus,
                     requestDate,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1435,7 +1441,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result =
-                await _hostelDashboardService.GetDashboardAsync(hostelId);
+                await _hostelDashboardService.GetDashboardAsync(hostelId, campusId);
 
             return Ok(new
             {
@@ -1466,7 +1472,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result =
-                await _hostelReportService.GetOccupancyReportAsync(hostelId);
+                await _hostelReportService.GetOccupancyReportAsync(hostelId, campusId);
 
             return Ok(new
             {
@@ -1497,7 +1503,8 @@ namespace CollegeManagement.API.Controllers.V1
                 await _hostelReportService.GetStudentReportAsync(
                     hostelId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1534,7 +1541,8 @@ namespace CollegeManagement.API.Controllers.V1
                     toDate,
                     session,
                     attendanceStatus,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1571,7 +1579,8 @@ namespace CollegeManagement.API.Controllers.V1
                     toDate,
                     requestType,
                     approvalStatus,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1610,7 +1619,8 @@ namespace CollegeManagement.API.Controllers.V1
                     requestType,
                     approvalStatus,
                     feeSettlementStatus,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {

@@ -31,6 +31,12 @@ namespace CollegeManagement.API.Hubs
                 }
             }
 
+            var collegeClaim = user?.Claims.FirstOrDefault(c => c.Type == "CollegeId" || c.Type == "college_id" || c.Type == "collegeId")?.Value;
+            if (!string.IsNullOrEmpty(collegeClaim))
+            {
+                await Groups.AddToGroupAsync(Context.ConnectionId, $"College_{collegeClaim}");
+            }
+
             var campusClaim = user?.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId")?.Value;
             if (!string.IsNullOrEmpty(campusClaim))
             {

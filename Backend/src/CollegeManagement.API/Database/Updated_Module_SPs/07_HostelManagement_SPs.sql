@@ -115,6 +115,7 @@ BEGIN
            hb.`HostelCode` LIKE CONCAT('%', TRIM(p_Search), '%') OR
            hb.`HostelType` LIKE CONCAT('%', TRIM(p_Search), '%'))
       AND (p_Status IS NULL OR p_Status = '' OR hb.`Status` = TRIM(p_Status))
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR hb.`CampusId` = p_CampusId)
     GROUP BY hb.`HostelId`, hb.`HostelName`, hb.`HostelCode`, hb.`HostelType`, hb.`TotalFloors`,
              hb.`WardenName`, hb.`PrimaryMobileNumber`, hb.`AlternateMobileNumber`, hb.`Email`,
              hb.`Status`, hb.`Address`, hb.`CreatedAt`
@@ -180,15 +181,16 @@ CREATE PROCEDURE `sp_GetHostelStudentAllocations`
     IN p_RoomId INT,
     IN p_StudentId INT,
     IN p_Status VARCHAR(50),
-    IN p_Search VARCHAR(150)
+    IN p_Search VARCHAR(150),
+    IN p_CampusId INT
 )
 BEGIN
     SELECT
         hsa.`AllocationId`,
         hsa.`StudentId`,
-        COALESCE(s.`AdmissionNumber`, '') AS AdmissionNo,
-        COALESCE(s.`RollNumber`, '') AS RollNo,
-        COALESCE(CONCAT(s.`FirstName`, ' ', s.`LastName`), 'Student') AS StudentName,
+        COALESCE(s.`AdmissionNo`, s.`AdmissionNumber`, '') AS AdmissionNo,
+        COALESCE(s.`RollNo`, s.`RollNumber`, '') AS RollNo,
+        COALESCE(s.`StudentName`, CONCAT(s.`FirstName`, ' ', s.`LastName`), 'Student') AS StudentName,
         hsa.`HostelId`,
         hb.`HostelName`,
         hb.`HostelCode`,
@@ -219,6 +221,7 @@ BEGIN
       AND (p_RoomId IS NULL OR hsa.`RoomId` = p_RoomId)
       AND (p_StudentId IS NULL OR hsa.`StudentId` = p_StudentId)
       AND (p_Status IS NULL OR p_Status = '' OR hsa.`Status` = TRIM(p_Status))
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR hb.`CampusId` = p_CampusId)
       AND (p_Search IS NULL OR p_Search = '' OR
            s.`FirstName` LIKE CONCAT('%', TRIM(p_Search), '%') OR
            s.`LastName` LIKE CONCAT('%', TRIM(p_Search), '%') OR
@@ -1171,7 +1174,8 @@ END //
 DROP PROCEDURE IF EXISTS `sp_GetHostelDashboard`//
 CREATE PROCEDURE `sp_GetHostelDashboard`
 (
-    IN p_HostelId INT
+    IN p_HostelId INT,
+    IN p_CampusId INT
 )
 BEGIN
     -- Overall Summary
@@ -1193,7 +1197,8 @@ BEGIN
     LEFT JOIN `hostel_beds` b ON rm.`RoomId` = b.`RoomId` AND b.`Status` = 'Active'
     LEFT JOIN `hostel_student_allocations` hsa ON hb.`HostelId` = hsa.`HostelId` AND hsa.`Status` = 'Active'
     LEFT JOIN `hostel_warden_assignments` hwa ON hb.`HostelId` = hwa.`HostelId` AND hwa.`Status` = 'Active'
-    WHERE (p_HostelId IS NULL OR hb.`HostelId` = p_HostelId);
+    WHERE (p_HostelId IS NULL OR hb.`HostelId` = p_HostelId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR hb.`CampusId` = p_CampusId);
 
     -- Breakdown by Block
     SELECT 
@@ -1218,6 +1223,7 @@ BEGIN
     LEFT JOIN `hostel_student_allocations` hsa ON hb.`HostelId` = hsa.`HostelId` AND hsa.`Status` = 'Active'
     LEFT JOIN `hostel_warden_assignments` hwa ON hb.`HostelId` = hwa.`HostelId` AND hwa.`Status` = 'Active'
     WHERE (p_HostelId IS NULL OR hb.`HostelId` = p_HostelId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR hb.`CampusId` = p_CampusId)
     GROUP BY hb.`HostelId`, hb.`HostelName`, hb.`HostelCode`, hb.`HostelType`
     ORDER BY hb.`HostelName`;
 END //

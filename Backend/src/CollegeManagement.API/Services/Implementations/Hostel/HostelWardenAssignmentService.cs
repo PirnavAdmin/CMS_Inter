@@ -21,14 +21,16 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 int? hostelId = null,
                 int? staffId = null,
                 string? status = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             var assignments =
                 await _repository.GetAllAsync(
                     hostelId,
                     staffId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return assignments.Select(MapToResponse);
         }

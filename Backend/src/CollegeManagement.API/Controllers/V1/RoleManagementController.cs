@@ -228,9 +228,10 @@ namespace CollegeManagement.API.Controllers.V1
         /// <summary>
         /// Updates the default permission matrix for a role.
         /// Accepts both { modules: [...] } and frontend-native { permissions: [...] }.
+        /// Only platform Super Admin can modify system-wide role permissions.
         /// </summary>
         [HttpPut("{roleId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize(Roles = "Super Admin")]
         public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
         {
             try

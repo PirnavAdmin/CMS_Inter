@@ -19,7 +19,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             int? roomId = null,
             int? studentId = null,
             string? status = null,
-            string? search = null)
+            string? search = null,
+            int? campusId = null)
         {
             var parameters = new
             {
@@ -27,7 +28,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_RoomId = roomId,
                 p_StudentId = studentId,
                 p_Status = status,
-                p_Search = search
+                p_Search = search,
+                p_CampusId = campusId
             };
 
             return await _dbConnection.QueryAsync<HostelStudentAllocation>(

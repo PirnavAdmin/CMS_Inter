@@ -82,7 +82,7 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   const usesRouteNavigation = isAdminRoute || isAccountantRoute;
   const tabsByQuery = { review: "all-claims", "all-claims": "all-claims", claims: "submit", submit: "submit", "my-claims": "my-claims", history: "history" };
   const tabQuery = searchParams.get("tab");
-  const requestedPortalTab = usesRouteNavigation ? (Object.hasOwn(tabsByQuery, tabQuery) ? tabsByQuery[tabQuery] : "all-claims") : legacyPortalTab;
+  const requestedPortalTab = usesRouteNavigation ? (Object.hasOwn(tabsByQuery, tabQuery) ? tabsByQuery[tabQuery] : (isAccountantRoute ? "submit" : "all-claims")) : legacyPortalTab;
   // Keep legacy review links usable after merging the Accountant review into history.
   const activePortalTab = isAccountantView && requestedPortalTab === "all-claims" ? "history" : requestedPortalTab;
   const isReviewTab = activePortalTab === "all-claims" || (isAccountantView && activePortalTab === "history");
@@ -95,7 +95,20 @@ export default function ReimbursementPage({ isAccountantView = false }) {
   }, [usesRouteNavigation, searchParams, setSearchParams]);
 
   // ── Live Claims & Account Entries State (API v1 Integration) ───────────
-  const [claims, setClaims] = useState([]);
+  useEffect(() => {
+    if (!isAccountantRoute || Object.hasOwn(tabsByQuery, tabQuery)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", "claims");
+    setSearchParams(next, { replace: true });
+  }, [isAccountantRoute, tabQuery, searchParams, setSearchParams]);
+
+  const [legacyClaims, setClaims] = useState([]);
+  const [accountantClaims, setAccountantClaims] = useState([]);
+  const [accountantMyClaims, setAccountantMyClaims] = useState([]);
+  const claims = isAccountantView
+    ? (activePortalTab === "my-claims" ? accountantMyClaims : accountantClaims)
+    : legacyClaims;
+  const refreshSequence = useRef(0);
   const [dedicatedAccountEntries, setDedicatedAccountEntries] = useState([]);
   const [isLoadingClaims, setIsLoadingClaims] = useState(false);
   const [summaryData, setSummaryData] = useState(null);
@@ -103,25 +116,33 @@ export default function ReimbursementPage({ isAccountantView = false }) {
 
   const campusId = authUser.campusId || authUser.CampusId || undefined;
 
+  const fetchTab = isAccountantView ? null : activePortalTab;
   const refreshData = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     setIsLoadingClaims(true);
     try {
       const fetchPromise =
-        isFacultyUser || activePortalTab === "my-claims"
+        isFacultyUser || fetchTab === "my-claims"
           ? reimbursementService.fetchMyClaims({ campusId })
           : reimbursementService.fetchClaims({ campusId });
 
       const summaryPromise = reimbursementService.fetchReimbursementSummary({ campusId });
       const accountEntriesPromise = reimbursementService.fetchAccountEntries({ campusId });
 
-      const [claimsResult, summaryResult, accountEntriesResult] = await Promise.allSettled([
+      const [claimsResult, summaryResult, accountEntriesResult, myClaimsResult] = await Promise.allSettled([
         fetchPromise,
         summaryPromise,
         accountEntriesPromise,
+        isAccountantView ? reimbursementService.fetchMyClaims({ campusId }) : Promise.resolve(null),
       ]);
 
+      if (sequence !== refreshSequence.current) return;
       if (claimsResult.status === "fulfilled") {
-        setClaims(claimsResult.value || []);
+        if (isAccountantView) setAccountantClaims(claimsResult.value || []);
+        else setClaims(claimsResult.value || []);
+      }
+      if (isAccountantView && myClaimsResult.status === "fulfilled") {
+        setAccountantMyClaims(myClaimsResult.value || []);
       }
       if (summaryResult.status === "fulfilled") {
         setSummaryData(summaryResult.value);
@@ -136,9 +157,9 @@ export default function ReimbursementPage({ isAccountantView = false }) {
     } catch (err) {
       console.warn("Error refreshing reimbursement data from API:", err);
     } finally {
-      setIsLoadingClaims(false);
+      if (sequence === refreshSequence.current) setIsLoadingClaims(false);
     }
-  }, [activePortalTab, campusId, isFacultyUser]);
+  }, [fetchTab, campusId, isFacultyUser, isAccountantView]);
   useEffect(() => {
     refreshData();
   }, [refreshData]);
@@ -955,14 +976,14 @@ export default function ReimbursementPage({ isAccountantView = false }) {
               className={`reimb-toggle-btn ${activePortalTab === "my-claims" ? "is-active" : ""}`}
               onClick={() => setActivePortalTab("my-claims")}
             >
-              <FileCheck2 size={15} /> My Claims ({activePortalTab === "my-claims" ? claims.length : (summary.myClaimsCount ?? claims.length)})
+              <FileCheck2 size={15} /> My Claims ({isAccountantView ? accountantMyClaims.length : (activePortalTab === "my-claims" ? claims.length : (summary.myClaimsCount ?? claims.length))})
             </button>
             <button
               type="button"
               className={`reimb-toggle-btn ${activePortalTab === "history" ? "is-active" : ""}`}
               onClick={() => setActivePortalTab("history")}
             >
-              <History size={15} /> Claims History ({claims.length})
+              <History size={15} /> Claims History ({isAccountantView ? accountantClaims.length : claims.length})
             </button>
           </div>
 

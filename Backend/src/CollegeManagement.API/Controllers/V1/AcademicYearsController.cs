@@ -44,10 +44,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var collegeId = _jwtTokenHelper.GetCollegeId(User);
-            if (!collegeId.HasValue || collegeId.Value <= 1)
-            {
-                return null;
-            }
+            if (!collegeId.HasValue || collegeId.Value <= 0) { return new HashSet<int>(); }
 
             var conn = _db.Database.GetDbConnection();
             if (conn.State != ConnectionState.Open)
@@ -111,7 +108,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Retrieves all currently active academic years.
         /// </summary>
         [HttpGet("active")]
-        public async Task<ActionResult> GetActive()
+        public async Task<ActionResult> GetActive([FromQuery] int? campusId = null, [FromQuery] int? boardId = null)
         {
             var ownedCampuses = await GetTenantOwnedCampusIdsAsync();
             if (ownedCampuses != null && ownedCampuses.Count == 0)
@@ -125,15 +122,28 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _service.GetActiveAsync();
-            var filtered = ownedCampuses != null
-                ? result.Where(y => y.CampusId.HasValue && ownedCampuses.Contains(y.CampusId.Value)).ToList()
-                : result;
+            var filtered = result.AsEnumerable();
+
+            if (ownedCampuses != null)
+            {
+                filtered = filtered.Where(y => !y.CampusId.HasValue || ownedCampuses.Contains(y.CampusId.Value));
+            }
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                filtered = filtered.Where(y => !y.CampusId.HasValue || y.CampusId.Value == campusId.Value);
+            }
+
+            if (boardId.HasValue && boardId.Value > 0)
+            {
+                filtered = filtered.Where(y => !y.BoardId.HasValue || y.BoardId.Value == boardId.Value);
+            }
 
             return Ok(new
             {
                 Status = true,
                 Message = "Active academic years retrieved successfully.",
-                Data = filtered
+                Data = filtered.ToList()
             });
         }
 

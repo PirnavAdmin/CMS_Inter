@@ -36,6 +36,8 @@ namespace CollegeManagement.API.Models.Faculty
 
         public int? CampusId { get; set; }
 
+        public int? CollegeId { get; set; } = 1;
+
         [ForeignKey(nameof(CampusId))]
         public virtual Campus? Campus { get; set; }
 

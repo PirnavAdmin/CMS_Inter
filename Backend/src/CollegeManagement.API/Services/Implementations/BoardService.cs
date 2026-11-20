@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using AutoMapper;
+using Dapper;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Board.Requests;
 using CollegeManagement.API.DTOs.Board.Responses;
@@ -99,9 +100,9 @@ namespace CollegeManagement.API.Services.Implementations
         /// <summary>
         /// Validates request details and creates a new Board atomically with auditing.
         /// </summary>
-        public async Task<BoardResponse> CreateBoardAsync(CreateBoardRequest request, string userName)
+        public async Task<BoardResponse> CreateBoardAsync(CreateBoardRequest request, string userName, int? collegeId = null, int? campusId = null)
         {
-            await ValidateCreateRequestAsync(request);
+            await ValidateCreateRequestAsync(request, collegeId);
 
             var strategy = _context.Database.CreateExecutionStrategy();
             return await strategy.ExecuteAsync(async () =>
@@ -111,9 +112,35 @@ namespace CollegeManagement.API.Services.Implementations
                 try
                 {
                     var board = _mapper.Map<Board>(request);
+                    if (collegeId.HasValue && collegeId.Value > 0)
+                    {
+                        board.CollegeId = collegeId.Value;
+                    }
+
                     var savedBoard = await _boardRepository.CreateBoardAsync(board, dbTransaction);
 
                     await _boardRepository.ReplaceAcademicLevelsAsync(savedBoard.BoardId, request.AcademicLevelIds, dbTransaction);
+
+                    var conn = _context.Database.GetDbConnection();
+                    if (!campusId.HasValue && collegeId.HasValue && collegeId.Value > 0)
+                    {
+                        var firstCampus = await conn.QueryFirstOrDefaultAsync<int?>(
+                            "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId AND IsActive = 1 ORDER BY IsHQ DESC, CampusId ASC LIMIT 1;",
+                            new { CollegeId = collegeId.Value },
+                            dbTransaction);
+                        if (firstCampus.HasValue && firstCampus.Value > 0)
+                        {
+                            campusId = firstCampus.Value;
+                        }
+                    }
+
+                    if (campusId.HasValue && campusId.Value > 0)
+                    {
+                        await conn.ExecuteAsync(
+                            "INSERT INTO CampusBoards (CampusId, BoardId, IsActive, CreatedAt) VALUES (@CampusId, @BoardId, 1, NOW()) ON DUPLICATE KEY UPDATE IsActive = 1;",
+                            new { CampusId = campusId.Value, BoardId = savedBoard.BoardId },
+                            dbTransaction);
+                    }
 
                     // Insert CREATE AuditLog entry
                     var audit = new AuditLog
@@ -329,7 +356,7 @@ namespace CollegeManagement.API.Services.Implementations
         /// <summary>
         /// Validates if a board code is available.
         /// </summary>
-        public async Task<ValidateBoardCodeResponse> ValidateBoardCodeAsync(ValidateBoardCodeRequest request)
+        public async Task<ValidateBoardCodeResponse> ValidateBoardCodeAsync(ValidateBoardCodeRequest request, int? collegeId = null)
         {
             var validationResult = await _codeValidator.ValidateAsync(request);
             if (!validationResult.IsValid)
@@ -337,7 +364,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new Exceptions.ValidationException(validationResult.Errors.First().ErrorMessage);
             }
 
-            var exists = await _boardRepository.IsBoardCodeExistsAsync(request.BoardCode, request.BoardId);
+            var exists = await _boardRepository.IsBoardCodeExistsAsync(request.BoardCode, request.BoardId, collegeId);
             return new ValidateBoardCodeResponse
             {
                 IsValid = !exists,
@@ -609,7 +636,7 @@ namespace CollegeManagement.API.Services.Implementations
         /// <summary>
         /// Performs full validation checking on creation request values.
         /// </summary>
-        private async Task ValidateCreateRequestAsync(CreateBoardRequest request)
+        private async Task ValidateCreateRequestAsync(CreateBoardRequest request, int? collegeId = null)
         {
             var validationResult = await _createValidator.ValidateAsync(request);
             if (!validationResult.IsValid)
@@ -617,7 +644,7 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new Exceptions.ValidationException(validationResult.Errors.First().ErrorMessage);
             }
 
-            if (await _boardRepository.IsBoardCodeExistsAsync(request.BoardCode))
+            if (await _boardRepository.IsBoardCodeExistsAsync(request.BoardCode, null, collegeId))
             {
                 throw new ConflictException($"Board code '{request.BoardCode}' already exists.");
             }

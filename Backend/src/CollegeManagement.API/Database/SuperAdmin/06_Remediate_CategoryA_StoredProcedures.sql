@@ -48,7 +48,8 @@ BEGIN
     ELSE
         SELECT ay.AcademicYearId INTO v_EffectiveAcademicYearId
         FROM `AcademicYears` ay
-        WHERE (ay.IsActive = 1 OR ay.IsActive IS NULL)
+        WHERE ay.CollegeId = p_CollegeId
+          AND (ay.IsActive = 1 OR ay.IsActive IS NULL)
           AND (p_BoardId IS NULL OR ay.BoardId = p_BoardId)
         ORDER BY ay.StartDate DESC LIMIT 1;
     END IF;
@@ -60,7 +61,7 @@ BEGIN
     WHERE c.CollegeId = p_CollegeId
       AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
       AND (s.IsActive = 1 OR s.IsActive IS NULL)
-      AND (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
+      AND (s.Status != 'Deleted' OR s.Status IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR s.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR s.BoardId = p_BoardId);
 
@@ -89,9 +90,7 @@ BEGIN
     -- 4. Total Groups Count
     SELECT COUNT(*) INTO v_TotalGroups
     FROM `Groups` g
-    JOIN `Campuses` c ON g.CampusId = c.CampusId
-    WHERE c.CollegeId = p_CollegeId
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR g.CampusId = p_CampusId)
+    WHERE g.CollegeId = p_CollegeId
       AND (g.IsActive = 1 OR g.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR g.AcademicYearId = v_EffectiveAcademicYearId)
       AND (p_BoardId IS NULL OR g.BoardId = p_BoardId);
@@ -109,7 +108,8 @@ BEGIN
     -- 6. Academic Year Name
     SELECT ay.AcademicYearName INTO v_AcademicYearName
     FROM `AcademicYears` ay
-    WHERE (ay.IsActive = 1 OR ay.IsActive IS NULL)
+    WHERE ay.CollegeId = p_CollegeId
+      AND (ay.IsActive = 1 OR ay.IsActive IS NULL)
       AND (v_EffectiveAcademicYearId IS NULL OR ay.AcademicYearId = v_EffectiveAcademicYearId)
     ORDER BY ay.StartDate DESC LIMIT 1;
 
@@ -240,7 +240,7 @@ BEGIN
            OR s.StudentName LIKE CONCAT('%', p_SearchTerm, '%')
            OR s.AdmissionNo LIKE CONCAT('%', p_SearchTerm, '%')
            OR s.RollNo LIKE CONCAT('%', p_SearchTerm, '%'))
-      AND (s.IsDeleted = 0 OR s.IsDeleted IS NULL)
+      AND (s.Status != 'Deleted' OR s.Status IS NULL)
     ORDER BY s.StudentId DESC
     LIMIT p_PageSize OFFSET v_Offset;
 END$$

@@ -10,7 +10,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
             string? approvalStatus = null,
             string? feeSettlementStatus = null,
             DateTime? requestDate = null,
-            string? search = null);
+            string? search = null,
+            int? campusId = null);
 
         Task<HostelTransferVacateResponseDto?> GetByIdAsync(
             int requestId);

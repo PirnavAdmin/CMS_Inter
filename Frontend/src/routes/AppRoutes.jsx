@@ -448,8 +448,11 @@ export default function AppRoutes() {
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="number-series" />}>
           <Route path="/dashboard/settings/number-series" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="dashboard" /></Suspense>} />
+          <Route path="/dashboard/settings/number_series" element={<Navigate to="/dashboard/settings/number-series" replace />} />
           <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="edit" /></Suspense>} />
+          <Route path="/dashboard/settings/number_series/:seriesId/edit" element={<Navigate to="/dashboard/settings/number-series/:seriesId/edit" replace />} />
           <Route path="/dashboard/settings/number-series/:seriesId" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="detail" /></Suspense>} />
+          <Route path="/dashboard/settings/number_series/:seriesId" element={<Navigate to="/dashboard/settings/number-series/:seriesId" replace />} />
         </Route>
 
         {/* Templates Management Module Routes */}

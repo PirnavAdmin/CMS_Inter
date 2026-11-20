@@ -17,13 +17,13 @@ namespace CollegeManagement.API.Services.Interfaces
         // Centralized Dispatcher Methods
         Task<NotificationDto> SendToUserAsync(int userId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
         Task<int> SendToUsersAsync(IEnumerable<int> userIds, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
-        Task<int> SendToRoleAsync(string role, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
-        Task<int> SendToRolesAsync(IEnumerable<string> roles, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
+        Task<int> SendToRoleAsync(string role, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null, int? collegeId = null);
+        Task<int> SendToRolesAsync(IEnumerable<string> roles, int? campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null, int? collegeId = null);
         Task<int> SendToStaffAsync(int staffId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
         Task<int> SendToStaffListAsync(IEnumerable<int> staffIds, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
         Task<int> SendToStudentAsync(int studentId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
         Task<int> SendToStudentsAsync(IEnumerable<int> studentIds, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
         Task<int> SendToCampusAsync(int campusId, string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
-        Task<int> SendGlobalAsync(string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null);
+        Task<int> SendGlobalAsync(string title, string message, string type = "General", int? referenceId = null, string? actionUrl = null, int? collegeId = null);
     }
 }

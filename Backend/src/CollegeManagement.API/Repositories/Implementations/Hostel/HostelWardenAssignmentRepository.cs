@@ -18,7 +18,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             int? hostelId = null,
             int? staffId = null,
             string? status = null,
-            string? search = null)
+            string? search = null,
+            int? campusId = null)
         {
             return await _dbConnection.QueryAsync<HostelWardenAssignment>(
                 "sp_GetHostelWardenAssignments",
@@ -27,7 +28,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_HostelId = hostelId,
                     p_StaffId = staffId,
                     p_Status = status,
-                    p_Search = search
+                    p_Search = search,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
         }

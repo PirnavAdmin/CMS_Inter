@@ -497,7 +497,8 @@ CREATE PROCEDURE `sp_GetUserRoleAssignments`(
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
     IN p_PageNumber INT,
-    IN p_PageSize INT
+    IN p_PageSize INT,
+    IN p_CollegeId INT
 )
 BEGIN
     DECLARE v_Offset INT DEFAULT 0;
@@ -513,10 +514,11 @@ BEGIN
     LEFT JOIN `Students` stu ON stu.StudentId = u.StudentId
     LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
     LEFT JOIN `Designations` des ON des.Id = st.DesignationId
-    WHERE (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+    WHERE (p_CollegeId IS NULL OR p_CollegeId = 0 OR u.CollegeId = p_CollegeId)
+      AND (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId OR (st.CampusId IS NULL AND stu.CampusId IS NULL))
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL OR (st.BoardId IS NULL AND stu.BoardId IS NULL))
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.StudentId IS NULL OR stu.AcademicYearId = p_AcademicYearId)
       AND (p_UserType IS NULL OR p_UserType = '' OR p_UserType = 'all' OR 
            CASE 
                WHEN stu.StudentId IS NOT NULL THEN 'Student'
@@ -536,6 +538,7 @@ BEGIN
     -- Result Set 2: Paginated User Assignment Rows
     SELECT 
         u.UserId,
+        u.FullName,
         u.FullName AS Name,
         COALESCE(st.EmployeeId, stu.AdmissionNo, CONCAT('ADM-', LPAD(u.UserId, 3, '0'))) AS UserCode,
         CASE 
@@ -557,10 +560,11 @@ BEGIN
     LEFT JOIN `Students` stu ON stu.StudentId = u.StudentId
     LEFT JOIN `Departments` d ON d.DepartmentId = st.DepartmentId
     LEFT JOIN `Designations` des ON des.Id = st.DesignationId
-    WHERE (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.AcademicYearId = p_AcademicYearId)
+    WHERE (p_CollegeId IS NULL OR p_CollegeId = 0 OR u.CollegeId = p_CollegeId)
+      AND (p_RoleId IS NULL OR p_RoleId = 0 OR u.RoleId = p_RoleId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR st.CampusId = p_CampusId OR stu.CampusId = p_CampusId OR (st.CampusId IS NULL AND stu.CampusId IS NULL))
+      AND (p_BoardId IS NULL OR p_BoardId = 0 OR st.BoardId = p_BoardId OR stu.BoardId = p_BoardId OR st.BoardId IS NULL OR (st.BoardId IS NULL AND stu.BoardId IS NULL))
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR stu.StudentId IS NULL OR stu.AcademicYearId = p_AcademicYearId)
       AND (p_UserType IS NULL OR p_UserType = '' OR p_UserType = 'all' OR 
            CASE 
                WHEN stu.StudentId IS NOT NULL THEN 'Student'
@@ -573,6 +577,13 @@ BEGIN
            u.FullName LIKE CONCAT('%', p_Search, '%') OR
            u.Email LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(st.EmployeeId, stu.AdmissionNo, CONCAT('USR-', LPAD(u.UserId, 3, '0'))) LIKE CONCAT('%', p_Search, '%') OR
+           r.RoleName LIKE CONCAT('%', p_Search, '%') OR
+           COALESCE(d.DepartmentName, '') LIKE CONCAT('%', p_Search, '%') OR
+           COALESCE(st.Designation, des.Name, '') LIKE CONCAT('%', p_Search, '%'))
+    ORDER BY CASE WHEN u.StudentId IS NULL THEN 0 ELSE 1 END, u.UserId ASC
+    LIMIT p_PageSize OFFSET v_Offset;
+END //
+DELIMITER ;
            r.RoleName LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(d.DepartmentName, '') LIKE CONCAT('%', p_Search, '%') OR
            COALESCE(st.Designation, des.Name, '') LIKE CONCAT('%', p_Search, '%'))

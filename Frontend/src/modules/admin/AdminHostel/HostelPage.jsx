@@ -875,7 +875,7 @@ export default function HostelPage() {
           : Promise.resolve(null),
         shouldFetchAllStudents ? apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
           .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
-        hostelApi.getAttendance().catch(() => null),
+        hostelApi.getAttendance(campusParams).catch(() => null),
       ]);
 
       const rawWardenAssignments = wardensRes.status === "fulfilled" ? extractCollection(wardensRes.value?.data) : [];
@@ -1306,7 +1306,7 @@ export default function HostelPage() {
 
   const refreshAttendance = useCallback(async () => {
     try {
-      const res = await hostelApi.getAttendance();
+      const res = await hostelApi.getAttendance(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setAttendanceRecords(raw.map(mapAttendanceRecord).filter(Boolean));
     } catch (_) { /* Intentionally ignored. */ }

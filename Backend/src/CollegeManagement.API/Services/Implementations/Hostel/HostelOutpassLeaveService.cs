@@ -30,7 +30,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 string? approvalStatus = null,
                 DateTime? fromDate = null,
                 DateTime? toDate = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             var records =
                 await _repository.GetAllAsync(
@@ -40,7 +41,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     approvalStatus,
                     fromDate,
                     toDate,
-                    search);
+                    search,
+                    campusId);
 
             return records.Select(MapToResponseDto);
         }
