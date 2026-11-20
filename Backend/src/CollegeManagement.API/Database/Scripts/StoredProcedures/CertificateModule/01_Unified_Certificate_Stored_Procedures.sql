@@ -64,8 +64,12 @@ BEGIN
            OR (p_Status = 'Generated' AND c.Status COLLATE utf8mb4_unicode_ci = 'Active'))
       AND (p_CertificateType IS NULL OR p_CertificateType = '' OR p_CertificateType = 'All' OR c.CertificateType COLLATE utf8mb4_unicode_ci = p_CertificateType COLLATE utf8mb4_unicode_ci)
       AND (p_CampusId IS NULL OR p_CampusId = 0 OR COALESCE(c.CampusId, sa.CampusId, s.CampusId) = p_CampusId)
-      AND (p_BoardId IS NULL OR p_BoardId = 0 OR COALESCE(s.BoardId, sa.BoardId) = p_BoardId)
-      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR COALESCE(sa.AcademicYearId, s.AcademicYearId) = p_AcademicYearId)
+      AND (p_BoardId IS NULL OR p_BoardId = 0 
+           OR COALESCE(s.BoardId, sa.BoardId) = p_BoardId
+           OR c.Status IN ('Requested', 'Generated', 'Active', 'Draft', 'Pending', 'Reviewed', 'Approved'))
+      AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 
+           OR COALESCE(sa.AcademicYearId, s.AcademicYearId) = p_AcademicYearId
+           OR c.Status IN ('Requested', 'Generated', 'Active', 'Draft', 'Pending', 'Reviewed', 'Approved'))
       AND (p_Search IS NULL OR p_Search = '' 
            OR c.CertificateNo LIKE CONCAT('%', p_Search, '%')
            OR c.AdmissionNo LIKE CONCAT('%', p_Search, '%')
@@ -280,17 +284,16 @@ CREATE PROCEDURE `sp_GetCertificateWorkflowStats`(
 )
 BEGIN
     SELECT
-        COUNT(*) AS TotalCount,
-        COALESCE(SUM(CASE WHEN c.Status = 'Requested' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS RequestedCount,
-        COALESCE(SUM(CASE WHEN (c.Status = 'Generated' OR c.Status = 'Active') AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS GeneratedCount,
-        COALESCE(SUM(CASE WHEN c.Status = 'Reviewed' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ReviewedCount,
-        COALESCE(SUM(CASE WHEN c.Status = 'Approved' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS ApprovedCount,
-        COALESCE(SUM(CASE WHEN c.Status = 'Issued' AND (c.IsActive = 1 OR c.IsActive IS NULL) THEN 1 ELSE 0 END), 0) AS IssuedCount,
-        COALESCE(SUM(CASE WHEN c.Status = 'Cancelled' OR c.Status = 'Deleted' OR c.IsActive = 0 THEN 1 ELSE 0 END), 0) AS CancelledCount
+        COALESCE(SUM(CASE WHEN c.Status IN ('Requested', 'Generated', 'Active', 'Reviewed', 'Approved', 'Issued', 'Cancelled') THEN 1 ELSE 0 END), 0) AS TotalCount,
+        COALESCE(SUM(CASE WHEN c.Status = 'Requested' THEN 1 ELSE 0 END), 0) AS RequestedCount,
+        COALESCE(SUM(CASE WHEN c.Status IN ('Generated', 'Active') THEN 1 ELSE 0 END), 0) AS GeneratedCount,
+        COALESCE(SUM(CASE WHEN c.Status = 'Reviewed' THEN 1 ELSE 0 END), 0) AS ReviewedCount,
+        COALESCE(SUM(CASE WHEN c.Status = 'Approved' THEN 1 ELSE 0 END), 0) AS ApprovedCount,
+        COALESCE(SUM(CASE WHEN c.Status = 'Issued' THEN 1 ELSE 0 END), 0) AS IssuedCount,
+        COALESCE(SUM(CASE WHEN c.Status = 'Cancelled' THEN 1 ELSE 0 END), 0) AS CancelledCount
     FROM `certificates` c
-    LEFT JOIN `StudentAdmissions` sa ON (c.AdmissionNo IS NOT NULL AND sa.AdmissionNo COLLATE utf8mb4_unicode_ci = c.AdmissionNo COLLATE utf8mb4_unicode_ci) OR (c.StudentId > 0 AND sa.AdmissionId = c.StudentId)
-    LEFT JOIN `Students` s ON (c.StudentId > 0 AND s.StudentId = c.StudentId) OR (c.AdmissionNo IS NOT NULL AND s.AdmissionNo COLLATE utf8mb4_unicode_ci = c.AdmissionNo COLLATE utf8mb4_unicode_ci)
-    WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR COALESCE(c.CampusId, sa.CampusId, s.CampusId) = p_CampusId);
+    WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR COALESCE(c.CampusId, 1) = p_CampusId)
+      AND (c.Status <> 'Deleted');
 END //
 DELIMITER ;
 

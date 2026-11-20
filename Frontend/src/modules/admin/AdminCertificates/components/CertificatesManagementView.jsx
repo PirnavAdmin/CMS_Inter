@@ -195,11 +195,12 @@ const toDisplayStatus = (value) => {
   if (!raw) return "Generated";
   const key = raw.toLowerCase();
   if (["requested"].includes(key)) return "Requested";
-  if (["generated", "draft", "pending"].includes(key)) return "Generated";
+  if (["generated", "draft", "pending", "active"].includes(key)) return "Generated";
   if (["reviewed", "inreview", "in-review", "review"].includes(key)) return "Reviewed";
   if (["approved", "authorize", "authorized"].includes(key)) return "Approved";
-  if (["issued", "completed", "active"].includes(key)) return "Issued";
+  if (["issued", "completed"].includes(key)) return "Issued";
   if (["cancelled", "canceled", "rejected", "inactive"].includes(key)) return "Cancelled";
+  if (["deleted"].includes(key)) return "Deleted";
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 };
 
@@ -1811,13 +1812,23 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       "Study Certificate",
       "Conduct Certificate",
       "Transfer Certificate",
+      "Fee Clearance Certificate",
+      "Migration Certificate",
+      "No Objection Certificate",
+      "Character Certificate",
+      "Course Completion Certificate",
+      "Sports Certificate",
     ];
-    if (!Array.isArray(activeTemplatesList) || activeTemplatesList.length === 0) return defaults;
+    const fromRequestType = fromRequestMeta?.type ? [fromRequestMeta.type] : [];
+    const currentFormType = form?.type ? [form.type] : [];
+    if (!Array.isArray(activeTemplatesList) || activeTemplatesList.length === 0) {
+      return Array.from(new Set([...defaults, ...fromRequestType, ...currentFormType])).filter(Boolean);
+    }
     const dynamicTypes = activeTemplatesList
       .map((t) => t.title || t.name || t.certificateType || t.templateName)
       .filter((title) => Boolean(title) && !String(title).toLowerCase().includes("upload") && !String(title).toLowerCase().includes("card"));
-    return Array.from(new Set([...dynamicTypes, ...defaults])).filter(Boolean);
-  }, [activeTemplatesList]);
+    return Array.from(new Set([...dynamicTypes, ...defaults, ...fromRequestType, ...currentFormType])).filter(Boolean);
+  }, [activeTemplatesList, fromRequestMeta?.type, form?.type]);
 
   const formFields = useMemo(
     () => baseFormFields.map((field) => {
@@ -1867,36 +1878,18 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     try {
       const params = {};
       if (selectedCampusId) params.campusId = selectedCampusId;
-      if (selectedBoardId) params.boardId = selectedBoardId;
-      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
-      
-      if (query.trim()) params.search = query.trim();
-      if (status !== "All") params.status = status;
-      if (typeFilter !== "All") params.certificateType = typeFilter;
+
       const response = await apiClient.get(CERTIFICATE_API.list, { params, skipGlobalLoader: true });
-      const mapped = unwrapListPayload(response?.data).map(normalizeCertificate);
+      const mapped = unwrapListPayload(response?.data)
+        .map(normalizeCertificate)
+        .filter((r) => r.status !== "Deleted");
+
       if (requestId !== listRequestRef.current) return false;
       setRows(mapped);
       return true;
     } catch (error) {
       if (requestId !== listRequestRef.current) return false;
-      const fallbackList = [];
-      let filtered = fallbackList;
-      if (query.trim()) {
-        const q = query.trim().toLowerCase();
-        filtered = filtered.filter((r) =>
-          [r.student, r.admissionNo, r.number, r.type, r.purpose].some((v) =>
-            String(v || "").toLowerCase().includes(q)
-          )
-        );
-      }
-      if (status !== "All") {
-        filtered = filtered.filter((r) => r.status === status);
-      }
-      if (typeFilter !== "All") {
-        filtered = filtered.filter((r) => r.type === typeFilter);
-      }
-      setRows(filtered);
+      setRows([]);
       return false;
     } finally {
       if (showLoader && requestId === listRequestRef.current) setLoadingList(false);
@@ -1908,8 +1901,6 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     try {
       const params = {};
       if (selectedCampusId) params.campusId = selectedCampusId;
-      if (selectedBoardId) params.boardId = selectedBoardId;
-      if (selectedAcademicYearId) params.academicYearId = selectedAcademicYearId;
       
       const response = await apiClient.get(CERTIFICATE_API.workflowStats, { params, skipGlobalLoader: true });
       const data = unwrapSinglePayload(response?.data) || {};
@@ -1923,15 +1914,16 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
         cancelledCount: Number(pick(data, ["cancelledCount", "CancelledCount"])) || 0,
       });
     } catch (error) {
-      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : [];
+      const list = (rowsForStats && rowsForStats.length) ? rowsForStats : rows || [];
+      const workflowList = list.filter((r) => ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(r.status));
       setWorkflowStats({
-        totalCount: list.length,
-        requestedCount: list.filter((r) => r.status === "Requested").length,
-        generatedCount: list.filter((r) => r.status === "Generated").length,
-        reviewedCount: list.filter((r) => r.status === "Reviewed").length,
-        approvedCount: list.filter((r) => r.status === "Approved").length,
-        issuedCount: list.filter((r) => r.status === "Issued").length,
-        cancelledCount: list.filter((r) => r.status === "Cancelled").length,
+        totalCount: workflowList.length,
+        requestedCount: workflowList.filter((r) => r.status === "Requested").length,
+        generatedCount: workflowList.filter((r) => r.status === "Generated").length,
+        reviewedCount: workflowList.filter((r) => r.status === "Reviewed").length,
+        approvedCount: workflowList.filter((r) => r.status === "Approved").length,
+        issuedCount: workflowList.filter((r) => r.status === "Issued").length,
+        cancelledCount: workflowList.filter((r) => r.status === "Cancelled").length,
       });
     } finally {
       setLoadingStats(false);
@@ -2219,16 +2211,6 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
 
   useEffect(() => {
-    if (!filtersReadyRef.current) return undefined;
-    const timer = window.setTimeout(() => {
-      loadCertificates();
-    }, 300);
-    return () => window.clearTimeout(timer);
-    // The selected server filters intentionally drive this request.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, status, typeFilter]);
-
-  useEffect(() => {
     if (generationMode !== "bulk") return undefined;
     const timer = window.setTimeout(loadBulkEligibleStudents, 300);
     return () => window.clearTimeout(timer);
@@ -2403,10 +2385,25 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     }
 
     const duplicate = !bulk && rows.some(
-      (row) =>
-        String(row.admissionNo || "").trim().toLowerCase() === admissionNo.toLowerCase() &&
-        certificateTypesMatch(row.type, type) &&
-        row.status !== "Cancelled",
+      (row) => {
+        // Exclude the pending request being fulfilled
+        if (fromRequestMeta && (
+          String(row.id) === String(fromRequestMeta.id) ||
+          String(row.backendId) === String(fromRequestMeta.id) ||
+          (row.number && fromRequestMeta.number && String(row.number) === String(fromRequestMeta.number))
+        )) {
+          return false;
+        }
+        // Exclude pending requests - they are not active certificates
+        if (row.status === "Requested") {
+          return false;
+        }
+        return (
+          String(row.admissionNo || "").trim().toLowerCase() === admissionNo.toLowerCase() &&
+          certificateTypesMatch(row.type, type) &&
+          row.status !== "Cancelled"
+        );
+      },
     );
 
     if (duplicate) {
@@ -2650,7 +2647,8 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     const duplicates = selectedAdmissionNos.filter((admissionNo) => rows.some((row) =>
       String(row.admissionNo).trim().toLowerCase() === admissionNo.toLowerCase()
       && certificateTypesMatch(row.type, certificateRequest.type)
-      && row.status !== "Cancelled"));
+      && row.status !== "Cancelled"
+      && row.status !== "Requested"));
     if (duplicates.length) {
       setErrors((current) => ({
         ...current,
@@ -3684,8 +3682,9 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
   const pageRows = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const normalizedWorkflowQuery = workflowQuery.trim().toLowerCase();
   const actionRows = rows.filter((row) => {
-    const isWorkflowRecord = ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(row.status);
-    const matchesStatus = workflowStatusFilter === "All" || row.status === workflowStatusFilter;
+    const rowStatus = toDisplayStatus(row.status);
+    const isWorkflowRecord = ["Requested", "Generated", "Reviewed", "Approved", "Issued", "Cancelled"].includes(rowStatus);
+    const matchesStatus = workflowStatusFilter === "All" || rowStatus === workflowStatusFilter;
     const matchesSearch = !normalizedWorkflowQuery || [
       row.number,
       row.admissionNo,
@@ -4354,7 +4353,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                   aria-pressed={workflowStatusFilter === label}
                   onClick={() => {
                     setWorkflowStatusFilter((current) => current === label ? "All" : label);
-              
+                    setActionPage(1);
                   }}
                   title={`${workflowStatusFilter === label ? "Clear" : "Filter by"} ${label} status`}
                 >
@@ -4372,7 +4371,7 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                   value={workflowQuery}
                   onChange={(event) => {
                     setWorkflowQuery(event.target.value);
-              
+                    setActionPage(1);
                   }}
                   placeholder="Search certificate no., admission no., student, type, status or date"
                 />

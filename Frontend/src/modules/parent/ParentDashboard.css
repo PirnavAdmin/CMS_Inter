@@ -2160,8 +2160,11 @@
   }
 
   /* Modal container reset */
+  .cms-modal,
   .cms-modal.parent-fee-receipt-modal,
-  .parent-fee-receipt-modal {
+  .cms-modal.parent-document-preview-modal,
+  .parent-fee-receipt-modal,
+  .parent-document-preview-modal {
     position: static !important;
     display: block !important;
     box-shadow: none !important;
@@ -2174,11 +2177,16 @@
     padding: 0 !important;
     margin: 0 auto !important;
     overflow: visible !important;
+    animation: none !important;
   }
 
   /* Hide modal header, Close button, and modal foot (Close & Print buttons) */
+  .cms-modal .cms-modal-head,
+  .cms-modal .cms-modal-foot,
   .parent-fee-receipt-modal .cms-modal-head,
   .parent-fee-receipt-modal .cms-modal-foot,
+  .parent-document-preview-modal .cms-modal-head,
+  .parent-document-preview-modal .cms-modal-foot,
   .parent-fee-receipt-modal .parent-receipt-modal-actions,
   .parent-close-btn,
   .parent-done-btn,
@@ -2186,7 +2194,9 @@
     display: none !important;
   }
 
-  .parent-fee-receipt-modal .cms-modal-body {
+  .cms-modal .cms-modal-body,
+  .parent-fee-receipt-modal .cms-modal-body,
+  .parent-document-preview-modal .cms-modal-body {
     padding: 0 !important;
     margin: 0 !important;
     overflow: visible !important;
