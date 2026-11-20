@@ -161,7 +161,7 @@ namespace CollegeManagement.API.Services
         // GET ACTIVE STUDENTS
         // =========================================================
 
-        Task<List<StudentListItemDto>> GetActiveAsync();
+        Task<List<StudentListItemDto>> GetActiveAsync(int? collegeId = null, int? campusId = null);
 
 
         // =========================================================

@@ -76,6 +76,7 @@ namespace CollegeManagement.API.Services.Implementations
             var academicYear = new AcademicYear
             {
                 AcademicYearName = dto.AcademicYearName.Trim(),
+                CollegeId = dto.CollegeId ?? 1,
                 CampusId = dto.CampusId ?? 1,
                 BoardId = dto.BoardId,
                 StartDate = dto.StartDate,

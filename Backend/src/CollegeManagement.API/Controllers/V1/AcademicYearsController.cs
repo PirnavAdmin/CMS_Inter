@@ -179,6 +179,11 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var collegeId = _jwtTokenHelper.GetCollegeId(User);
+                if (collegeId.HasValue && collegeId.Value > 0)
+                {
+                    dto.CollegeId = collegeId.Value;
+                }
                 var result = await _service.CreateAsync(dto);
                 return CreatedAtAction(nameof(GetById), new { id = result.AcademicYearId }, new
                 {
