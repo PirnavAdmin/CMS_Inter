@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   RotateCcw,
 } from "lucide-react";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 import api, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -73,6 +74,32 @@ function statusTone(status) {
   if (/reject|cancel|absent/i.test(s)) return "red";
   if (/draft|pending|requested/i.test(s)) return "orange";
   return "violet";
+}
+
+function normalizeStudentStatus(status) {
+  if (status === null || status === undefined) return null;
+  const s = String(status).trim().toLowerCase();
+  if (s === "1" || s === "present" || s === "p") return "Present";
+  if (s === "2" || s === "absent" || s === "a") return "Absent";
+  if (s === "3" || s === "late" || s === "l") return "Late";
+  if (s === "4" || s === "half day" || s === "half-day" || s === "halfday" || s === "hd") return "Half Day";
+  if (s === "5" || s === "excused" || s === "e") return "Excused";
+  return null;
+}
+
+function CustomDonutTooltip({ active, payload: tooltipPayload }) {
+  if (active && tooltipPayload && tooltipPayload.length) {
+    const item = tooltipPayload[0];
+    const dotColor = item.payload?.color || item.color || "#22a447";
+    return (
+      <div className="dashboard-custom-donut-tooltip">
+        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+        <span className="tooltip-name">{item.name}:</span>
+        <span className="tooltip-val">{formatNumber(item.value)}</span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function KpiCard({ label, value, icon, tone, loading, error, subtext = "View details", to, trend = "Active" }) {
@@ -241,19 +268,119 @@ export default function Dashboard() {
       },
       results: () => api.get("/api/v1/results/dashboard", { params }),
       attendance: async () => {
+        const attParams = {
+          campusId: params.campusId,
+          boardId: params.boardId,
+          academicYearId: params.academicYearId,
+          date: today(),
+        };
+
+        let attendanceResult = null;
+
+        // 1. Primary: Student Attendance module endpoint (/api/v1/attendance/admin/students)
         try {
-          return await api.get(apiEndpoints.dashboard.studentAttendance, {
-            params: { campusId: params.campusId, boardId: params.boardId, academicYearId: params.academicYearId },
-          });
-        } catch {
-          try {
-            return await api.get(apiEndpoints.attendance.studentAdminDaily, {
-              params: { ...params, date: today(), attendanceDate: today(), fromDate: today(), toDate: today() },
+          const res = await api.get(apiEndpoints.attendance.studentAdminDaily, { params: attParams });
+          const raw = payload(res);
+          const rows = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || []);
+
+          if (Array.isArray(rows) && rows.length > 0) {
+            const totalEnrolled = rows.length;
+            let present = 0;
+            let absent = 0;
+            let halfDay = 0;
+            let markedCount = 0;
+
+            rows.forEach((row) => {
+              const morning = normalizeStudentStatus(row.morningStatus ?? row.status);
+              const afternoon = normalizeStudentStatus(row.afternoonStatus ?? row.status);
+              const isMarked =
+                Boolean(row.isAttendanceMarked) ||
+                (morning !== null && morning !== undefined) ||
+                (afternoon !== null && afternoon !== undefined);
+
+              if (isMarked) {
+                markedCount++;
+                if (
+                  morning === "Half Day" ||
+                  afternoon === "Half Day" ||
+                  (morning === "Present" && afternoon === "Absent") ||
+                  (afternoon === "Present" && morning === "Absent") ||
+                  Number(row.status) === 4
+                ) {
+                  halfDay++;
+                } else if (morning === "Present" || afternoon === "Present" || Number(row.status) === 1) {
+                  present++;
+                } else if (morning === "Absent" || afternoon === "Absent" || Number(row.status) === 2) {
+                  absent++;
+                }
+              }
             });
+
+            const percentage =
+              markedCount > 0 && totalEnrolled > 0
+                ? Number((((present + 0.5 * halfDay) / totalEnrolled) * 100).toFixed(1))
+                : 0;
+
+            attendanceResult = {
+              total: totalEnrolled,
+              totalStudents: totalEnrolled,
+              present,
+              absent,
+              halfDay,
+              marked: markedCount,
+              markedStudents: markedCount,
+              percentage,
+              hasMarked: markedCount > 0,
+            };
+          }
+        } catch {
+          // Fallback below
+        }
+
+        // 2. Fallback: Dashboard SP endpoint (/api/v1/dashboard/students-attendance-today)
+        if (!attendanceResult) {
+          try {
+            const res = await api.get(apiEndpoints.dashboard.studentAttendance, {
+              params: { ...attParams, viewBy: "Overall" },
+            });
+            const att = payload(res) || {};
+            const total = att.totalStudents ?? att.total ?? 0;
+            const marked = att.markedStudents ?? att.markedCount ?? ((att.present ?? 0) + (att.absent ?? 0) + (att.halfDay ?? 0));
+            const present = att.present ?? att.presentCount ?? 0;
+            const absent = att.absent ?? att.absentCount ?? 0;
+            const halfDay = att.halfDay ?? att.late ?? 0;
+            const percentage =
+              att.attendancePercentage ??
+              att.percentage ??
+              (marked > 0 && total > 0 ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1)) : 0);
+
+            attendanceResult = {
+              total,
+              totalStudents: total,
+              present,
+              absent,
+              halfDay,
+              marked,
+              markedStudents: marked,
+              percentage,
+              hasMarked: marked > 0,
+            };
           } catch {
-            return { presentCount: 0, totalStudents: 0 };
+            return {
+              total: 0,
+              totalStudents: 0,
+              present: 0,
+              absent: 0,
+              halfDay: 0,
+              marked: 0,
+              markedStudents: 0,
+              percentage: 0,
+              hasMarked: false,
+            };
           }
         }
+
+        return attendanceResult;
       },
       certificates: () => api.get("/api/v1/certificates", { params: { ...params, status: "Requested" } }),
       certificateStats: () => api.get("/api/v1/certificates/workflow-stats", { params }),
@@ -340,11 +467,46 @@ export default function Dashboard() {
     /draft|submitted|verified|not started|rejected/i.test(String(evaluationStatus(row) || ""))
   );
 
-  const attendanceData = payload(data.attendance);
-  const attendanceCount = Array.isArray(attendanceData)
-    ? attendanceData.filter((row) => row.isAttendanceMarked).length
-    : (attendanceData?.presentCount ?? attendanceData?.present ?? 0);
-  const totalStudentsToday = attendanceData?.totalStudents ?? attendanceData?.totalCount ?? 0;
+  const studentAttData = useMemo(() => {
+    const raw = payload(data.attendance) || {};
+    const total = Number(raw.total ?? raw.totalStudents ?? raw.totalCount ?? 0);
+    const present = Number(raw.present ?? raw.presentCount ?? 0);
+    const absent = Number(raw.absent ?? raw.absentCount ?? 0);
+    const halfDay = Number(raw.halfDay ?? raw.halfDayCount ?? raw.late ?? 0);
+    const marked = Number(raw.marked ?? raw.markedStudents ?? (present + absent + halfDay));
+    const hasMarkedRecords = marked > 0 || (present + absent + halfDay > 0);
+
+    let percentage = raw.percentage ?? raw.attendancePercentage;
+    if (percentage === undefined || percentage === null) {
+      percentage = hasMarkedRecords && total > 0
+        ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1))
+        : 0;
+    } else {
+      percentage = Number(Number(percentage).toFixed(1));
+    }
+
+    const chartData = hasMarkedRecords
+      ? [
+          { name: "Present", value: present, color: "#22a447" },
+          { name: "Absent", value: absent, color: "#ef4444" },
+          { name: "Half-day", value: halfDay, color: "#f59e0b" },
+        ]
+      : [{ name: "Not marked today", value: total || 1, color: "#cbd5e1" }];
+
+    return {
+      total,
+      present,
+      absent,
+      halfDay,
+      marked,
+      percentage,
+      hasMarkedRecords,
+      chartData,
+    };
+  }, [data.attendance]);
+
+  const attendanceCount = studentAttData.present;
+  const totalStudentsToday = studentAttData.total;
 
   const certificates = records(data.certificates).filter((row) => /^requested$/i.test(String(row.status || "")));
   const readyExams = data.readyExams || [];
@@ -385,10 +547,10 @@ export default function Dashboard() {
     {
       label: "Today's Attendance",
       value: attendanceCount,
-      error: null,
+      error: errors.attendance,
       icon: attendanceImage,
       tone: "green",
-      trend: totalStudentsToday > 0 ? `${Math.round((attendanceCount / totalStudentsToday) * 100)}% Marked` : "Active",
+      trend: totalStudentsToday > 0 ? `${Math.round(studentAttData.percentage)}% Marked` : "Active",
       subtext: attendanceCount > 0 ? `${attendanceCount} students present` : "Attendance records active",
       to: `${examCellBase}/attendance`,
     },
@@ -416,11 +578,9 @@ export default function Dashboard() {
 
   const quickActions = [
     { label: "Examination", to: `${examCellBase}/exams`, icon: examImage, tone: "orange" },
-    { label: "Time Table", to: `${examCellBase}/exam-timetable`, icon: timetableImage, tone: "cyan" },
     { label: "Marks Entry", to: `${examCellBase}/marks-entry`, icon: marksImage, tone: "violet" },
     { label: "Marks Verification", to: `${examCellBase}/marks-verification`, icon: verifyImage, tone: "blue" },
     { label: "Results", to: `${examCellBase}/results`, icon: resultsImage, tone: "emerald" },
-    { label: "Attendance", to: `${examCellBase}/attendance`, icon: attendanceImage, tone: "green" },
     { label: "My Attendance", to: `${examCellBase}/check-in-out`, icon: attendanceImage, tone: "green" },
     { label: "Certificates", to: `${examCellBase}/certificates`, icon: certificateImage, tone: "orange" },
     { label: "Promotions", to: `${examCellBase}/promotions`, icon: promotionImage, tone: "violet" },
@@ -616,60 +776,125 @@ export default function Dashboard() {
             </div>
           </article>
 
-          {/* Card 3: Results Ready for Processing */}
-          <article className="dashboard-card">
+          {/* Card 3: Students Attendance Overview (Today) */}
+          <article className="dashboard-card dashboard-attendance-today-card">
             <header className="dashboard-card-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <img src={resultsImage} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
-                Results Ready for Processing ({readyExams.length})
-              </h3>
-              <Link to={`${examCellBase}/publish-results`} className="dashboard-view-link">
-                View All <ChevronRight size={14} />
-              </Link>
+              <h2>Students Attendance Overview (Today)</h2>
             </header>
-            <div className="dashboard-card-body" style={{ padding: 0 }}>
-              {errors.readiness || errors.exams ? (
-                <div className="dashboard-card-error">
-                  <AlertTriangle size={18} className="dashboard-error-icon" />
-                  <span>{errors.readiness || errors.exams}</span>
-                  <button type="button" className="dashboard-retry-btn" onClick={() => setRefresh((r) => r + 1)}>
-                    <RotateCcw size={13} /> Retry
-                  </button>
+
+            {loading ? (
+              <div className="dashboard-card-loading" style={{ padding: "24px 16px" }}>
+                <Skeleton style={{ width: "100%", height: 160 }} />
+              </div>
+            ) : errors.attendance ? (
+              <div className="dashboard-card-error">
+                <AlertTriangle size={18} className="dashboard-error-icon" />
+                <span>{errors.attendance}</span>
+                <button type="button" className="dashboard-retry-btn" onClick={() => setRefresh((r) => r + 1)}>
+                  <RotateCcw size={13} /> Retry
+                </button>
+              </div>
+            ) : (
+              <div className="dashboard-card-body dashboard-attendance-body">
+                {studentAttData.total === 0 && !studentAttData.hasMarkedRecords ? (
+                  <div className="dashboard-card-empty">
+                    <Info size={18} className="dashboard-empty-icon" />
+                    <span>No student attendance data available for today.</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Donut Chart & Side Status Legend (Centered Together) */}
+                    <div className="dashboard-attendance-donut-row">
+                      <div className="dashboard-donut-chart-wrap">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={
+                                studentAttData.chartData.some((d) => d.value > 0)
+                                  ? studentAttData.chartData.filter((d) => d.value > 0)
+                                  : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                              }
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius="65%"
+                              outerRadius="90%"
+                              paddingAngle={studentAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
+                              stroke="var(--cms-surface)"
+                              strokeWidth={2}
+                            >
+                              {(studentAttData.chartData.some((d) => d.value > 0)
+                                ? studentAttData.chartData.filter((d) => d.value > 0)
+                                : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                              ).map((entry) => (
+                                <Cell key={entry.name} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              content={studentAttData.total > 0 ? <CustomDonutTooltip /> : () => null}
+                              wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
+                              allowEscapeViewBox={{ x: true, y: true }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="dashboard-donut-center">
+                          <strong>{studentAttData.percentage ?? 0}%</strong>
+                          <span>{studentAttData.hasMarkedRecords ? "Attendance" : "Not Marked"}</span>
+                        </div>
+                      </div>
+
+                      <div className="dashboard-attendance-legend-vertical">
+                        <div className="legend-item">
+                          <span className="legend-label">
+                            <span className="dot dot-present" /> Present
+                          </span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-label">
+                            <span className="dot dot-absent" /> Absent
+                          </span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-label">
+                            <span className="dot dot-halfday" /> Half-day
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 5 Summary KPI Chips */}
+                    <div className="dashboard-attendance-kpi-row">
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip">
+                        <small>Total Students</small>
+                        <strong>{formatNumber(studentAttData.total)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip text-present">
+                        <small>Present</small>
+                        <strong>{formatNumber(studentAttData.present)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip text-absent">
+                        <small>Absent</small>
+                        <strong>{formatNumber(studentAttData.absent)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip text-halfday text-late">
+                        <small>Half-day</small>
+                        <strong>{formatNumber(studentAttData.halfDay)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip">
+                        <small>Attendance</small>
+                        <strong>{formatNumber(studentAttData.percentage)}%</strong>
+                      </Link>
+                    </div>
+                  </>
+                )}
+
+                {/* Footer */}
+                <div className="dashboard-card-footer">
+                  <Link to={`${examCellBase}/attendance`} className="dashboard-footer-btn">
+                    View Attendance Details <ChevronRight size={14} />
+                  </Link>
                 </div>
-              ) : readyExams.length === 0 ? (
-                <div className="dashboard-card-empty">
-                  <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No examination results ready for publishing."}</span>
-                </div>
-              ) : (
-                <div className="cms-table-wrap">
-                  <table className="cms-table" style={{ fontSize: "12px" }}>
-                    <thead>
-                      <tr>
-                        <th>Exam</th>
-                        <th>Group</th>
-                        <th>Approved Evaluations</th>
-                        <th>Eligible Students</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {readyExams.slice(0, 5).map((row, idx) => (
-                        <tr key={row.id || row.examinationId || idx}>
-                          <td className="cms-strong">{row.examinationName || row.examName || "—"}</td>
-                          <td>{row.groupName || "—"}</td>
-                          <td>
-                            <span className="exam-type-pill pill-green">
-                              {row.approvedEvaluationCount ?? 0} Approved
-                            </span>
-                          </td>
-                          <td>{row.totalEligibleStudents ?? "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </article>
 
           {/* Card 4: Pending Certificate Requests */}

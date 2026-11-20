@@ -5,6 +5,7 @@ namespace CollegeManagement.API.DTOs.Fees;
 // ========================= FEE TYPE =========================
 public class CreateFeeTypeRequest
 {
+    public int? CollegeId { get; set; }
     [Required, StringLength(100, MinimumLength = 2)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, StringLength(50)] public string Category { get; set; } = "Academic";
     
@@ -29,6 +30,7 @@ public class UpdateFeeTypeRequest
 
 public class FeeTypeResponse
 {
+    public int CollegeId { get; set; }
     public int FeeTypeId { get; set; }
     public string FeeTypeCode { get; set; } = string.Empty;
     public string FeeTypeName { get; set; } = string.Empty;
@@ -46,6 +48,7 @@ public class FeeTypeResponse
 // ========================= FEE STRUCTURE =========================
 public class CreateFeeStructureRequest
 {
+    public int? CollegeId { get; set; }
     public int? CampusId { get; set; }
     [Range(1, int.MaxValue)] public int BoardId { get; set; }
     [Range(1, int.MaxValue)] public int AcademicYearId { get; set; }
@@ -66,6 +69,10 @@ public class UpdateFeeStructureRequest
 
     public string? Description { get; set; }
     public int? ProgramId { get; set; }
+    public int? AcademicLevelId { get; set; }
+    public string? YearFeeMode { get; set; }
+    public string? IncrementType { get; set; }
+    public decimal? IncrementValue { get; set; }
     public bool IsActive { get; set; } = true;
 }
 
@@ -85,6 +92,7 @@ public class UpdateFeeStructureItemRequest
 
 public class FeeStructureResponse
 {
+    public int CollegeId { get; set; }
     public int FeeStructureId { get; set; }
     public int? CampusId { get; set; }
     public string? CampusName { get; set; }
@@ -98,6 +106,7 @@ public class FeeStructureResponse
     public int? ProgramId { get; set; }
     public string? ProgramName { get; set; }
     public string StructureName { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public int AcademicLevelId { get; set; }
     public string AcademicLevelName { get; set; } = string.Empty;
     public string? YearFeeMode { get; set; }
@@ -127,6 +136,7 @@ public class FeeStructureItemResponse
 // ========================= SCHOLARSHIP MASTER =========================
 public class CreateScholarshipRequest
 {
+    public int? CollegeId { get; set; }
     [Required, StringLength(100, MinimumLength = 2)] public string ScholarshipName { get; set; } = string.Empty;
     public string? Description { get; set; }
     [Required, StringLength(20)] public string DiscountType { get; set; } = "Percentage";
@@ -155,6 +165,7 @@ public class UpdateScholarshipRequest
 
 public class ScholarshipResponse
 {
+    public int CollegeId { get; set; }
     public int ScholarshipId { get; set; }
     public string ScholarshipName { get; set; } = string.Empty;
     public string? Description { get; set; }
@@ -329,6 +340,17 @@ public class FeePaymentResponse
     public string ReceiptNumber { get; set; } = string.Empty;
     public string? Note { get; set; }
     public string? Remarks { get => Note; set => Note = value; }
+    public int? GatewayTransactionId { get; set; }
+    public string? GatewayStatus { get; set; }
+    public string PaymentStatus { get; set; } = string.Empty;
+    public string VerificationStatus { get; set; } = string.Empty;
+    public decimal? OutstandingBalance { get; set; }
+    public int? ReceiptId { get; set; }
+    public bool ReceiptAvailable { get; set; }
+    public string EmailNotificationStatus { get; set; } = "NOT_REQUESTED";
+    public string EmailDeliveryStatus { get; set; } = "NOT_REQUESTED";
+    public DateTime? EmailSentAt { get; set; }
+    public string? EmailFailureReason { get; set; }
 }
 
 public class FeeReceiptResponse
@@ -480,6 +502,9 @@ public class StudentFeeDetailsResponse
 public class StudentFeeBreakdownResponse
 {
     public int StudentFeeId { get; set; }
+    public int StudentFeeComponentId { get; set; }
+    public int FeeStructureComponentId { get; set; }
+    public int FeeTypeId { get; set; }
     public string FeeType { get; set; } = string.Empty;
     public decimal Amount { get; set; }
     public string? ConcessionScheme { get; set; }

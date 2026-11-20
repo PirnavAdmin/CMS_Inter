@@ -23,12 +23,6 @@ import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.js
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useParentPortal } from "./context/ParentPortalContext.jsx";
 import {
-  subjectAttendanceData,
-  academicSubjectsData,
-  upcomingExamsData,
-  getStoredFeeRecords,
-  saveStoredFeeRecords,
-  collegeAnnouncements,
   getStoredNotifications,
   saveStoredNotifications,
 } from "./parentData.js";
@@ -52,9 +46,9 @@ export default function ParentDashboard() {
     dataKey,
     currentAcademicYear,
     loading,
+    refreshActiveChild,
   } = useParentPortal();
 
-  const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [notifs, setNotifs] = useState(getStoredNotifications());
 
   // Interactive Modals State
@@ -71,9 +65,7 @@ export default function ParentDashboard() {
 
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
-    : (child
-        ? feeRecords[dataKey] || (isCurrentYear ? (feeRecords[child?.id] || child?.fees) : null) || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] }
-        : { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] });
+    : (child?.fees || { total: 0, paid: 0, pending: 0, breakdown: [], receipts: [] });
 
   const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
   const breakdownPaid = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.paid || 0), 0);
@@ -81,16 +73,16 @@ export default function ParentDashboard() {
 
   const childFee = {
     ...rawChildFee,
-    total: breakdownTotal > 0 ? breakdownTotal : rawChildFee.total,
-    paid: breakdownTotal > 0 ? breakdownPaid : rawChildFee.paid,
-    pending: breakdownTotal > 0 ? breakdownPending : rawChildFee.pending,
-    status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
+    total: breakdownTotal > 0 ? breakdownTotal : (rawChildFee.total || 0),
+    paid: breakdownTotal > 0 ? breakdownPaid : (rawChildFee.paid || 0),
+    pending: breakdownTotal > 0 ? breakdownPending : (rawChildFee.pending || 0),
+    status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : (rawChildFee.status || "—"),
   };
   const subjects = child?.attendance?.subjectRecords || [];
   const academics = useMemo(() => {
     if (curriculumSubjects && curriculumSubjects.length > 0) return curriculumSubjects;
-    return child ? academicSubjectsData[dataKey] || (isCurrentYear ? (academicSubjectsData[child?.id] || []) : []) : [];
-  }, [curriculumSubjects, child, dataKey, isCurrentYear]);
+    return [];
+  }, [curriculumSubjects]);
   
   // Bridge real published examination results or live scheduled exams
   const exams = useMemo(() => {
@@ -290,212 +282,215 @@ export default function ParentDashboard() {
             </div>
             <div className="parent-stat-info">
               <div className="parent-stat-label">Upcoming Exams</div>
-              <div className="parent-stat-value" style={{ fontSize: 18 }}>{nextExam ? nextExam.date : "Dec 2026"}</div>
-              <div className="parent-stat-subtext">{nextExam ? nextExam.subject : "Half-Yearly"}</div>
+              <div className="parent-stat-value" style={{ fontSize: 18 }}>{nextExam ? nextExam.date : "—"}</div>
+              <div className="parent-stat-subtext">{nextExam ? nextExam.subject : "No active exams scheduled"}</div>
             </div>
           </div>
         </div>
 
 
 
-        {/* Main Two-Column Grid */}
+        {/* Main 2x3 Uniform Grid */}
         <div className="parent-dashboard-grid">
-          {/* Left Column (Student Overview, Attendance, Academics) */}
-          <div className="parent-section-column">
-            {/* 2. Student Overview Card */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <Users size={18} /> Student Overview
-                </h3>
-                <button type="button" className="cms-btn cms-btn-sm cms-btn-outline" onClick={() => setStudentModalOpen(true)}>
-                  <Eye size={13} /> Full Profile
-                </button>
-              </div>
-              <div className="parent-card-body">
-                <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 18 }}>
-                  <img src={child.avatar} alt={child.name} className="parent-child-avatar" style={{ width: 62, height: 62 }} />
-                  <div>
-                    <h3 style={{ margin: "0 0 4px 0", fontSize: 18, color: "var(--cms-text)" }}>{child.name}</h3>
-                    <div style={{ fontSize: 13, color: "var(--cms-muted)" }}>{child.programme} • {child.level}</div>
-                    <div style={{ fontSize: 12.5, color: "var(--cms-muted)", marginTop: 2 }}>
-                      Class Teacher: <strong>{child.mentor}</strong> ({child.mentorMobile})
-                    </div>
-                  </div>
-                </div>
-
-                <div className="parent-profile-meta-grid">
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Admission Number</span>
-                    <span className="parent-meta-val">{child.admissionNo}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Roll Number</span>
-                    <span className="parent-meta-val">{child.roll}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Department</span>
-                    <span className="parent-meta-val">{child.department}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Semester / Term</span>
-                    <span className="parent-meta-val">{child.semester}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Affiliation Board</span>
-                    <span className="parent-meta-val">{child.board}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Academic Year</span>
-                    <span className="parent-meta-val">{child.academicYear}</span>
-                  </div>
-                </div>
-              </div>
+          {/* Row 1, Card 1: Student Overview */}
+          <div className="parent-card">
+            <div className="parent-card-header">
+              <h3 className="parent-card-title">
+                <Users size={18} /> Student Overview
+              </h3>
+              <button type="button" className="cms-btn cms-btn-sm cms-btn-outline" onClick={() => setStudentModalOpen(true)}>
+                <Eye size={13} /> Full Profile
+              </button>
             </div>
-
-            {/* 3. Attendance Overview Card */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <CalendarCheck size={18} /> Attendance Breakdown
-                </h3>
-                <Link to={`/parent-dashboard/attendance${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
-                  Detailed Register <ChevronRight size={13} />
-                </Link>
-              </div>
-              <div className="parent-card-body">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                  <div>
-                    <div style={{ fontSize: 13, color: "var(--cms-muted)" }}>Overall Attendance Rate</div>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: "var(--cms-green)" }}>
-                      {child?.attendance?.overall ?? 0}%
-                    </div>
-                  </div>
-                  <span className="cms-badge cms-badge-active" style={{ fontSize: 12 }}>
-                    {child?.attendance?.status || "—"}
-                  </span>
-                </div>
-
-                <div className="parent-progress-bar-wrap" style={{ height: 10, marginBottom: 16 }}>
-                  <div
-                    className="parent-progress-bar-fill green"
-                    style={{ width: `${child?.attendance?.overall ?? 0}%` }}
-                  />
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {subjects.length > 0 ? (
-                    subjects.slice(0, 4).map((sub, idx) => (
-                      <div key={sub.subjectId ? `dash-sub-${sub.subjectId}-${idx}` : `${sub.code || "sub"}-${idx}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
-                        <div>
-                          <strong>{sub.subject}</strong>
-                          <span style={{ fontSize: 12, color: "var(--cms-muted)", marginLeft: 6 }}>({sub.present}/{sub.total} classes)</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontWeight: 700 }}>{sub.percentage}%</span>
-                          <span className={`cms-badge ${sub.percentage >= 90 ? "cms-badge-active" : "cms-badge-warn"}`} style={{ fontSize: 11 }}>
-                            {sub.status}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--cms-muted)", padding: "4px 0" }}>
-                      <span>Recorded Working Days: <strong>{child?.attendance?.totalWorkingDays ?? 0}</strong></span>
-                      <span>Present: <strong style={{ color: "var(--cms-green)" }}>{child?.attendance?.presentDays ?? 0}</strong></span>
-                      <span>Absent: <strong style={{ color: "var(--cms-red)" }}>{child?.attendance?.absentDays ?? 0}</strong></span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Academics Overview Card */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <Award size={18} /> Academic Performance
-                </h3>
-                <Link to={`/parent-dashboard/academics${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
-                  View Syllabus & Marks <ChevronRight size={13} />
-                </Link>
-              </div>
-              <div className="parent-card-body">
-                <div className="parent-profile-meta-grid">
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Current Term SGPA</span>
-                    <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)", fontSize: 18 }}>{child.academics.sgpa} / 10.0</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Cumulative CGPA</span>
-                    <span className="parent-meta-val" style={{ fontSize: 18 }}>{child.academics.cgpa}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Overall Evaluation</span>
-                    <span className="parent-meta-val">Grade {child.academics.grade}</span>
-                  </div>
-                  <div className="parent-meta-item">
-                    <span className="parent-meta-label">Class Merit Rank</span>
-                    <span className="parent-meta-val">{child.academics.rank}</span>
+            <div className="parent-card-body">
+              <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 18 }}>
+                <img src={child.avatar} alt={child.name} className="parent-child-avatar" style={{ width: 62, height: 62 }} />
+                <div>
+                  <h3 style={{ margin: "0 0 4px 0", fontSize: 18, color: "var(--cms-text)" }}>{child.name}</h3>
+                  <div style={{ fontSize: 13, color: "var(--cms-muted)" }}>{child.programme} • {child.level}</div>
+                  <div style={{ fontSize: 12.5, color: "var(--cms-muted)", marginTop: 2 }}>
+                    Class Teacher: <strong>{child.mentor}</strong> ({child.mentorMobile})
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* 8. Fees & Payments Overview Card (Restored to Left Column) */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <Wallet size={18} /> Fee Account Status
-                </h3>
-                <Link to={`/parent-dashboard/fees${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
-                  All Transactions <ChevronRight size={13} />
-                </Link>
-              </div>
-              <div className="parent-card-body">
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 16 }}>
-                  <div style={{ padding: 12, background: "var(--cms-bg)", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11.5, color: "var(--cms-muted)", textTransform: "uppercase" }}>Total Fee</div>
-                    <div style={{ fontSize: 16, fontWeight: 700 }}>₹{childFee.total.toLocaleString()}</div>
-                  </div>
-                  <div style={{ padding: 12, background: "var(--cms-green-soft)", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11.5, color: "var(--cms-green)", textTransform: "uppercase" }}>Paid Amount</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--cms-green)" }}>₹{childFee.paid.toLocaleString()}</div>
-                  </div>
-                  <div style={{ padding: 12, background: childFee.pending > 0 ? "var(--cms-red-soft)" : "var(--cms-bg)", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11.5, color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-muted)", textTransform: "uppercase" }}>Pending Due</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: childFee.pending > 0 ? "var(--cms-red)" : "inherit" }}>₹{childFee.pending.toLocaleString()}</div>
-                  </div>
+              <div className="parent-profile-meta-grid">
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Admission Number</span>
+                  <span className="parent-meta-val">{child.admissionNo}</span>
                 </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                  <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>
-                    Payment Status: <strong style={{ color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{childFee.status}</strong>
-                    {childFee.pending > 0 && ` (Due: ${childFee.dueDate})`}
-                  </span>
-                  <span className={`cms-badge ${childFee.pending > 0 ? (childFee.status === "Partial" ? "cms-badge-warn" : "cms-badge-danger") : "cms-badge-active"}`}>
-                    {childFee.pending > 0 ? childFee.status : "No Pending Dues"}
-                  </span>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Roll Number</span>
+                  <span className="parent-meta-val">{child.roll}</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Department</span>
+                  <span className="parent-meta-val">{child.department}</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Semester / Term</span>
+                  <span className="parent-meta-val">{child.semester}</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Affiliation Board</span>
+                  <span className="parent-meta-val">{child.board}</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Academic Year</span>
+                  <span className="parent-meta-val">{child.academicYear}</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Right Column (Examinations, Announcements, Notifications) */}
-          <div className="parent-section-column">
-            {/* 5. Announcements Card */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <Megaphone size={18} /> College Announcements
-                </h3>
-                <Link to={`/parent-dashboard/announcements${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
-                  All Notices <ChevronRight size={13} />
-                </Link>
+          {/* Row 1, Card 2: Attendance Overview */}
+          <div className="parent-card">
+            <div className="parent-card-header">
+              <h3 className="parent-card-title">
+                <CalendarCheck size={18} /> Attendance Breakdown
+              </h3>
+              <Link to={`/parent-dashboard/attendance${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                Detailed Register <ChevronRight size={13} />
+              </Link>
+            </div>
+            <div className="parent-card-body">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 13, color: "var(--cms-muted)" }}>Overall Attendance Rate</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "var(--cms-green)" }}>
+                    {child?.attendance?.overall ?? 0}%
+                  </div>
+                </div>
+                <span className="cms-badge cms-badge-active" style={{ fontSize: 12 }}>
+                  {child?.attendance?.status || "—"}
+                </span>
               </div>
-              <div className="parent-card-body">
-                <div className="parent-list-stack">
-                  {(contextAnnouncements && contextAnnouncements.length > 0 ? contextAnnouncements : collegeAnnouncements).slice(0, 3).map((ann) => (
+
+              <div className="parent-progress-bar-wrap" style={{ height: 10, marginBottom: 16 }}>
+                <div
+                  className="parent-progress-bar-fill green"
+                  style={{ width: `${child?.attendance?.overall ?? 0}%` }}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {subjects.length > 0 ? (
+                  subjects.slice(0, 4).map((sub, idx) => (
+                    <div key={sub.subjectId ? `dash-sub-${sub.subjectId}-${idx}` : `${sub.code || "sub"}-${idx}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+                      <div>
+                        <strong>{sub.subject}</strong>
+                        <span style={{ fontSize: 12, color: "var(--cms-muted)", marginLeft: 6 }}>({sub.present}/{sub.total} classes)</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontWeight: 700 }}>{sub.percentage}%</span>
+                        <span className={`cms-badge ${sub.percentage >= 90 ? "cms-badge-active" : "cms-badge-warn"}`} style={{ fontSize: 11 }}>
+                          {sub.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--cms-muted)", padding: "4px 0" }}>
+                    <span>Recorded Working Days: <strong>{child?.attendance?.totalWorkingDays ?? 0}</strong></span>
+                    <span>Present: <strong style={{ color: "var(--cms-green)" }}>{child?.attendance?.presentDays ?? 0}</strong></span>
+                    <span>Absent: <strong style={{ color: "var(--cms-red)" }}>{child?.attendance?.absentDays ?? 0}</strong></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2, Card 1: Academic Performance */}
+          <div className="parent-card">
+            <div className="parent-card-header">
+              <h3 className="parent-card-title">
+                <Award size={18} /> Academic Performance
+              </h3>
+              <Link to={`/parent-dashboard/academics${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                View Syllabus & Marks <ChevronRight size={13} />
+              </Link>
+            </div>
+            <div className="parent-card-body">
+              <div className="parent-profile-meta-grid" style={{ marginBottom: 16 }}>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Current Term SGPA</span>
+                  <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)", fontSize: 18 }}>{child.academics.sgpa} / 10.0</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Cumulative CGPA</span>
+                  <span className="parent-meta-val" style={{ fontSize: 18 }}>{child.academics.cgpa}</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Overall Evaluation</span>
+                  <span className="parent-meta-val">Grade {child.academics.grade}</span>
+                </div>
+                <div className="parent-meta-item">
+                  <span className="parent-meta-label">Class Merit Rank</span>
+                  <span className="parent-meta-val">{child.academics.rank}</span>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, paddingTop: 12, borderTop: "1px solid var(--cms-border)" }}>
+                <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>
+                  Academic Standing: <strong style={{ color: "var(--cms-green)" }}>Good Standing</strong>
+                </span>
+                <span className="cms-badge cms-badge-active" style={{ fontSize: 11 }}>Active Session</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 2, Card 2: Fee Account Status */}
+          <div className="parent-card">
+            <div className="parent-card-header">
+              <h3 className="parent-card-title">
+                <Wallet size={18} /> Fee Account Status
+              </h3>
+              <Link to={`/parent-dashboard/fees${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                All Transactions <ChevronRight size={13} />
+              </Link>
+            </div>
+            <div className="parent-card-body">
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 16 }}>
+                <div style={{ padding: 12, background: "var(--cms-bg)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11.5, color: "var(--cms-muted)", textTransform: "uppercase" }}>Total Fee</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>₹{childFee.total.toLocaleString()}</div>
+                </div>
+                <div style={{ padding: 12, background: "var(--cms-green-soft)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11.5, color: "var(--cms-green)", textTransform: "uppercase" }}>Paid Amount</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--cms-green)" }}>₹{childFee.paid.toLocaleString()}</div>
+                </div>
+                <div style={{ padding: 12, background: childFee.pending > 0 ? "var(--cms-red-soft)" : "var(--cms-bg)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11.5, color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-muted)", textTransform: "uppercase" }}>Pending Due</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: childFee.pending > 0 ? "var(--cms-red)" : "inherit" }}>₹{childFee.pending.toLocaleString()}</div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, paddingTop: 12, borderTop: "1px solid var(--cms-border)" }}>
+                <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>
+                  Payment Status: <strong style={{ color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{childFee.status}</strong>
+                  {childFee.pending > 0 && ` (Due: ${childFee.dueDate})`}
+                </span>
+                <span className={`cms-badge ${childFee.pending > 0 ? (childFee.status === "Partial" ? "cms-badge-warn" : "cms-badge-danger") : "cms-badge-active"}`}>
+                  {childFee.pending > 0 ? childFee.status : "No Pending Dues"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Row 3, Card 1: College Announcements */}
+          <div className="parent-card">
+            <div className="parent-card-header">
+              <h3 className="parent-card-title">
+                <Megaphone size={18} /> College Announcements
+              </h3>
+              <Link to={`/parent-dashboard/announcements${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                All Notices <ChevronRight size={13} />
+              </Link>
+            </div>
+            <div className="parent-card-body">
+              <div className="parent-list-stack">
+                {(contextAnnouncements && contextAnnouncements.length > 0) ? (
+                  contextAnnouncements.slice(0, 3).map((ann) => (
                     <div
                       key={ann.id}
                       style={{ padding: 12, borderRadius: 10, background: "var(--cms-bg)", border: "1px solid var(--cms-border)", cursor: "pointer" }}
@@ -519,24 +514,30 @@ export default function ParentDashboard() {
                         {ann.summary}
                       </p>
                     </div>
-                  ))}
-                </div>
+                  ))
+                ) : (
+                  <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--cms-muted)", fontSize: 13 }}>
+                    No announcements or circulars published yet.
+                  </div>
+                )}
               </div>
             </div>
+          </div>
 
-            {/* 6. Upcoming Examinations Card */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <Calendar size={18} /> Upcoming Examinations
-                </h3>
-                <Link to={`/parent-dashboard/examinations${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
-                  Schedule <ChevronRight size={13} />
-                </Link>
-              </div>
-              <div className="parent-card-body">
-                <div className="parent-list-stack">
-                  {exams.slice(0, 3).map((ex, idx) => (
+          {/* Row 3, Card 2: Upcoming Examinations */}
+          <div className="parent-card">
+            <div className="parent-card-header">
+              <h3 className="parent-card-title">
+                <Calendar size={18} /> Upcoming Examinations
+              </h3>
+              <Link to={`/parent-dashboard/examinations${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
+                Schedule <ChevronRight size={13} />
+              </Link>
+            </div>
+            <div className="parent-card-body">
+              <div className="parent-list-stack">
+                {exams && exams.length > 0 ? (
+                  exams.slice(0, 3).map((ex, idx) => (
                     <div key={ex.id ? `exam-${ex.id}-${idx}` : `ex-${idx}`} className="parent-list-row">
                       <div className="parent-list-info" style={{ minWidth: 0 }}>
                         <h4 style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ex.subject} ({ex.code})</h4>
@@ -552,53 +553,22 @@ export default function ParentDashboard() {
                         <Eye size={13} /> Details
                       </button>
                     </div>
-                  ))}
-                </div>
-                <div style={{ marginTop: 14 }}>
-                  <button
-                    type="button"
-                    className="cms-btn cms-btn-primary"
-                    style={{ width: "100%", justifyContent: "center", whiteSpace: "normal", fontSize: 13, padding: "9px 12px" }}
-                    onClick={() => setHallTicketOpen(true)}
-                  >
-                    <Printer size={14} /> Download Admit Card / Hall Ticket
-                  </button>
-                </div>
+                  ))
+                ) : (
+                  <div style={{ padding: "20px 10px", textAlign: "center", color: "var(--cms-muted)", fontSize: 13 }}>
+                    No upcoming examinations currently scheduled.
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* 7. Notifications Card */}
-            <div className="parent-card">
-              <div className="parent-card-header">
-                <h3 className="parent-card-title">
-                  <Bell size={18} /> Recent Notifications
-                </h3>
-                <Link to={`/parent-dashboard/notifications${childParam}`} className="cms-btn cms-btn-sm cms-btn-outline" style={{ textDecoration: "none" }}>
-                  View All <ChevronRight size={13} />
-                </Link>
-              </div>
-              <div className="parent-card-body">
-                <div className="parent-list-stack">
-                  {childNotifs.slice(0, 3).map((n) => (
-                    <div
-                      key={n.id}
-                      onClick={() => handleOpenNotification(n)}
-                      style={{
-                        padding: 10,
-                        borderRadius: 8,
-                        background: n.read ? "var(--cms-bg)" : "var(--cms-primary-soft)",
-                        border: "1px solid var(--cms-border)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 2 }}>
-                        <strong style={{ fontSize: 13 }}>{n.title}</strong>
-                        <span style={{ fontSize: 11, color: "var(--cms-muted)" }}>{n.time}</span>
-                      </div>
-                      <p style={{ margin: 0, fontSize: 12, color: "var(--cms-text)" }}>{n.message}</p>
-                    </div>
-                  ))}
-                </div>
+              <div style={{ marginTop: "auto", paddingTop: 14 }}>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  style={{ width: "100%", justifyContent: "center", whiteSpace: "normal", fontSize: 13, padding: "9px 12px" }}
+                  onClick={() => setHallTicketOpen(true)}
+                >
+                  <Printer size={14} /> Download Admit Card / Hall Ticket
+                </button>
               </div>
             </div>
           </div>

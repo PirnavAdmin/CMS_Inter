@@ -28,6 +28,7 @@ using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using CollegeManagement.API.Services.Interfaces.Reimbursement;
+using CollegeManagement.API.Settings;
 using CollegeManagement.API.Services.Implementations.Reimbursement;
 using CollegeManagement.API.Services.Interfaces.Inventory;
 using CollegeManagement.API.Services.Implementations.Inventory;
@@ -46,6 +47,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.Extensions.Caching.Memory;
 using MySqlConnector;
 
 using Serilog;
@@ -72,8 +76,28 @@ try
             fileSizeLimitBytes: 10 * 1024 * 1024,
             rollOnFileSizeLimit: true,
             outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}"));
-builder.Services.AddSignalR();
-builder.Services.AddDistributedMemoryCache();
+var redisEnabled = builder.Configuration.GetValue<bool>("Redis:Enabled");
+var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+var redisInstanceName = builder.Configuration["Redis:InstanceName"] ?? "CMS_";
+var useRedis = redisEnabled && !string.IsNullOrWhiteSpace(redisConnectionString);
+
+if (useRedis)
+{
+    builder.Services.AddSignalR().AddStackExchangeRedis(redisConnectionString!, options =>
+    {
+        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal($"{redisInstanceName}SignalR:");
+    });
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = redisConnectionString;
+        options.InstanceName = redisInstanceName;
+    });
+}
+else
+{
+    builder.Services.AddSignalR();
+    builder.Services.AddDistributedMemoryCache();
+}
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromHours(8);
@@ -95,6 +119,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers(options =>
     {
         options.Filters.Add<CollegeManagement.API.Filters.GlobalIsolationFilter>();
+        options.Filters.Add<CollegeManagement.API.Filters.TenantIsolationActionFilter>();
     })
     .AddJsonOptions(options =>
     {
@@ -234,6 +259,7 @@ builder.Services.AddScoped<ISectionRollAllocationRepository, SectionRollAllocati
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<INumberSeriesRepository, NumberSeriesRepository>();
 builder.Services.AddScoped<ITemplateRepository, TemplateRepository>();
+builder.Services.AddScoped<ILandingPageRepository, LandingPageRepository>();
 builder.Services.AddScoped<IHolidayRepository, HolidayRepository>();
 builder.Services.AddScoped<IAttendanceTimingConfigRepository, AttendanceTimingConfigRepository>();
 builder.Services.AddScoped<ILeaveCategoryRepository, LeaveCategoryRepository>();
@@ -277,6 +303,9 @@ builder.Services.AddScoped<IReimbursementRepository, ReimbursementRepository>();
 // Inventory Repository
 builder.Services.AddScoped<IInventoryRepository, InventoryRepository>();
 builder.Services.AddScoped<ILopConfigurationRepository, LopConfigurationRepository>();
+builder.Services.AddScoped<IEnquiryRepository, EnquiryRepository>();
+builder.Services.AddScoped<ILandingPageConfigRepository, LandingPageConfigRepository>();
+builder.Services.AddScoped<IUserPreferencesRepository, UserPreferencesRepository>();
 builder.Services.AddScoped<INonTeachingRepository, NonTeachingRepository>();
 builder.Services.AddScoped<ISuperAdminRepository, SuperAdminRepository>();
 builder.Services.AddScoped<ISuperAdminService, SuperAdminService>();
@@ -292,6 +321,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<ICampusAuthorizationService, CampusAuthorizationService>();
+builder.Services.AddScoped<ITenantSecurityService, TenantSecurityService>();
 builder.Services.AddScoped<INumberSeriesService, NumberSeriesService>();
 builder.Services.AddScoped<ITemplateService, TemplateService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
@@ -312,6 +342,16 @@ builder.Services.AddScoped<IStaffTransferService, StaffTransferService>();
 builder.Services.AddScoped<IStaffExperienceService, StaffExperienceService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IFeeService, FeeService>();
+builder.Services.Configure<PaymentGatewaySettings>(builder.Configuration.GetSection("PaymentGateway"));
+builder.Services.AddSingleton<CollegeManagement.API.Helpers.AppUrlResolver>();
+builder.Services.AddScoped<IPaymentGatewayService, PaymentGatewayService>();
+builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentProofStorageService, PaymentProofStorageService>();
+builder.Services.AddScoped<IPaymentUtrVerificationService, PaymentUtrVerificationService>();
+builder.Services.AddScoped<IPaymentLedgerService, PaymentLedgerService>();
+builder.Services.AddScoped<IFeeReceiptPdfService, FeeReceiptPdfService>();
+builder.Services.AddSingleton<CollegeManagement.API.Services.Implementations.PaymentEmailDispatchSignal>();
+builder.Services.AddScoped<IPaymentEmailOutboxService, PaymentEmailOutboxService>();
 builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<CollegeManagement.API.Services.IProgramService, CollegeManagement.API.Services.ProgramService>();
 builder.Services.AddScoped<ISectionService, SectionService>();
@@ -346,6 +386,7 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IStudyMaterialService, StudyMaterialService>();
 builder.Services.AddScoped<ICertificateService, CertificateService>();
 builder.Services.AddScoped<ICertificateExportService, CertificateExportService>();
+builder.Services.AddScoped<ICertificateDocumentStorageService, CertificateDocumentStorageService>();
 
 // Hostel Services
 builder.Services.AddScoped<IHostelBlockService, HostelBlockService>();
@@ -390,6 +431,8 @@ builder.Services.AddScoped<IReimbursementService, ReimbursementService>();
 // Inventory Service
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ILopConfigurationService, LopConfigurationService>();
+builder.Services.AddScoped<IEnquiryService, EnquiryService>();
+builder.Services.AddScoped<ILandingPageService, LandingPageService>();
 
 builder.Services.AddHttpClient();
 // Location Service
@@ -397,8 +440,15 @@ builder.Services.AddHttpClient<ILocationService, LocationService>(client =>
 {
     client.BaseAddress = new Uri("https://api.postalpincode.in/");
 });
+builder.Services.AddHttpClient("RazorpayAssets", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 // Background Services
 builder.Services.AddHostedService<CollegeManagement.API.Services.Background.ExamAutoCompletionWorker>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeeBackgroundHostedService>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.NotificationHistoryCleanupWorker>();
+builder.Services.AddHostedService<CollegeManagement.API.Services.Background.FeePaymentEmailDispatcherWorker>();
 #endregion
 
 #region Email Configuration
@@ -431,6 +481,67 @@ builder.Services.AddAuthentication(options =>
     };
     options.Events = new JwtBearerEvents
     {
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            if (principal == null) return;
+
+            if (principal.IsInRole("Super Admin")
+                || principal.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role")
+                    && string.Equals(c.Value, "Super Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            var userIdClaim = principal.FindFirst("UserId")
+                           ?? principal.FindFirst(ClaimTypes.NameIdentifier)
+                           ?? principal.FindFirst(JwtRegisteredClaimNames.Sub)
+                           ?? principal.FindFirst("sub");
+
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId <= 0)
+            {
+                return;
+            }
+
+            var cache = context.HttpContext.RequestServices.GetService<IMemoryCache>();
+            var cacheKey = $"user_active_status:{userId}";
+
+            if (cache != null && cache.TryGetValue(cacheKey, out bool cachedIsActive))
+            {
+                if (!cachedIsActive)
+                {
+                    context.Fail("Account is inactive. Please contact your administrator.");
+                }
+                return;
+            }
+
+            var config = context.HttpContext.RequestServices.GetService<IConfiguration>();
+            var connStr = config?.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrWhiteSpace(connStr)) return;
+
+            try
+            {
+                await using var conn = new MySqlConnection(connStr);
+                await conn.OpenAsync(context.HttpContext.RequestAborted);
+                await using var cmd = new MySqlCommand("SELECT IsActive FROM Users WHERE UserId = @UserId LIMIT 1", conn);
+                cmd.Parameters.AddWithValue("@UserId", userId);
+                var result = await cmd.ExecuteScalarAsync(context.HttpContext.RequestAborted);
+
+                if (result != null && result != DBNull.Value)
+                {
+                    bool isActive = Convert.ToBoolean(result);
+                    cache?.Set(cacheKey, isActive, TimeSpan.FromSeconds(60));
+                    if (!isActive)
+                    {
+                        context.Fail("Account is inactive. Please contact your administrator.");
+                    }
+                }
+            }
+            catch
+            {
+                // Preserve availability on transient DB errors
+            }
+        },
         OnMessageReceived = context =>
         {
             var accessToken = context.Request.Query["access_token"];
@@ -648,6 +759,13 @@ if (args.Contains("--test-student-portal"))
 if (args.Contains("--test-parent-portal"))
 {
     var success = await CollegeManagement.API.Tests.ParentPortalBackendTester.RunAllTestsAsync(app.Services);
+    Environment.Exit(success ? 0 : 1);
+    return;
+}
+
+if (args.Contains("--test-fee-gateway-flow"))
+{
+    var success = await CollegeManagement.API.Tests.PaymentSettlementReceiptEmailTester.RunAllTestsAsync(app.Services);
     Environment.Exit(success ? 0 : 1);
     return;
 }
@@ -1153,6 +1271,428 @@ catch (Exception ex)
 {
     app.Logger.LogWarning(ex, "Failed to run startup NumberSeriesConfigurations migration check.");
 }
+
+    // Align Omnichannel Payment Gateway tables (PaymentGatewayTransactions, FeePaymentAllocations, PaymentGatewayConfigs)
+    try
+    {
+        using var pgScope = app.Services.CreateScope();
+        var pgDb = pgScope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentGatewayTransactions` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `StudentId` INT NOT NULL,
+                `StudentFeeId` INT NOT NULL,
+                `FeeInstallmentId` INT NULL,
+                `FeeInstallmentIdsJson` VARCHAR(500) NULL,
+                `OrderId` VARCHAR(100) NOT NULL,
+                `GatewayPaymentId` VARCHAR(100) NULL,
+                `UtrNumber` VARCHAR(50) NULL,
+                `BankName` VARCHAR(200) NULL,
+                `Amount` DECIMAL(18,2) NOT NULL,
+                `Currency` VARCHAR(10) NOT NULL DEFAULT 'INR',
+                `PaymentMethod` VARCHAR(50) NOT NULL DEFAULT 'UPI_QR',
+                `Status` VARCHAR(30) NOT NULL DEFAULT 'Created',
+                `IdempotencyKey` VARCHAR(256) NULL,
+                `RequestPayloadHash` VARCHAR(128) NULL,
+                `RowVersion` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+                `ReceiptNumber` VARCHAR(50) NULL,
+                `FeePaymentId` INT NULL,
+                `CollectedByUserId` INT NULL,
+                `FailureReason` VARCHAR(500) NULL,
+                `Remarks` VARCHAR(500) NULL,
+                `UpiUri` VARCHAR(1000) NULL,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `SettledAt` DATETIME(6) NULL,
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UK_PaymentGateway_OrderId` (`OrderId`),
+                KEY `IX_PaymentGateway_IdempotencyKey` (`IdempotencyKey`),
+                KEY `IX_PaymentGateway_PayloadHash` (`RequestPayloadHash`),
+                KEY `IX_PaymentGateway_UtrNumber` (`UtrNumber`),
+                KEY `IX_PaymentGateway_Status` (`Status`),
+                KEY `IX_PaymentGateway_StudentFeeId` (`StudentFeeId`),
+                KEY `IX_PaymentGateway_StudentId` (`StudentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        var pgColExists = await pgDb.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+            WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayTransactions' AND column_name = 'FeeInstallmentIdsJson'").FirstOrDefaultAsync();
+        if (pgColExists == 0)
+        {
+            await pgDb.Database.ExecuteSqlRawAsync("ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `FeeInstallmentIdsJson` VARCHAR(500) NULL AFTER `FeeInstallmentId`;");
+        }
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `FeePaymentAllocations` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `FeePaymentId` INT NOT NULL,
+                `FeeInstallmentId` INT NOT NULL,
+                `AllocatedAmount` DECIMAL(18,2) NOT NULL,
+                `AllocationDate` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                KEY `IX_FeePaymentAllocations_PaymentId` (`FeePaymentId`),
+                KEY `IX_FeePaymentAllocations_InstallmentId` (`FeeInstallmentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentGatewayConfigs` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NULL,
+                `BankName` VARCHAR(200) NULL,
+                `AccountHolderName` VARCHAR(200) NULL,
+                `AccountNumber` VARCHAR(50) NULL,
+                `IfscCode` VARCHAR(20) NULL,
+                `BranchName` VARCHAR(200) NULL,
+                `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
+                `PayeeVpa` VARCHAR(100) NOT NULL DEFAULT '',
+                `PayeeName` VARCHAR(200) NOT NULL DEFAULT '',
+                `Currency` VARCHAR(10) NOT NULL DEFAULT 'INR',
+                `Mcc` VARCHAR(10) NOT NULL DEFAULT '8220',
+                `EnableCounterUpiQr` TINYINT(1) NOT NULL DEFAULT 0,
+                `Provider` VARCHAR(50) NOT NULL DEFAULT 'Razorpay',
+                `IsLiveMode` TINYINT(1) NOT NULL DEFAULT 0,
+                `RazorpayKeyId` VARCHAR(100) NULL,
+                `RazorpayKeySecret` VARCHAR(200) NULL,
+                `RazorpayWebhookSecret` VARCHAR(200) NULL,
+                `AutoCapture` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnableRazorpay` TINYINT(1) NOT NULL DEFAULT 0,
+                `EnableOfflineUtr` TINYINT(1) NOT NULL DEFAULT 0,
+                `PollingIntervalMs` INT NOT NULL DEFAULT 1200,
+                `MonitoringTimeoutSeconds` INT NOT NULL DEFAULT 600,
+                `BaseAppUrl` VARCHAR(255) NULL,
+                `FrontendPort` INT NOT NULL DEFAULT 5173,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAt` DATETIME(6) NULL,
+                `UpdatedByUserId` INT NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_PaymentGatewayConfigs_CampusId` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+        var extraPgColumns = new (string ColName, string AlterSql)[]
+        {
+            ("GatewayQrCodeId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `GatewayQrCodeId` VARCHAR(100) NULL AFTER `OrderId`;"),
+            ("CampusId", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `CampusId` INT NULL AFTER `StudentFeeId`;"),
+            ("PaymentDate", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `PaymentDate` DATETIME(6) NULL AFTER `BankName`;"),
+            ("ClientIdempotencyKey", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ClientIdempotencyKey` VARCHAR(128) NULL AFTER `IdempotencyKey`;"),
+            ("ExpiresAt", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `ExpiresAt` DATETIME(6) NULL AFTER `SettledAt`;"),
+            ("LastGatewaySyncAtUtc", "ALTER TABLE `PaymentGatewayTransactions` ADD COLUMN `LastGatewaySyncAtUtc` DATETIME(6) NULL AFTER `ExpiresAt`;")
+        };
+
+        foreach (var (colName, alterSql) in extraPgColumns)
+        {
+            var colExists = await pgDb.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayTransactions' AND column_name = {colName}").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await pgDb.Database.ExecuteSqlRawAsync(alterSql);
+            }
+        }
+
+        var extraPgConfigColumns = new (string ColName, string AlterSql)[]
+        {
+            ("BaseAppUrl", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `BaseAppUrl` VARCHAR(255) NULL;"),
+            ("FrontendPort", "ALTER TABLE `PaymentGatewayConfigs` ADD COLUMN `FrontendPort` INT NOT NULL DEFAULT 5173;")
+        };
+
+        foreach (var (colName, alterSql) in extraPgConfigColumns)
+        {
+            var colExists = await pgDb.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS `Value` FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'PaymentGatewayConfigs' AND column_name = {colName}").FirstOrDefaultAsync();
+            if (colExists == 0)
+            {
+                await pgDb.Database.ExecuteSqlRawAsync(alterSql);
+            }
+        }
+
+        // Align and persist local development configuration for CampusId = 1
+        var isDevEnv = app.Environment.IsDevelopment();
+        var defaultDevUrl = "http://localhost:5173";
+        const int defaultDevPort = 5173;
+
+        var campus1Config = await pgDb.PaymentGatewayConfigs
+            .Where(c => c.CampusId == 1)
+            .OrderByDescending(c => c.UpdatedAt ?? c.CreatedAt)
+            .ThenByDescending(c => c.Id)
+            .FirstOrDefaultAsync();
+
+        if (campus1Config != null)
+        {
+            bool modified = false;
+            if (isDevEnv)
+            {
+                if (campus1Config.BaseAppUrl != defaultDevUrl)
+                {
+                    campus1Config.BaseAppUrl = defaultDevUrl;
+                    modified = true;
+                }
+                if (campus1Config.FrontendPort != defaultDevPort)
+                {
+                    campus1Config.FrontendPort = defaultDevPort;
+                    modified = true;
+                }
+            }
+            else
+            {
+                if (campus1Config.FrontendPort <= 0)
+                {
+                    campus1Config.FrontendPort = defaultDevPort;
+                    modified = true;
+                }
+            }
+            if (campus1Config.PollingIntervalMs < 500 || campus1Config.PollingIntervalMs > 10000)
+            {
+                campus1Config.PollingIntervalMs = 1200;
+                modified = true;
+            }
+            if (campus1Config.MonitoringTimeoutSeconds < 60 || campus1Config.MonitoringTimeoutSeconds > 3600)
+            {
+                campus1Config.MonitoringTimeoutSeconds = 600;
+                modified = true;
+            }
+            if (modified)
+            {
+                campus1Config.UpdatedAt = DateTime.UtcNow;
+                await pgDb.SaveChangesAsync();
+            }
+        }
+        else if (isDevEnv)
+        {
+            pgDb.PaymentGatewayConfigs.Add(new CollegeManagement.API.Models.Fee.PaymentGatewayConfig
+            {
+                CampusId = 1,
+                BaseAppUrl = defaultDevUrl,
+                FrontendPort = defaultDevPort,
+                PollingIntervalMs = 1200,
+                MonitoringTimeoutSeconds = 600,
+                Currency = "INR",
+                Mcc = "8220",
+                Provider = "Razorpay",
+                AutoCapture = true,
+                CreatedAt = DateTime.UtcNow
+            });
+            await pgDb.SaveChangesAsync();
+        }
+
+        // Ensure no other campus configuration defaults FrontendPort to <= 0
+        await pgDb.Database.ExecuteSqlRawAsync(
+            "UPDATE `PaymentGatewayConfigs` SET `FrontendPort` = 5173 WHERE `FrontendPort` <= 0;");
+
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentLedgerEntries` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `PaymentGatewayTransactionId` INT NULL,
+                `FeePaymentId` INT NULL,
+                `StudentId` INT NULL,
+                `CampusId` INT NULL,
+                `AcademicYearId` INT NULL,
+                `EntryType` VARCHAR(30) NOT NULL DEFAULT 'Credit',
+                `Amount` DECIMAL(18,2) NOT NULL,
+                `StudentName` VARCHAR(200) NOT NULL,
+                `AdmissionNo` VARCHAR(100) NOT NULL DEFAULT '',
+                `Course` VARCHAR(200) NOT NULL DEFAULT '',
+                `PaymentMethod` VARCHAR(50) NOT NULL,
+                `ReferenceNumber` VARCHAR(150) NOT NULL DEFAULT '',
+                `ReceiptNumber` VARCHAR(50) NOT NULL DEFAULT '',
+                `Status` VARCHAR(30) NOT NULL DEFAULT 'Captured',
+                `Remarks` VARCHAR(500) NULL,
+                `PaymentDateUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                KEY `IX_PaymentLedgerEntries_TxnId` (`PaymentGatewayTransactionId`),
+                KEY `IX_PaymentLedgerEntries_Campus_Created` (`CampusId`, `CreatedAt`),
+                KEY `IX_PaymentLedgerEntries_AcademicYearId` (`AcademicYearId`),
+                KEY `IX_PaymentLedgerEntries_StudentId` (`StudentId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+        ");
+
+        await pgDb.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS `PaymentProofAttachments` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `PaymentGatewayTransactionId` INT NOT NULL,
+                `OrderId` VARCHAR(100) NOT NULL,
+                `StudentId` INT NOT NULL,
+                `StudentFeeId` INT NOT NULL,
+                `CampusId` INT NULL,
+                `OriginalFileName` VARCHAR(255) NOT NULL,
+                `StoredFileName` VARCHAR(255) NOT NULL,
+                `StorageRelativePath` VARCHAR(500) NOT NULL,
+                `ContentType` VARCHAR(100) NOT NULL,
+                `FileSizeBytes` BIGINT NOT NULL,
+                `Sha256Hash` VARCHAR(64) NOT NULL,
+                `UploadedByUserId` INT NULL,
+                `IsActive` TINYINT(1) NOT NULL DEFAULT 1,
+                `ActiveTransactionKey` INT NULL,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UK_PaymentProof_StoredFileName` (`StoredFileName`),
+                UNIQUE KEY `UK_PaymentProof_ActiveTxn` (`ActiveTransactionKey`),
+                KEY `IX_PaymentProof_TxnActive` (`PaymentGatewayTransactionId`, `IsActive`),
+                KEY `IX_PaymentProof_OrderId` (`OrderId`),
+                KEY `IX_PaymentProof_StudentFeeId` (`StudentFeeId`),
+                KEY `IX_PaymentProof_CampusId` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `FeePaymentEmailOutbox` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `EventEntityId` INT NOT NULL,
+                `FeePaymentId` INT NULL,
+                `PaymentGatewayTransactionId` INT NULL,
+                `StudentId` INT NOT NULL,
+                `CampusId` INT NULL,
+                `RecipientEmail` VARCHAR(255) NOT NULL,
+                `RecipientType` VARCHAR(30) NOT NULL DEFAULT 'StudentOrParent',
+                `NotificationType` VARCHAR(50) NOT NULL DEFAULT 'PAYMENT_SUCCESS_RECEIPT',
+                `Status` VARCHAR(20) NOT NULL DEFAULT 'QUEUED',
+                `AttemptCount` INT NOT NULL DEFAULT 0,
+                `MaxAttempts` INT NOT NULL DEFAULT 5,
+                `NextAttemptAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `LockedUntilUtc` DATETIME(6) NULL,
+                `SentAtUtc` DATETIME(6) NULL,
+                `LastAttemptAtUtc` DATETIME(6) NULL,
+                `LastError` VARCHAR(500) NULL,
+                `PayloadJson` TEXT NULL,
+                `CreatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UX_FeePaymentEmailOutbox_Dedup` (`NotificationType`, `EventEntityId`, `RecipientEmail`),
+                KEY `IX_FeePaymentEmailOutbox_Dispatch` (`Status`, `NextAttemptAtUtc`, `LockedUntilUtc`),
+                KEY `IX_FeePaymentEmailOutbox_FeePaymentId` (`FeePaymentId`),
+                KEY `IX_FeePaymentEmailOutbox_StudentCampus` (`StudentId`, `CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `PaymentCommunicationSettings` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NULL,
+                `CollegeDisplayName` VARCHAR(200) NULL,
+                `CampusDisplayName` VARCHAR(200) NULL,
+                `CollegeAddress` VARCHAR(500) NULL,
+                `ContactNumber` VARCHAR(50) NULL,
+                `ContactEmail` VARCHAR(254) NULL,
+                `Website` VARCHAR(300) NULL,
+                `ReceiptTitle` VARCHAR(150) NULL,
+                `Layout` VARCHAR(20) NULL,
+                `AccentColor` VARCHAR(20) NULL,
+                `FooterMessage` VARCHAR(500) NULL,
+                `AdditionalInstructions` VARCHAR(1000) NULL,
+                `SignatureName` VARCHAR(150) NULL,
+                `SignatureDesignation` VARCHAR(150) NULL,
+                `ReceiptVisibilityJson` TEXT NULL,
+                `SenderDisplayName` VARCHAR(150) NULL,
+                `ReplyToEmailAddress` VARCHAR(254) NULL,
+                `RecipientPreference` VARCHAR(20) NOT NULL DEFAULT 'both',
+                `AttachPdfOnSuccess` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnablePendingVerificationEmail` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnablePaymentRejectedEmail` TINYINT(1) NOT NULL DEFAULT 1,
+                `EnablePaymentReminderEmail` TINYINT(1) NOT NULL DEFAULT 0,
+                `EmailTemplatesJson` MEDIUMTEXT NULL,
+                `UpdatedByUserId` INT NULL,
+                `CreatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAtUtc` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                PRIMARY KEY (`Id`),
+                UNIQUE KEY `UX_PaymentCommSettings_Campus` (`CampusId`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            CREATE TABLE IF NOT EXISTS `CampusBankAccounts` (
+                `Id` INT NOT NULL AUTO_INCREMENT,
+                `CampusId` INT NOT NULL,
+                `BankName` VARCHAR(200) NOT NULL,
+                `AccountHolderName` VARCHAR(200) NOT NULL,
+                `AccountNumber` VARCHAR(50) NOT NULL,
+                `IfscCode` VARCHAR(20) NOT NULL,
+                `BranchName` VARCHAR(200) NULL,
+                `AccountType` VARCHAR(50) NOT NULL DEFAULT 'Current',
+                `IsActive` TINYINT(1) NOT NULL DEFAULT 0,
+                `CreatedAt` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+                `UpdatedAt` DATETIME(6) NULL,
+                `CreatedByUserId` INT NULL,
+                `UpdatedByUserId` INT NULL,
+                PRIMARY KEY (`Id`),
+                KEY `IX_CampusBankAccounts_CampusId` (`CampusId`),
+                KEY `IX_CampusBankAccounts_Campus_Active` (`CampusId`, `IsActive`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+            UPDATE `Notifications` 
+            SET `Message` = REPLACE(`Message`, 'â‚¹', '₹') 
+            WHERE `Message` LIKE '%â‚¹%';
+
+            UPDATE `Notifications` 
+            SET `Title` = REPLACE(`Title`, 'â‚¹', '₹') 
+            WHERE `Title` LIKE '%â‚¹%';
+        ");
+    }
+    catch (Exception pgEx)
+    {
+        app.Logger.LogWarning(pgEx, "Failed to align PaymentGateway database tables on startup.");
+    }
+
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var deptColExists = await db.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DepartmentId'
+        ").FirstOrDefaultAsync();
+        if (deptColExists == 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE `Roles` ADD COLUMN `DepartmentId` INT NULL AFTER `Description`;");
+        }
+
+        var desigColExists = await db.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'DesignationId'
+        ").FirstOrDefaultAsync();
+        if (desigColExists == 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE `Roles` ADD COLUMN `DesignationId` INT NULL AFTER `DepartmentId`;");
+        }
+
+        var stColExists = await db.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) AS Value FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Roles' AND COLUMN_NAME = 'StaffType'
+        ").FirstOrDefaultAsync();
+        if (stColExists == 0)
+        {
+            await db.Database.ExecuteSqlRawAsync("ALTER TABLE `Roles` ADD COLUMN `StaffType` VARCHAR(20) NOT NULL DEFAULT 'Both' AFTER `DesignationId`;");
+        }
+
+        await db.Database.ExecuteSqlRawAsync(@"
+            INSERT IGNORE INTO `Departments` (`DepartmentCode`, `DepartmentName`, `StaffType`, `Description`, `IsActive`)
+            VALUES ('DEP_SA', 'Student Affairs', 'Non-Teaching', 'Student Affairs, Front Office & Services', 1);
+
+            INSERT IGNORE INTO `Designations` (`Name`, `StaffType`, `IsActive`, `CreatedAt`)
+            VALUES ('Receptionist', 'Non-Teaching', 1, UTC_TIMESTAMP());
+
+            UPDATE `Designations`
+            SET `DepartmentId` = (SELECT `DepartmentId` FROM `Departments` WHERE `DepartmentName` = 'Student Affairs' LIMIT 1),
+                `StaffType` = 'Non-Teaching'
+            WHERE `Name` = 'Receptionist';
+
+            INSERT INTO `Roles` (`RoleName`, `Description`, `StaffType`, `IsSystemRole`, `IsActive`, `DepartmentId`, `DesignationId`)
+            SELECT 'Receptionist', 'Front desk visitor management, receptionist services, and prospective student enquiry handling', 'Non-Teaching', 0, 1,
+                   (SELECT `DepartmentId` FROM `Departments` WHERE `DepartmentName` = 'Student Affairs' LIMIT 1),
+                   (SELECT `Id` FROM `Designations` WHERE `Name` = 'Receptionist' LIMIT 1)
+            WHERE NOT EXISTS (SELECT 1 FROM `Roles` WHERE `RoleName` = 'Receptionist');
+
+            UPDATE `Roles`
+            SET `StaffType` = 'Non-Teaching',
+                `DepartmentId` = (SELECT `DepartmentId` FROM `Departments` WHERE `DepartmentName` = 'Student Affairs' LIMIT 1),
+                `DesignationId` = (SELECT `Id` FROM `Designations` WHERE `Name` = 'Receptionist' LIMIT 1)
+            WHERE `RoleName` = 'Receptionist';
+
+            UPDATE `Roles` SET `StaffType` = 'Teaching' WHERE `RoleName` IN ('Faculty', 'Teacher', 'Lecturer', 'HOD');
+            UPDATE `Roles` SET `StaffType` = 'Non-Teaching' WHERE `RoleName` IN ('Accounts', 'Accountant', 'Examination Cell', 'Library / Librarian', 'Librarian', 'Hostel Warden', 'Placement Officer', 'Bus Driver', 'Driver', 'Cleaner', 'Attendant');
+        ");
+    }
+    catch (Exception roleEx)
+    {
+        app.Logger.LogWarning(roleEx, "Failed to align Roles department and designation schema on startup.");
+    }
 
     app.Run();
 }

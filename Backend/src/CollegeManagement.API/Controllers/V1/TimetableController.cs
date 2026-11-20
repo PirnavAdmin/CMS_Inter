@@ -202,7 +202,10 @@ namespace CollegeManagement.API.Controllers.V1
         [BypassPermission]
         public async Task<IActionResult> GetByFaculty([FromRoute] int? facultyId = null, [FromQuery] int? academicYearId = null, [FromQuery] int? campusId = null)
         {
-            var callerStaffClaim = User.FindFirst("StaffId")?.Value;
+            var callerStaffClaim = User.FindFirst("StaffId")?.Value
+                ?? User.FindFirst("staffId")?.Value
+                ?? User.FindFirst("staff_id")?.Value
+                ?? User.FindFirst("id")?.Value;
             int? callerStaffId = int.TryParse(callerStaffClaim, out var sId) ? sId : null;
 
             if (!User.IsInRole("Admin") && !User.IsInRole("Super Admin") && !User.IsInRole("Principal"))

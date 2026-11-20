@@ -8,22 +8,23 @@ import logo from "@/assets/pirnav-colleges-logo.png";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { inventoryLogout } from "../data/inventorySession.js";
 import { useInventory } from "../InventoryDataContext.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 const menu = [
-  ["", "Dashboard", "dashboard"],
-  ["items", "Items", "inventory"],
-  ["stock-in", "Stock In", "stock-in"],
-  ["stock-out", "Stock Out", "stock-out"],
-  ["suppliers", "Suppliers", "suppliers"],
-  ["categories", "Categories", "categories"],
-  ["orders", "Purchase Orders", "orders"],
-  ["returns", "Returns", "returns"],
-  ["reports", "Reports", "reports-analytics"],
-  ["leave", "Leave Management", "staff-leave"],
-  ["payslips", "My Payslips", "payroll"],
-  ["notifications", "Notifications", "notifications"],
-  ["profile", "Profile", "staff"],
-  ["settings", "Settings", "settings"],
+  ["", "Dashboard", "dashboard", "dashboard"],
+  ["items", "Items", "inventory", "inventory-management"],
+  ["stock-in", "Stock In", "stock-in", "inventory-management"],
+  ["stock-out", "Stock Out", "stock-out", "inventory-management"],
+  ["suppliers", "Suppliers", "suppliers", "inventory-management"],
+  ["categories", "Categories", "categories", "inventory-management"],
+  ["orders", "Purchase Orders", "orders", "inventory-management"],
+  ["returns", "Returns", "returns", "inventory-management"],
+  ["reports", "Reports", "reports-analytics", "inventory-management"],
+  ["leave", "Leave Management", "staff-leave", "staff-leave-management"],
+  ["payslips", "My Payslips", "payroll", "payroll"],
+  ["notifications", "Notifications", "notifications", "dashboard"],
+  ["profile", "Profile", "staff", "profile"],
+  ["settings", "Settings", "settings", "settings"],
 ];
 
 export default function InventoryLayout({ children }) {
@@ -44,6 +45,13 @@ export default function InventoryLayout({ children }) {
           (o) => o.status === "Pending" && !state.readNotifications.includes(o.id),
         ).length
       : 0);
+
+  const { canView, loading: permsLoading, permissions } = useEffectivePermissions();
+  const visibleMenu = menu.filter(([, , , moduleKey]) => {
+    if (!moduleKey || moduleKey === "dashboard") return true;
+    if (permsLoading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+    return canView(moduleKey);
+  });
 
   return (
     <div className="ip-shell">
@@ -69,7 +77,7 @@ export default function InventoryLayout({ children }) {
           </div>
         </div>
         <nav aria-label="Inventory navigation">
-          {menu.map(([path, label, iconName]) => (
+          {visibleMenu.map(([path, label, iconName]) => (
             <NavLink
               key={label}
               end

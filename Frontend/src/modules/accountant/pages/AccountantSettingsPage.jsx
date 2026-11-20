@@ -1,8 +1,10 @@
 import React from "react";
 import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
+import { PaymentSettingsLink, usePaymentSettingsAccess } from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
 import "@/modules/faculty/styles/FacultySettings.css";
 
 export default function AccountantSettingsPage() {
+  const paymentSettingsAccess = usePaymentSettingsAccess();
   return (
     <div className="faculty-settings-container" style={{ padding: "16px 20px" }}>
       <div className="cms-page-head" style={{ marginBottom: "18px" }}>
@@ -16,6 +18,7 @@ export default function AccountantSettingsPage() {
 
       <div className="faculty-settings-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 420px))", gap: "16px" }}>
         <ThemeSettingsCard />
+        {paymentSettingsAccess && <section className="cms-card"><div className="cms-card-body"><h2>Payment Gateway & Bank Accounts</h2><p>Configure campus receiving bank accounts, dynamic UPI QR, Razorpay credentials, and payment processing settings.</p><PaymentSettingsLink accountant>Configure Accounts</PaymentSettingsLink></div></section>}
       </div>
     </div>
   );

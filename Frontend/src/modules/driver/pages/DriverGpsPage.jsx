@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStatusBadge from "../components/DriverStatusBadge.jsx";
+import DriverTripActionBar from "../components/DriverTripActionBar.jsx";
 import { getRoute, getGps, sendGpsLocation, getTrips } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
@@ -135,7 +136,13 @@ const STOP_COORDINATES = {
   campus: [17.4151, 78.57201],
 };
 
-export default function DriverGpsPage() {
+export default function DriverGpsPage({
+  activeTripState,
+  onStartTrip,
+  onEndTrip,
+  onNavigateTab,
+  students = [],
+}) {
   const [routeDetails, setRouteDetails] = useState(null);
   const [tripsData, setTripsData] = useState(null);
   const [speed, setSpeed] = useState(32); // Default operational cruise speed in km/h
@@ -314,10 +321,10 @@ export default function DriverGpsPage() {
   }, []);
 
   const stops = routeDetails?.stops || [];
-  const morningTrip = tripsData?.morningTrip;
-  const eveningTrip = tripsData?.eveningTrip;
-  const isAllTripsCompleted = morningTrip?.status === "Completed" && eveningTrip?.status === "Completed";
-  const isTripInProgress = morningTrip?.status === "In Progress" || eveningTrip?.status === "In Progress";
+  const morningStatus = activeTripState?.morningTripStatus || tripsData?.morningTrip?.status || "Scheduled";
+  const eveningStatus = activeTripState?.eveningTripStatus || tripsData?.eveningTrip?.status || "Scheduled";
+  const isAllTripsCompleted = morningStatus === "Completed" && eveningStatus === "Completed";
+  const isTripInProgress = morningStatus === "In Progress" || eveningStatus === "In Progress";
 
   const completedStops = stops.filter((s) => s.status === "Completed");
   const nextStop = isAllTripsCompleted ? null : (stops.find((s) => s.status === "Ongoing") || stops.find((s) => s.status !== "Completed") || stops[0]);
@@ -365,6 +372,18 @@ export default function DriverGpsPage() {
           </button>
         </div>
       </div>
+
+      {/* Persistent Trip Operations Action Bar */}
+      <DriverTripActionBar
+        activeTripState={activeTripState}
+        onStartTrip={onStartTrip}
+        onEndTrip={onEndTrip}
+        onNavigateTab={onNavigateTab}
+        students={students}
+        assignedRoute="Route 32 Habsiguda"
+        vehicleNumber="AP39AU2653"
+        scheduledTime="07:35 AM - 08:30 AM"
+      />
 
       {/* Real-Time Metrics */}
       <div className="dp-stat-grid-4">

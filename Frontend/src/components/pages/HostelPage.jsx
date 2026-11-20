@@ -785,7 +785,7 @@ export default function HostelPage() {
       if (roomsRes.status === "fulfilled") {
         const rawRooms = extractCollection(roomsRes.value?.data);
         const mappedRooms = Array.isArray(rawRooms) ? rawRooms.map((r) => mapRoom(r, uniqueBlocks, uniqueCats)) : [];
-        const uniqueRooms = Array.from(new Map(mappedRooms.map((r) => [String(r.id || `${r.hostelId}-${r.roomNo}`), r])).values());
+        const uniqueRooms = Array.from(new Map(mappedRooms.map((r) => [String(r.id || `${r.hostelId}-${r.floor || ''}-${r.roomNo}`), r])).values());
         setRooms(uniqueRooms);
       }
       if (bedsRes.status === "fulfilled") {
@@ -999,8 +999,8 @@ export default function HostelPage() {
         const serverRooms = raw.map((r) => mapRoom(r, blocksRef.current, categoriesRef.current));
         setRooms((prev) => {
           const map = new Map();
-          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
-          serverRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.floor || ''}-${r.roomNo}`), r));
+          serverRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.floor || ''}-${r.roomNo}`), r));
           return Array.from(map.values());
         });
       }
@@ -1391,11 +1391,25 @@ export default function HostelPage() {
         (db) => Number(db.hostelId) === Number(b.id) || db.hostelCode === b.code || db.hostelName === b.name
       );
       const blockRooms = rooms.filter(
-        (r) => Number(r.hostelId) === Number(b.id) || r.block === b.name || r.blockName === b.name || r.block === b.code
+        (r) =>
+          Number(r.hostelId) === Number(b.id) ||
+          String(r.hostelId) === String(b.id) ||
+          r.block === b.name ||
+          r.blockName === b.name ||
+          r.block === b.code ||
+          r.blockCode === b.code ||
+          (b.code && String(r.block || "").toLowerCase() === String(b.code).toLowerCase()) ||
+          (b.name && String(r.block || r.blockName || "").toLowerCase() === String(b.name).toLowerCase())
       );
-      const totalRoomsCount = dbBlock?.totalRooms ?? blockRooms.length;
-      const blockBeds = beds.filter((bd) => Number(bd.hostelId) === Number(b.id) || blockRooms.some((r) => Number(r.id) === Number(bd.roomId)));
-      const totalBedsCount = dbBlock?.totalBeds ?? (blockBeds.length > 0 ? blockBeds.length : blockRooms.reduce((acc, r) => acc + (Number(r.capacity) || 1), 0));
+      const totalRoomsCount = Math.max(blockRooms.length, Number(dbBlock?.totalRooms) || 0);
+      const blockBeds = beds.filter(
+        (bd) =>
+          Number(bd.hostelId) === Number(b.id) ||
+          String(bd.hostelId) === String(b.id) ||
+          blockRooms.some((r) => Number(r.id) === Number(bd.roomId))
+      );
+      const liveCapacityFromRooms = blockRooms.reduce((acc, r) => acc + (Number(r.capacity || r.bedCapacity) || 1), 0);
+      const totalBedsCount = Math.max(blockBeds.length, liveCapacityFromRooms, Number(dbBlock?.totalBeds) || 0);
       const occupiedCount = allocations.filter((a) => (Number(a.hostelId) === Number(b.id) || a.blockName === b.name || a.blockCode === b.code || a.hostelName === b.name || a.hostelCode === b.code) && ((a.status || "").toLowerCase() === "active" || (a.status || "").toLowerCase() === "allocated")).length;
       const vacantCount = Math.max(0, totalBedsCount - occupiedCount);
       const assignedWarden = wardens.find((w) => (w.status || "").toLowerCase() === "active" && (Number(w.hostelId) === Number(b.id) || String(w.hostelId) === String(b.id) || w.assignedHostels === b.name || (w.assignedHostels || "").includes(b.name)));
@@ -1471,13 +1485,13 @@ export default function HostelPage() {
 
   // ── Computed Metrics ────────────────────────────────────────────────
   const totalRooms = useMemo(
-    () => dashboardData?.totalRooms ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0),
-    [dashboardData, enrichedBlocks]
+    () => Math.max(rooms.length, enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0), Number(dashboardData?.totalRooms) || 0),
+    [dashboardData, enrichedBlocks, rooms.length]
   );
 
   const totalBeds = useMemo(
-    () => dashboardData?.totalBeds ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0),
-    [dashboardData, enrichedBlocks]
+    () => Math.max(beds.length, enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0), Number(dashboardData?.totalBeds) || 0),
+    [dashboardData, enrichedBlocks, beds.length]
   );
 
   const activeAllocations = useMemo(
@@ -1488,12 +1502,6 @@ export default function HostelPage() {
   const occupiedBeds = activeAllocations.length;
   const vacantBeds = Math.max(0, totalBeds - occupiedBeds);
   const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-  const monthlyRevenue = useMemo(() => {
-    return activeAllocations.reduce((sum, a) => {
-      const num = parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
-      return sum + num;
-    }, 0);
-  }, [activeAllocations]);
 
   // Enriched Student Fee & Dues Records tied to active allocations
   const revenueStudentRecords = useMemo(() => {
@@ -1552,6 +1560,18 @@ export default function HostelPage() {
       efficiencyRate,
     };
   }, [revenueStudentRecords]);
+
+  const monthlyRevenue = useMemo(() => {
+    if (revenueSummary?.totalBilled > 0) return revenueSummary.totalBilled;
+    return activeAllocations.reduce((sum, a) => {
+      const raw = parseFloat(String(a.monthlyFee || a.fee || "").replace(/[^0-9.]/g, "")) || 0;
+      if (raw > 0) return sum + raw;
+      const rm = rooms.find((r) => Number(r.id) === Number(a.roomId) || r.roomNo === a.roomNumber);
+      const rmFee = parseFloat(String(rm?.fee || "").replace(/[^0-9.]/g, "")) || 0;
+      return sum + (rmFee > 0 ? rmFee : 6000);
+    }, 0);
+  }, [revenueSummary, activeAllocations, rooms]);
+
   const activeWardensCount = wardens.filter((w) => (w.status || "").toLowerCase() === "active").length || (dashboardData?.activeWardens ?? 0);
   const pendingOutpasses = useMemo(
     () => outpasses.filter((o) => o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review").length,
@@ -1780,6 +1800,7 @@ export default function HostelPage() {
             let newRoomId = null;
             const existingRoom = rooms.find(
               (r) => (Number(r.hostelId) === targetHostelId || r.block === blockCode || r.blockName === blockName) &&
+                     isFloorMatch(r.floor, fc.floorLabel || `Floor ${fc.floorIndex || 1}`) &&
                      String(r.roomNo || r.roomNumber).replace(/^Room #/i, "").trim().toLowerCase() === roomNum.toLowerCase()
             );
 
@@ -2238,16 +2259,16 @@ export default function HostelPage() {
           const cleanTarget = String(rNum).replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
           const targetNum = parseInt(cleanTarget, 10);
 
-          // Check if room number already exists in this hostel block
+          // Check if room number already exists in this hostel block on the same floor
           const existingRoom = rooms.find((r) => {
             const matchesBlock =
               (r.hostelId && Number(r.hostelId) === Number(hostelId)) ||
               (blk?.code && r.block && String(r.block).trim().toLowerCase() === String(blk.code).trim().toLowerCase()) ||
               (blk?.name && r.blockName && String(r.blockName).trim().toLowerCase() === String(blk.name).trim().toLowerCase());
             if (!matchesBlock) return false;
+            if (roomData.floor && !isFloorMatch(r.floor, roomData.floor)) return false;
             const rClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
-            const rParsed = parseInt(rClean, 10);
-            return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
+            return rClean === cleanTarget;
           });
 
           // Determine specific AC vs Non-AC, capacity, and category for this individual room
@@ -2355,9 +2376,9 @@ export default function HostelPage() {
               (blk?.code && r.block && String(r.block).trim().toLowerCase() === String(blk.code).trim().toLowerCase()) ||
               (blk?.name && r.blockName && String(r.blockName).trim().toLowerCase() === String(blk.name).trim().toLowerCase());
             if (!matchesBlock) return false;
+            if (roomData.floor && !isFloorMatch(r.floor, roomData.floor)) return false;
             const rClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
-            const rParsed = parseInt(rClean, 10);
-            return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
+            return rClean === cleanTarget;
           });
           const targetAc = roomData.roomAcMap?.[rNum] || er?.acType || "Non-AC";
           const targetCap = Number(roomData.roomCapMap?.[rNum] || er?.capacity || er?.bedCapacity || 2);
@@ -9499,7 +9520,7 @@ function StudentAttendanceModal({
         <div className="cms-student-att-filter-row">
           {activeMode === "daily" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Date:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Date:</label>
               <input
                 type="date"
                 value={selectedDate}
@@ -9519,7 +9540,7 @@ function StudentAttendanceModal({
               {/* Quick Roll Call Marker for this student on selectedDate if it's attendanceDate */}
               {selectedDate === attendanceDate && (
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-muted)" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>
                     Mark for Today ({attendanceShift}):
                   </span>
                   <div className="cms-att-status-group" style={{ transform: "scale(0.9)", transformOrigin: "right center" }}>
@@ -9559,7 +9580,7 @@ function StudentAttendanceModal({
 
           {activeMode === "monthly" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Month:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Month:</label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -9577,7 +9598,7 @@ function StudentAttendanceModal({
 
           {activeMode === "custom" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Date Range:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Date Range:</label>
               <input
                 type="date"
                 value={rangeStart}
@@ -13023,7 +13044,7 @@ function RoomModal({
                 }}
               >
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Floor Rooms Breakdown</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Floor Rooms Breakdown</span>
                   <strong style={{ fontSize: 12.5, color: "var(--cms-text)" }}>
                     <span style={{ color: "#2563eb" }}>❄️ {summaryStats.acRooms} AC</span>
                     {" / "}
@@ -13031,13 +13052,13 @@ function RoomModal({
                   </strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Total Bed Capacity</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Total Bed Capacity</span>
                   <strong style={{ fontSize: 13, color: "var(--cms-text)" }}>
                     {summaryStats.totalBeds} Beds across {summaryStats.totalRooms} Room{summaryStats.totalRooms !== 1 ? "s" : ""}
                   </strong>
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: "var(--cms-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block", marginBottom: 3 }}>
                     Monthly Tariff
                   </label>
                   <input

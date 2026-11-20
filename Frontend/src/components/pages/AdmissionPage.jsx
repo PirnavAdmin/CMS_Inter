@@ -5318,7 +5318,11 @@ export default function AdmissionPage() {
     const admissionListId = resolveApprovedStudentId(matchingAdmission);
     if (admissionListId) return admissionListId;
 
-    const studentsResponse = await apiClient.get(apiEndpoints.students.getAll);
+    const searchTerm = readText(currentDetail, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber")
+      || [readText(currentDetail, "firstName", "FirstName"), readText(currentDetail, "lastName", "LastName")].filter(Boolean).join(" ").trim();
+    const studentsResponse = await apiClient.get(apiEndpoints.students.getAll, {
+      params: searchTerm ? { search: searchTerm, pageNumber: 1, pageSize: 50 } : { pageNumber: 1, pageSize: 50 },
+    });
     const studentRows = getCollection(studentsResponse.data);
     const matchingStudent = studentRows.find((item) => sameStudentIdentity(item, currentDetail));
     return resolveApprovedStudentId(matchingStudent);

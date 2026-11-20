@@ -30,7 +30,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 DateTime? attendanceDate = null,
                 string? session = null,
                 string? attendanceStatus = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             var records =
                 await _attendanceRepository.GetAllAsync(
@@ -40,7 +41,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     attendanceDate,
                     session,
                     attendanceStatus,
-                    search);
+                    search,
+                    campusId);
 
             return records.Select(MapToResponseDto);
         }

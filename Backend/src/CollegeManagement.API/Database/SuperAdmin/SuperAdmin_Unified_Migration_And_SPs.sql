@@ -1538,16 +1538,17 @@ CREATE PROCEDURE `sp_SuperAdmin_GetNotifications`(
 )
 BEGIN
     SELECT 
-        n.`Id`,
+        n.`NotificationId` AS `Id`,
+        n.`NotificationId`,
         n.`Title`,
         n.`Message`,
-        n.`Category`,
+        n.`Type` AS `Category`,
         n.`IsRead`,
         n.`CreatedAt`
     FROM `Notifications` n
     WHERE (p_IsRead IS NULL OR n.`IsRead` = p_IsRead)
-      AND (p_Category IS NULL OR p_Category = '' OR n.`Category` = p_Category)
-    ORDER BY n.`Id` DESC
+      AND (p_Category IS NULL OR p_Category = '' OR n.`Type` = p_Category)
+    ORDER BY n.`NotificationId` DESC
     LIMIT 50;
 END$$
 
@@ -1564,8 +1565,8 @@ CREATE PROCEDURE `sp_SuperAdmin_CreatePlatformNotification`(
     OUT p_NewNotificationId INT
 )
 BEGIN
-    INSERT INTO `Notifications` (`Title`, `Message`, `Category`, `IsRead`, `CreatedAt`)
-    VALUES (p_Title, p_Message, p_Category, 0, CURRENT_TIMESTAMP(6));
+    INSERT INTO `Notifications` (`UserId`, `Title`, `Message`, `Type`, `IsRead`, `CreatedAt`)
+    VALUES (IFNULL(p_CreatedBy, 1), p_Title, p_Message, IFNULL(p_Category, 'System Alerts'), 0, CURRENT_TIMESTAMP(6));
 
     SET p_NewNotificationId = LAST_INSERT_ID();
 END$$
@@ -1578,8 +1579,9 @@ DROP PROCEDURE IF EXISTS `sp_SuperAdmin_MarkNotificationRead`$$
 CREATE PROCEDURE `sp_SuperAdmin_MarkNotificationRead`(IN p_NotificationId INT)
 BEGIN
     UPDATE `Notifications`
-    SET `IsRead` = 1
-    WHERE `Id` = p_NotificationId;
+    SET `IsRead` = 1,
+        `ReadAt` = CURRENT_TIMESTAMP(6)
+    WHERE `NotificationId` = p_NotificationId;
 END$$
 
 

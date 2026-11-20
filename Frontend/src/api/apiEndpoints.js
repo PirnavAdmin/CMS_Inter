@@ -196,6 +196,25 @@ export const apiEndpoints = {
     byGroup: (groupId) => `/api/v1/groups/${encodeURIComponent(groupId)}/programs`,
     mappedByGroup: (groupId) => `/api/v1/programs/group/${encodeURIComponent(groupId)}`,
   },
+  feeGateway: {
+    config: "/api/v1/fee-payments/gateway/config",
+    createOrder: "/api/v1/fee-payments/gateway/create-order",
+    verify: "/api/v1/fee-payments/gateway/verify",
+    status: (studentFeeId) => `/api/v1/fee-payments/gateway/status/${encodeURIComponent(studentFeeId)}`,
+    submitUtr: "/api/v1/fee-payments/gateway/submit-utr",
+    pendingUtrs: "/api/v1/fee-payments/gateway/pending-utrs",
+    approveUtr: "/api/v1/fee-payments/gateway/approve-utr",
+    exportLedger: "/api/v1/fee-payments/gateway/export-ledger",
+    reverse: "/api/v1/fee-payments/gateway/reverse",
+    paymentStatus: (feePaymentId) => `/api/v1/fee-payments/gateway/payments/${encodeURIComponent(feePaymentId)}/status`,
+    retryEmail: (feePaymentId) => `/api/v1/fee-payments/gateway/payments/${encodeURIComponent(feePaymentId)}/retry-email`,
+    communicationSettings: "/api/v1/fee-payments/gateway/communication-settings",
+    restoreCommunicationSettings: "/api/v1/fee-payments/gateway/communication-settings/restore-default",
+    sendTestCommunicationEmail: "/api/v1/fee-payments/gateway/communication-settings/send-test-email",
+    bankAccounts: "/api/v1/fee-payments/gateway/bank-accounts",
+    bankAccountById: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}`,
+    activateBankAccount: (id) => `/api/v1/fee-payments/gateway/bank-accounts/${encodeURIComponent(id)}/activate`,
+  },
   fee: {
     feeTypes: "/api/v1/fees/types",
     feeTypeById: (feeTypeId) => `/api/v1/fees/types/${encodeURIComponent(feeTypeId)}`,
@@ -661,6 +680,15 @@ export const apiEndpoints = {
     delete: (id) => `/api/v1/settings/templates/${id}`,
     toggleActive: (id) => `/api/v1/settings/templates/${id}/toggle-active`,
     preview: "/api/v1/settings/templates/preview",
+    uploadLogo: "/api/v1/settings/templates/upload-logo",
+    duplicate: (id) => `/api/v1/settings/templates/${id}/duplicate`,
+    setDefault: (id) => `/api/v1/settings/templates/${id}/set-default`,
+  },
+  landingPage: {
+    getConfig: "/api/v1/landing-page/config",
+    saveConfig: "/api/v1/landing-page/config",
+    uploadImage: "/api/v1/landing-page/upload-image",
+    getPublic: "/api/v1/landing-page/public",
   },
   holidays: {
     list: "/api/v1/holidays",
@@ -676,7 +704,11 @@ export const apiEndpoints = {
     studentDetails: "/api/v1/transport/student/details",
     routes: "/api/v1/transport/routes",
     routeById: (id) => `/api/v1/transport/routes/${id}`,
+<<<<<<< HEAD
     calculateDistance: "/api/v1/transport/routes/calculate-distance",
+=======
+    calculateRouteDistance: "/api/v1/transport/routes/calculate-distance",
+>>>>>>> ffda7eac9e1fa762cc19e9956ead11bd4a0f485e
     pickupPoints: "/api/v1/transport/pickup-points",
     pickupPointById: (id) => `/api/v1/transport/pickup-points/${id}`,
     vehicles: "/api/v1/transport/vehicles",
@@ -865,6 +897,7 @@ export const apiEndpoints = {
     userPermissions: (userId) => `/api/v1/roles/users/${userId}/permissions`,
     userOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides`,
     resetUserOverrides: (userId) => `/api/v1/roles/users/${userId}/overrides/reset`,
+    updateUserStatus: (userId) => `/api/v1/roles/users/${userId}/status`,
     userAssignments: "/api/v1/roles/user-assignments",
     assignUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/assign`,
     removeUserRole: (userId) => `/api/v1/roles/user-assignments/${userId}/remove`,
@@ -897,6 +930,25 @@ export const apiEndpoints = {
     auditLogs: "/api/v1/super-admin/audit-logs",
     settings: "/api/v1/super-admin/settings",
     profile: "/api/v1/super-admin/profile",
+
+  },
+  enquiries: {
+    submit: "/api/v1/enquiries",
+    list: "/api/v1/enquiries",
+    stats: "/api/v1/enquiries/stats",
+    byId: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}`,
+    takeCharge: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/take-charge`,
+    history: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/history`,
+    updateStatus: (id) => `/api/v1/enquiries/${encodeURIComponent(id)}/status`,
+    contactConfig: "/api/v1/enquiries/contact-config",
+  },
+  userPreferences: {
+    get: "/api/v1/user-preferences",
+    save: "/api/v1/user-preferences",
+  },
+  landingPageConfig: {
+    get: "/api/v1/landing-page-config",
+    save: "/api/v1/landing-page-config",
   },
 };
 

@@ -1,9 +1,14 @@
+using CollegeManagement.API.Data;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.DTOs.Payroll;
+using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Payroll;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace CollegeManagement.API.Controllers
@@ -17,13 +22,25 @@ namespace CollegeManagement.API.Controllers
     {
         private readonly IPayrollService _payrollService;
         private readonly INotificationService? _notificationService;
+        private readonly IJwtTokenHelper? _jwtTokenHelper;
+        private readonly IUserRepository? _userRepository;
+        private readonly IPermissionRepository? _permissionRepository;
+        private readonly AppDbContext? _db;
 
         public PayrollController(
             IPayrollService payrollService,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IJwtTokenHelper? jwtTokenHelper = null,
+            IUserRepository? userRepository = null,
+            IPermissionRepository? permissionRepository = null,
+            AppDbContext? db = null)
         {
             _payrollService = payrollService;
             _notificationService = notificationService;
+            _jwtTokenHelper = jwtTokenHelper;
+            _userRepository = userRepository;
+            _permissionRepository = permissionRepository;
+            _db = db;
         }
 
         private int? ResolveCampusId(int? explicitlyProvided = null)
@@ -64,9 +81,9 @@ namespace CollegeManagement.API.Controllers
             return null;
         }
 
-        private (int? StaffId, bool IsAdminOrFinance) GetCallerIdentity()
+        private async Task<int?> ResolveCallerStaffIdAsync()
         {
-            int? staffId = null;
+            // 1. Direct trusted claims check
             var staffClaim = User?.FindFirst("StaffId")?.Value 
                 ?? User?.FindFirst("staffId")?.Value 
                 ?? User?.FindFirst("staff_id")?.Value
@@ -74,31 +91,115 @@ namespace CollegeManagement.API.Controllers
 
             if (int.TryParse(staffClaim, out int sId) && sId > 0)
             {
-                staffId = sId;
+                return sId;
             }
 
+            // 2. Resolve via authenticated User ID from trusted JWT identity claims
+            int? userId = _jwtTokenHelper?.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                var uidClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? User?.FindFirst("sub")?.Value
+                    ?? User?.FindFirst("UserId")?.Value;
+                if (int.TryParse(uidClaim, out int uid) && uid > 0)
+                {
+                    userId = uid;
+                }
+            }
+
+            if (userId.HasValue && userId.Value > 0)
+            {
+                if (_userRepository != null)
+                {
+                    var user = await _userRepository.GetByIdAsync(userId.Value);
+                    if (user != null && user.StaffId.HasValue && user.StaffId.Value > 0)
+                    {
+                        return user.StaffId.Value;
+                    }
+                }
+                else if (_db != null)
+                {
+                    var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId.Value);
+                    if (user != null && user.StaffId.HasValue && user.StaffId.Value > 0)
+                    {
+                        return user.StaffId.Value;
+                    }
+                }
+            }
+
+            // Fail closed: Never treat sub, employee ID strings, or partial searches as StaffId
+            return null;
+        }
+
+        private bool IsAdminOrHr() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("HR");
+
+        private bool IsAccountantUser()
+        {
             var role = User?.FindFirst(ClaimTypes.Role)?.Value 
                 ?? User?.FindFirst("role")?.Value 
                 ?? User?.FindFirst("Role")?.Value;
+            return string.Equals(role, "Accountant", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(role, "Finance", StringComparison.OrdinalIgnoreCase)
+                || User.IsInRole("Accountant")
+                || User.IsInRole("Finance");
+        }
 
-            bool isAdminOrFinance = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(role, "Principal", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(role, "Accountant", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(role, "Finance", StringComparison.OrdinalIgnoreCase);
+        private async Task<bool> HasStaffPayrollPermissionAsync()
+        {
+            if (IsAdminOrHr())
+                return true;
 
-            return (staffId, isAdminOrFinance);
+            int? userId = _jwtTokenHelper?.GetUserId(User);
+            if (!userId.HasValue || userId.Value <= 0)
+            {
+                var uidClaim = User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? User?.FindFirst(JwtRegisteredClaimNames.Sub)?.Value
+                    ?? User?.FindFirst("sub")?.Value
+                    ?? User?.FindFirst("UserId")?.Value;
+                if (int.TryParse(uidClaim, out int uid) && uid > 0)
+                    userId = uid;
+            }
+
+            if (!userId.HasValue || userId.Value <= 0)
+                return false;
+
+            if (_permissionRepository != null)
+            {
+                return await _permissionRepository.HasPermissionAsync(userId.Value, "finance.payroll.payslips.view");
+            }
+
+            return false;
+        }
+
+        private async Task<int?> GetStaffCampusIdAsync(int staffId)
+        {
+            if (_db != null)
+            {
+                var staff = await _db.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == staffId);
+                if (staff != null) return staff.CampusId;
+            }
+            return null;
         }
 
         // GET: api/payroll/salary-structures
         [HttpGet("salary-structures")]
         public async Task<IActionResult> GetSalaryStructures(
             [FromQuery] string? staffType,
-            [FromQuery] string? search)
+            [FromQuery] string? search,
+            [FromQuery] int? campusId = null)
         {
+            var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SalaryStructureDto>());
+            }
+
             var result =
                 await _payrollService.GetSalaryStructuresAsync(
                     staffType,
-                    search);
+                    search,
+                    resolvedCampusId);
 
             return Ok(result);
         }
@@ -187,9 +288,14 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetEmployees(
             [FromQuery] string? staffType,
             [FromQuery] string? search,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<PayrollEmployeeDto>());
+            }
+
             var result =
                 await _payrollService.GetEmployeesAsync(
                     staffType,
@@ -204,7 +310,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetSalaryAssignments(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -217,6 +323,11 @@ namespace CollegeManagement.API.Controllers
                 });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SalaryAssignmentDto>());
+            }
+
             var result = await _payrollService
                 .GetSalaryAssignmentsAsync(staffId, status, resolvedCampusId);
             return Ok(result);
@@ -425,7 +536,7 @@ namespace CollegeManagement.API.Controllers
                         $"Your salary payslip for {request.PayrollMonth}/{request.PayrollYear} is now available in the portal.",
                         "Payroll",
                         payslipId,
-                        "/dashboard/payroll/payslips");
+                        $"/faculty-dashboard/payslips?payslipId={payslipId}");
                 }
                 catch { }
             }
@@ -493,7 +604,7 @@ namespace CollegeManagement.API.Controllers
                         $"Your salary payslip for {request.PayrollMonth}/{request.PayrollYear} is now available in the portal.",
                         "Payroll",
                         null,
-                        "/dashboard/payroll/payslips");
+                        "/faculty-dashboard/payslips");
                 }
                 catch { }
             }
@@ -568,7 +679,7 @@ namespace CollegeManagement.API.Controllers
                             $"Your salary payslip #{numericId.Value} has been marked as Paid. Net payable: ₹{slip.NetSalary:N0}.",
                             "Payroll",
                             numericId.Value,
-                            "/dashboard/payroll/payslips");
+                            $"/faculty-dashboard/payslips?payslipId={numericId.Value}");
                     }
                 }
                 catch { }
@@ -630,21 +741,9 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? payrollYear,
             [FromQuery] int? campusId)
         {
-            var (callerStaffId, _) = GetCallerIdentity();
+            var callerStaffId = await ResolveCallerStaffIdAsync();
             if (!callerStaffId.HasValue || callerStaffId.Value <= 0)
             {
-                var empIdClaim = User?.FindFirst("EmployeeId")?.Value 
-                    ?? User?.FindFirst("employeeId")?.Value 
-                    ?? User?.FindFirst("sub")?.Value;
-
-                if (!string.IsNullOrWhiteSpace(empIdClaim))
-                {
-                    var resolvedCampus = ResolveCampusId(campusId);
-                    var searchPayslips = await _payrollService.GetPayslipHistoryAsync(
-                        payrollMonth, payrollYear, null, empIdClaim, resolvedCampus);
-                    return Ok(searchPayslips);
-                }
-
                 return Unauthorized(new { Message = "Staff profile could not be identified from authentication credentials." });
             }
 
@@ -652,6 +751,7 @@ namespace CollegeManagement.API.Controllers
             var allPayslips = await _payrollService.GetPayslipHistoryAsync(
                 payrollMonth, payrollYear, null, null, resolvedCampusId);
 
+            // Exact ownership filtering: Never return another employee's payslip
             var myPayslips = allPayslips.Where(p => p.StaffId == callerStaffId.Value).ToList();
             return Ok(myPayslips);
         }
@@ -664,34 +764,73 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? payrollYear,
             [FromQuery] string? staffType,
             [FromQuery] string? search,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? scope = null,
+            [FromQuery] bool? personal = null)
         {
-            var resolvedCampusId = ResolveCampusId(campusId);
-            var result =
-                await _payrollService.GetPayslipHistoryAsync(
-                    payrollMonth,
-                    payrollYear,
-                    staffType,
-                    search,
-                    resolvedCampusId);
+            bool isPersonalRequested = personal == true || string.Equals(scope, "personal", StringComparison.OrdinalIgnoreCase);
 
-            if (!IsAdminOrHr())
+            if (isPersonalRequested)
             {
-                var callerStaffId = GetCallerStaffId();
-                var callerEmployeeId = GetCallerEmployeeId();
+                return await GetMyPayslips(payrollMonth, payrollYear, campusId);
+            }
+
+            bool canViewStaff = IsAdminOrHr() || (IsAccountantUser() && await HasStaffPayrollPermissionAsync());
+
+            if (!canViewStaff)
+            {
+                // Accountant users without explicit finance.payroll.payslips.view cannot access staff payroll
+                if (IsAccountantUser())
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied. You do not have permission to view staff payroll records." });
+                }
+
+                // Preserve existing personal self-service for Faculty, Driver, Non-Teaching Staff
+                var callerStaffId = await ResolveCallerStaffIdAsync();
+                if (!callerStaffId.HasValue || callerStaffId.Value <= 0)
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied. Staff profile could not be identified." });
+                }
+
+                var resolvedCampus = ResolveCampusId(campusId);
+                var personalHistory = await _payrollService.GetPayslipHistoryAsync(
+                    payrollMonth, payrollYear, staffType, null, resolvedCampus);
+
+                // Exact ownership match only (never partial search)
+                var ownRecords = personalHistory.Where(p => p.StaffId == callerStaffId.Value).ToList();
+                return Ok(ownRecords);
+            }
+
+            var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<PayslipDto>());
+            }
+
+            // Enforce authorized campus scope for Accountant
+            if (IsAccountantUser())
+            {
+                var callerStaffId = await ResolveCallerStaffIdAsync();
                 if (callerStaffId.HasValue && callerStaffId.Value > 0)
                 {
-                    result = result.Where(p => p.StaffId == callerStaffId.Value);
-                }
-                else if (!string.IsNullOrEmpty(callerEmployeeId))
-                {
-                    result = result.Where(p => string.Equals(p.EmployeeId, callerEmployeeId, StringComparison.OrdinalIgnoreCase));
-                }
-                else if (!string.IsNullOrEmpty(search))
-                {
-                    result = result.Where(p => string.Equals(p.EmployeeId, search, StringComparison.OrdinalIgnoreCase));
+                    var accountantCampusId = await GetStaffCampusIdAsync(callerStaffId.Value);
+                    if (accountantCampusId.HasValue && accountantCampusId.Value > 0)
+                    {
+                        if (resolvedCampusId.HasValue && resolvedCampusId.Value != accountantCampusId.Value)
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied: You can only view staff payroll for your authorized campus." });
+                        }
+                        resolvedCampusId = accountantCampusId.Value;
+                    }
                 }
             }
+
+            var result = await _payrollService.GetPayslipHistoryAsync(
+                payrollMonth,
+                payrollYear,
+                staffType,
+                search,
+                resolvedCampusId);
 
             return Ok(result);
         }
@@ -718,9 +857,7 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
-            var result =
-                await _payrollService.GetPayslipByIdAsync(numericId.Value);
-
+            var result = await _payrollService.GetPayslipByIdAsync(numericId.Value);
             if (result == null)
             {
                 return NotFound(new
@@ -731,10 +868,30 @@ namespace CollegeManagement.API.Controllers
 
             if (!IsAdminOrHr())
             {
-                var callerStaffId = GetCallerStaffId();
-                if (result.StaffId != callerStaffId)
+                bool canViewStaff = IsAdminOrHr() || (IsAccountantUser() && await HasStaffPayrollPermissionAsync());
+                var callerStaffId = await ResolveCallerStaffIdAsync();
+
+                if (!canViewStaff)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to view payslips of other employees." });
+                    if (!callerStaffId.HasValue || callerStaffId.Value <= 0 || result.StaffId != callerStaffId.Value)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to view payslips of other employees." });
+                    }
+                }
+                else
+                {
+                    if (callerStaffId.HasValue && callerStaffId.Value > 0)
+                    {
+                        var accountantCampusId = await GetStaffCampusIdAsync(callerStaffId.Value);
+                        if (accountantCampusId.HasValue && accountantCampusId.Value > 0)
+                        {
+                            var targetCampusId = await GetStaffCampusIdAsync(result.StaffId);
+                            if (targetCampusId.HasValue && targetCampusId.Value != accountantCampusId.Value)
+                            {
+                                return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied: This payslip does not belong to your authorized campus." });
+                            }
+                        }
+                    }
                 }
             }
 
@@ -764,14 +921,38 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            var existing = await _payrollService.GetPayslipByIdAsync(numericId.Value);
+            if (existing == null)
+            {
+                return NotFound(new { Message = "Payslip not found." });
+            }
+
             if (!IsAdminOrHr())
             {
-                var existing = await _payrollService.GetPayslipByIdAsync(numericId.Value);
-                if (existing == null) return NotFound(new { Message = "Payslip not found." });
-                var callerStaffId = GetCallerStaffId();
-                if (existing.StaffId != callerStaffId)
+                bool canViewStaff = IsAdminOrHr() || (IsAccountantUser() && await HasStaffPayrollPermissionAsync());
+                var callerStaffId = await ResolveCallerStaffIdAsync();
+
+                if (!canViewStaff)
                 {
-                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to download payslips of other employees." });
+                    if (!callerStaffId.HasValue || callerStaffId.Value <= 0 || existing.StaffId != callerStaffId.Value)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to download payslips of other employees." });
+                    }
+                }
+                else
+                {
+                    if (callerStaffId.HasValue && callerStaffId.Value > 0)
+                    {
+                        var accountantCampusId = await GetStaffCampusIdAsync(callerStaffId.Value);
+                        if (accountantCampusId.HasValue && accountantCampusId.Value > 0)
+                        {
+                            var targetCampusId = await GetStaffCampusIdAsync(existing.StaffId);
+                            if (targetCampusId.HasValue && targetCampusId.Value != accountantCampusId.Value)
+                            {
+                                return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied: This payslip does not belong to your authorized campus." });
+                            }
+                        }
+                    }
                 }
             }
 
@@ -787,27 +968,12 @@ namespace CollegeManagement.API.Controllers
             return File(pdfBytes, "application/pdf", $"Payslip_{numericId.Value}.pdf");
         }
 
-        private bool IsAdminOrHr() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("HR");
-
-        private int? GetCallerStaffId()
-        {
-            var claim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
-            return int.TryParse(claim, out int id) ? id : null;
-        }
-
-        private string? GetCallerEmployeeId()
-        {
-            return User.FindFirst("EmployeeId")?.Value 
-                ?? User.FindFirst("employee_id")?.Value
-                ?? User.FindFirst("staff_code")?.Value;
-        }
-
         // GET: api/payroll/revisions?staffId=10&status=Pending
         [HttpGet("revisions")]
         public async Task<IActionResult> GetSalaryRevisions(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
             {
@@ -829,6 +995,11 @@ namespace CollegeManagement.API.Controllers
             }
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SalaryRevisionDto>());
+            }
+
             var result = await _payrollService
                 .GetSalaryRevisionsAsync(staffId, status, resolvedCampusId);
 
@@ -958,7 +1129,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetBonuses(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -973,6 +1144,11 @@ namespace CollegeManagement.API.Controllers
                 });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<BonusDto>());
+            }
+
             var result = await _payrollService.GetBonusesAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
@@ -1050,7 +1226,7 @@ namespace CollegeManagement.API.Controllers
         public async Task<IActionResult> GetAdvances(
             [FromQuery] int? staffId,
             [FromQuery] string? status,
-            [FromQuery] int? campusId)
+            [FromQuery] int? campusId = null)
         {
             if (staffId.HasValue && staffId.Value <= 0)
                 return BadRequest(new { Message = "Valid StaffId is required." });
@@ -1066,6 +1242,11 @@ namespace CollegeManagement.API.Controllers
                 });
 
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<AdvanceDto>());
+            }
+
             var result = await _payrollService.GetAdvancesAsync(staffId, status, resolvedCampusId);
             return Ok(result);
         }
@@ -1198,20 +1379,52 @@ namespace CollegeManagement.API.Controllers
 
         // GET: api/v1/payroll/staff/10/summary?year=2026
         [HttpGet("staff/{staffId:int}/summary")]
+        [BypassPermission]
         public async Task<IActionResult> GetStaffPayrollSummary(int staffId, [FromQuery] int? year)
         {
             var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
             if (staffId <= 0 || targetYear < 2000)
                 return BadRequest(new { Message = "Valid staff ID and year (>= 2000) are required." });
 
+            if (!IsAdminOrHr())
+            {
+                bool canViewStaff = IsAdminOrHr() || (IsAccountantUser() && await HasStaffPayrollPermissionAsync());
+                var callerStaffId = await ResolveCallerStaffIdAsync();
+
+                if (!canViewStaff)
+                {
+                    if (!callerStaffId.HasValue || callerStaffId.Value <= 0 || callerStaffId.Value != staffId)
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { Message = "You are not authorized to view the payroll summary of other employees." });
+                    }
+                }
+                else
+                {
+                    if (callerStaffId.HasValue && callerStaffId.Value > 0)
+                    {
+                        var accountantCampusId = await GetStaffCampusIdAsync(callerStaffId.Value);
+                        if (accountantCampusId.HasValue && accountantCampusId.Value > 0)
+                        {
+                            var targetCampusId = await GetStaffCampusIdAsync(staffId);
+                            if (targetCampusId.HasValue && targetCampusId.Value != accountantCampusId.Value)
+                            {
+                                return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied: This staff summary does not belong to your authorized campus." });
+                            }
+                        }
+                    }
+                }
+            }
+
             var result = await _payrollService.GetStaffPayrollSummaryAsync(staffId, targetYear);
             return Ok(result);
         }
 
-        // GET: api/v1/payroll/summary?month=9&year=2026
-        [HttpGet("summary")]
-        public async Task<IActionResult> GetMonthlyPayrollSummary(
-            [FromQuery] int? month, [FromQuery] int? year, [FromQuery] int? campusId)
+        // GET: api/v1/payroll/my-summary (Personal summary for logged-in staff member)
+        [HttpGet("my-summary")]
+        [HttpGet("payslips/my-summary")]
+        [BypassPermission]
+        public async Task<IActionResult> GetMyPayrollSummary(
+            [FromQuery] int? month, [FromQuery] int? year)
         {
             var targetMonth = month.GetValueOrDefault(DateTime.UtcNow.Month);
             var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
@@ -1219,9 +1432,204 @@ namespace CollegeManagement.API.Controllers
             if (targetMonth < 1 || targetMonth > 12 || targetYear < 2000)
                 return BadRequest(new { Message = "Valid month (1-12) and year (>= 2000) are required." });
 
+            return await GetPersonalSummaryResultAsync(targetMonth, targetYear);
+        }
+
+        // GET: api/v1/payroll/summary?month=9&year=2026
+        [HttpGet("summary")]
+        [HttpGet("payslips/summary")]
+        [BypassPermission]
+        public async Task<IActionResult> GetMonthlyPayrollSummary(
+            [FromQuery] int? month,
+            [FromQuery] int? year,
+            [FromQuery] int? campusId = null,
+            [FromQuery] string? scope = null,
+            [FromQuery] bool? personal = null)
+        {
+            var targetMonth = month.GetValueOrDefault(DateTime.UtcNow.Month);
+            var targetYear = year.GetValueOrDefault(DateTime.UtcNow.Year);
+
+            if (targetMonth < 1 || targetMonth > 12 || targetYear < 2000)
+                return BadRequest(new { Message = "Valid month (1-12) and year (>= 2000) are required." });
+
+            bool isPersonalRequested = personal == true || string.Equals(scope, "personal", StringComparison.OrdinalIgnoreCase);
+
+            if (isPersonalRequested)
+            {
+                return await GetPersonalSummaryResultAsync(targetMonth, targetYear);
+            }
+
+            bool canViewStaff = IsAdminOrHr() || (IsAccountantUser() && await HasStaffPayrollPermissionAsync());
+
+            if (!canViewStaff)
+            {
+                if (string.Equals(scope, "staff", StringComparison.OrdinalIgnoreCase))
+                {
+                    return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied. You do not have permission to view staff-wide payroll summary." });
+                }
+
+                // For Accountant or unauthorized staff without explicit scope=staff, return personal summary (never leak campus-wide 74300)
+                return await GetPersonalSummaryResultAsync(targetMonth, targetYear);
+            }
+
             var resolvedCampusId = ResolveCampusId(campusId);
+            if (resolvedCampusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new MonthlyPayrollSummaryDto
+                {
+                    PayrollMonth = targetMonth,
+                    PayrollYear = targetYear
+                });
+            }
+
+            // Enforce authorized campus scope for Accountant
+            if (IsAccountantUser())
+            {
+                var callerStaffId = await ResolveCallerStaffIdAsync();
+                if (callerStaffId.HasValue && callerStaffId.Value > 0)
+                {
+                    var accountantCampusId = await GetStaffCampusIdAsync(callerStaffId.Value);
+                    if (accountantCampusId.HasValue && accountantCampusId.Value > 0)
+                    {
+                        if (resolvedCampusId.HasValue && resolvedCampusId.Value != accountantCampusId.Value)
+                        {
+                            return StatusCode(StatusCodes.Status403Forbidden, new { Message = "Access denied: You can only view staff payroll summary for your authorized campus." });
+                        }
+                        resolvedCampusId = accountantCampusId.Value;
+                    }
+                }
+            }
+
             var result = await _payrollService.GetMonthlyPayrollSummaryAsync(targetMonth, targetYear, resolvedCampusId);
             return Ok(result);
+        }
+
+        private async Task<IActionResult> GetPersonalSummaryResultAsync(int targetMonth, int targetYear)
+        {
+            var callerStaffId = await ResolveCallerStaffIdAsync();
+            if (!callerStaffId.HasValue || callerStaffId.Value <= 0)
+            {
+                return Unauthorized(new { Message = "Staff profile could not be identified from authentication credentials." });
+            }
+
+            var allPayslips = await _payrollService.GetPayslipHistoryAsync(
+                targetMonth, targetYear, null, null, null);
+
+            var mySlip = allPayslips.FirstOrDefault(p => p.StaffId == callerStaffId.Value);
+
+            if (mySlip != null)
+            {
+                var summary = new MonthlyPayrollSummaryDto
+                {
+                    PayrollMonth = targetMonth,
+                    PayrollYear = targetYear,
+                    TotalPayslips = 1,
+                    TotalEmployees = 1,
+                    TotalGrossSalary = mySlip.GrossSalary,
+                    TotalDeductions = mySlip.TotalDeductions,
+                    TotalAdvanceDeductions = 0.00m,
+                    TotalNetSalary = mySlip.NetSalary,
+                    PaidPayslips = string.Equals(mySlip.PayslipStatus, "Paid", StringComparison.OrdinalIgnoreCase) ? 1 : 0,
+                    PendingPayslips = (string.Equals(mySlip.PayslipStatus, "Pending", StringComparison.OrdinalIgnoreCase) || string.Equals(mySlip.PayslipStatus, "Generated", StringComparison.OrdinalIgnoreCase)) ? 1 : 0,
+                    OnHoldPayslips = string.Equals(mySlip.PayslipStatus, "On Hold", StringComparison.OrdinalIgnoreCase) ? 1 : 0,
+
+                    // Personal breakdown fields
+                    StaffId = mySlip.StaffId,
+                    EmployeeId = mySlip.EmployeeId,
+                    StaffName = mySlip.StaffName,
+                    PayslipStatus = mySlip.PayslipStatus,
+                    BasicPay = mySlip.BasicPay,
+                    Hra = mySlip.HRA,
+                    Da = mySlip.DA,
+                    ConveyanceAllowance = mySlip.ConveyanceAllowance,
+                    MedicalAllowance = mySlip.MedicalAllowance,
+                    OtherAllowance = mySlip.OtherAllowance,
+                    Pf = mySlip.PF,
+                    ProfessionalTax = mySlip.ProfessionalTax,
+                    Tds = mySlip.TDS,
+                    Esi = mySlip.ESI,
+                    InsuranceOtherDeduction = mySlip.InsuranceOtherDeduction
+                };
+                return Ok(summary);
+            }
+            else
+            {
+                // Check if staff has an active assigned salary structure to show configured salary breakdown
+                SalaryStructureDto? assignedStructure = null;
+                string? empId = null;
+                string? staffName = null;
+
+                try
+                {
+                    if (_db != null)
+                    {
+                        var staffObj = await _db.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == callerStaffId.Value);
+                        if (staffObj != null)
+                        {
+                            empId = staffObj.EmployeeId;
+                            staffName = $"{staffObj.FirstName} {staffObj.LastName}".Trim();
+                        }
+                    }
+
+                    var assignments = await _payrollService.GetSalaryAssignmentsAsync(callerStaffId.Value, "Active", null);
+                    var activeAssignment = assignments?.FirstOrDefault();
+                    if (activeAssignment != null && activeAssignment.SalaryStructureId > 0)
+                    {
+                        assignedStructure = await _payrollService.GetSalaryStructureByIdAsync(activeAssignment.SalaryStructureId);
+                    }
+                }
+                catch
+                {
+                    // Fall back gracefully
+                }
+
+                var basic = assignedStructure?.BasicPay ?? 0.00m;
+                var hra = assignedStructure?.HRA ?? 0.00m;
+                var da = assignedStructure?.DA ?? 0.00m;
+                var conv = assignedStructure?.ConveyanceAllowance ?? 0.00m;
+                var med = assignedStructure?.MedicalAllowance ?? 0.00m;
+                var otherAll = assignedStructure?.OtherAllowance ?? 0.00m;
+                var pf = assignedStructure?.PF ?? 0.00m;
+                var pt = assignedStructure?.ProfessionalTax ?? 0.00m;
+                var tds = assignedStructure?.TDS ?? 0.00m;
+                var esi = assignedStructure?.ESI ?? 0.00m;
+                var ins = assignedStructure?.InsuranceOtherDeduction ?? 0.00m;
+
+                var gross = basic + hra + da + conv + med + otherAll;
+                var ded = pf + pt + tds + esi + ins;
+                var net = gross - ded;
+
+                var summary = new MonthlyPayrollSummaryDto
+                {
+                    PayrollMonth = targetMonth,
+                    PayrollYear = targetYear,
+                    TotalPayslips = 0,
+                    TotalEmployees = 0,
+                    TotalGrossSalary = gross,
+                    TotalDeductions = ded,
+                    TotalAdvanceDeductions = 0.00m,
+                    TotalNetSalary = net,
+                    PaidPayslips = 0,
+                    PendingPayslips = 0,
+                    OnHoldPayslips = 0,
+                    StaffId = callerStaffId.Value,
+                    EmployeeId = empId,
+                    StaffName = staffName,
+                    PayslipStatus = assignedStructure != null ? "Structure Assigned (Not Generated)" : "Not Generated",
+                    BasicPay = basic,
+                    Hra = hra,
+                    Da = da,
+                    ConveyanceAllowance = conv,
+                    MedicalAllowance = med,
+                    OtherAllowance = otherAll,
+                    Pf = pf,
+                    ProfessionalTax = pt,
+                    Tds = tds,
+                    Esi = esi,
+                    InsuranceOtherDeduction = ins
+                };
+                return Ok(summary);
+            }
         }
 
         // GET: api/payroll/payslips/10/advance-repayments

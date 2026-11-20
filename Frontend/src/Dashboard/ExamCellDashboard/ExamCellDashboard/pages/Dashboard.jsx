@@ -1,3 +1,4 @@
+import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
@@ -8,14 +9,20 @@ import {
   AlertTriangle,
   RotateCcw,
 } from "lucide-react";
+import {
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import api, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
-import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
+import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { examCellBase } from "../navigation.js";
 import examImage from "@/assets/dashboard-3d/create-exam.png";
-import timetableImage from "@/assets/sidebar-3d/timetable.png";
 import marksImage from "@/assets/sidebar-3d/marks-evaluation.png";
 import resultsImage from "@/assets/sidebar-3d/results.png";
 import attendanceImage from "@/assets/dashboard-3d/mark-attendance.png";
@@ -24,7 +31,8 @@ import promotionImage from "@/assets/sidebar-3d/promotion.png";
 import reportsImage from "@/assets/sidebar-3d/reports-analytics.png";
 import clockImage from "@/assets/settings-3d/attendance-timing.png";
 import verifyImage from "@/assets/settings-3d/audit-logs.png";
-import "@/components/pages/DashboardPage.css";
+import "@/modules/admin/AdminDashboard/DashboardPage.css";
+import { normalizeStudentStatus } from "@/modules/admin/AdminAttendance/dashboardStudentAttendance.js";
 
 export const payload = (response) => response?.data?.data ?? response?.data ?? response;
 export const records = (response) => {
@@ -64,6 +72,21 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en-IN").format(num);
 }
 
+function CustomDonutTooltip({ active, payload }) {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const dotColor = data.payload?.color || data.color || "#22a447";
+    return (
+      <div className="dashboard-custom-donut-tooltip">
+        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+        <span className="tooltip-name">{data.name}:</span>
+        <span className="tooltip-val">{formatNumber(data.value)}</span>
+      </div>
+    );
+  }
+  return null;
+}
+
 function statusTone(status) {
   const s = String(status || "").toLowerCase();
   if (/approved|ready|completed|issued|published|active/i.test(s)) return "green";
@@ -89,7 +112,7 @@ function KpiCard({ label, value, icon, tone, loading, error, subtext = "View det
         <div className="dashboard-kpi-title-wrap">
           <span className="dashboard-kpi-label">{label}</span>
           <div className="dashboard-kpi-value-row">
-            <strong className="dashboard-kpi-value">{loading ? "…" : isError ? "—" : formatNumber(value)}</strong>
+            <strong className="dashboard-kpi-value">{loading ? <Skeleton style={{ width: 72, height: 28 }} /> : isError ? "—" : formatNumber(value)}</strong>
             <span className="dashboard-kpi-trend">{displayTrend}</span>
           </div>
           <span className="dashboard-kpi-subtext">{displaySubtext}</span>
@@ -108,6 +131,10 @@ function KpiCard({ label, value, icon, tone, loading, error, subtext = "View det
   return content;
 }
 
+// In-memory module cache to prevent flickering / constant reloads when switching tabs
+let examCellDashboardCache = null;
+let examCellLastFetchedAt = 0;
+
 export default function Dashboard() {
   const { selectedCampus, selectedCampusId } = useCampusContext();
   const {
@@ -119,11 +146,11 @@ export default function Dashboard() {
     setSelectedAcademicYear,
   } = useAcademicContext();
 
-  const [data, setData] = useState({});
-  const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(() => examCellDashboardCache?.data || {});
+  const [errors, setErrors] = useState(() => examCellDashboardCache?.errors || {});
+  const [loading, setLoading] = useState(() => !examCellDashboardCache);
   const [refresh, setRefresh] = useState(0);
-  const [lastUpdated, setLastUpdated] = useState(() => formattedTimestamp());
+  const [lastUpdated, setLastUpdated] = useState(() => examCellDashboardCache?.lastUpdated || formattedTimestamp());
   const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
 
   // Resolve matching active academic year for the selected board
@@ -192,28 +219,65 @@ export default function Dashboard() {
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    const campusKey = Number(selectedCampusId) || 1;
+    const boardKey = Number(selectedBoardId) || 1;
+    const yearKey = effectiveYearId;
+
+    const isSameContext =
+      examCellDashboardCache &&
+      examCellDashboardCache.campusId === campusKey &&
+      examCellDashboardCache.boardId === boardKey &&
+      examCellDashboardCache.yearId === yearKey;
+
+    const isFresh = isSameContext && Date.now() - examCellLastFetchedAt < 60_000;
+
+    // Only set loading if there is no cached data to avoid flashing/reloading
+    if (!isSameContext || !examCellDashboardCache) {
+      setLoading(true);
+    } else if (isFresh && refresh === 0) {
+      // Data is already fresh for this module - do not re-fetch on tab switches
+      return;
+    }
+
     const params = {
-      campusId: Number(selectedCampusId) || 1,
-      boardId: Number(selectedBoardId) || 1,
-      academicYearId: effectiveYearId,
+      campusId: campusKey,
+      boardId: boardKey,
+      academicYearId: yearKey,
       pageNumber: 1,
       pageSize: 1000,
     };
 
     const requests = {
       exams: () => api.get(apiEndpoints.examinations.getAll, { params }),
-      evaluations: () => api.post(apiEndpoints.evaluations.search, params),
+      evaluations: async () => {
+        try {
+          return await api.post(apiEndpoints.evaluations.search, params);
+        } catch {
+          try {
+            return await api.get("/api/v1/faculty/evaluations", { params });
+          } catch {
+            return [];
+          }
+        }
+      },
       results: () => api.get("/api/v1/results/dashboard", { params }),
       attendance: async () => {
         try {
-          return await api.get(apiEndpoints.dashboard.studentAttendance, {
-            params: { campusId: params.campusId, boardId: params.boardId, academicYearId: params.academicYearId },
-          });
-        } catch {
-          return api.get(apiEndpoints.attendance.studentAdminDaily, {
+          const res = await api.get(apiEndpoints.attendance.studentAdminDaily, {
             params: { ...params, date: today(), attendanceDate: today(), fromDate: today(), toDate: today() },
           });
+          const raw = payload(res);
+          const rows = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || []);
+          if (Array.isArray(rows) && rows.length > 0) return rows;
+          return raw;
+        } catch {
+          try {
+            return await api.get(apiEndpoints.dashboard.studentAttendance, {
+              params: { campusId: params.campusId, boardId: params.boardId, academicYearId: params.academicYearId, viewBy: "Overall" },
+            });
+          } catch {
+            return { presentCount: 0, totalStudents: 0 };
+          }
         }
       },
       certificates: () => api.get("/api/v1/certificates", { params: { ...params, status: "Requested" } }),
@@ -232,7 +296,12 @@ export default function Dashboard() {
       })
     ).then(async (responses) => {
       const values = Object.fromEntries(responses.map(([key, value]) => [key, value]));
+      values.exams = records(values.exams);
       const failures = Object.fromEntries(responses.filter(([, , error]) => error).map(([key, , error]) => [key, error]));
+
+      if (failures.evaluations && /format|submitted/i.test(failures.evaluations)) {
+        delete failures.evaluations;
+      }
 
       const completed = records(values.exams).filter((exam) => /completed/i.test(String(exam.status || "")));
       const readiness = await Promise.all(
@@ -261,7 +330,18 @@ export default function Dashboard() {
         setData(values);
         setErrors(failures);
         setLoading(false);
-        setLastUpdated(formattedTimestamp());
+        const updatedTime = formattedTimestamp();
+        setLastUpdated(updatedTime);
+
+        examCellDashboardCache = {
+          data: values,
+          errors: failures,
+          campusId: campusKey,
+          boardId: boardKey,
+          yearId: yearKey,
+          lastUpdated: updatedTime,
+        };
+        examCellLastFetchedAt = Date.now();
       }
     });
 
@@ -270,9 +350,33 @@ export default function Dashboard() {
     };
   }, [selectedCampusId, selectedBoardId, effectiveYearId, refresh]);
 
-  const exams = records(data.exams)
-    .filter((exam) => !/cancel/i.test(exam.status || ""))
-    .sort((a, b) => String(b.startDate || "").localeCompare(String(a.startDate || "")));
+  const todayStr = today();
+  const rawExams = records(data.exams);
+  const seenExamIds = new Set();
+  const allBackendExams = [];
+  for (const item of rawExams) {
+    const id = String(item.examinationId ?? item.examId ?? item.id ?? "");
+    if (id && !seenExamIds.has(id)) {
+      seenExamIds.add(id);
+      allBackendExams.push(item);
+    } else if (!id) {
+      allBackendExams.push(item);
+    }
+  }
+
+  const upcomingExams = allBackendExams
+    .filter((exam) => {
+      if (exam.isActive === false) return false;
+      const st = String(exam.status || "").toLowerCase();
+      if (/cancel|archive|deleted/i.test(st)) return false;
+      if (/complete|finish|evaluated/i.test(st) || exam.isCompleted === true) return false;
+      const sDate = String(exam.startDate || "").slice(0, 10);
+      if (!sDate) return false;
+      return sDate >= todayStr;
+    })
+    .sort((a, b) => String(a.startDate || "").localeCompare(String(b.startDate || "")));
+
+  const exams = upcomingExams;
 
   const evaluations = records(data.evaluations);
   const evaluationStatus = (row) =>
@@ -282,11 +386,78 @@ export default function Dashboard() {
     /draft|submitted|verified|not started|rejected/i.test(String(evaluationStatus(row) || ""))
   );
 
-  const attendanceData = payload(data.attendance);
-  const attendanceCount = Array.isArray(attendanceData)
-    ? attendanceData.filter((row) => row.isAttendanceMarked).length
-    : (attendanceData?.presentCount ?? attendanceData?.present ?? 0);
-  const totalStudentsToday = attendanceData?.totalStudents ?? attendanceData?.totalCount ?? 0;
+  const studentAttData = useMemo(() => {
+    const raw = payload(data.attendance) || {};
+    let total = 0;
+    let marked = 0;
+    let present = 0;
+    let absent = 0;
+    let halfDay = 0;
+    let percentage = 0;
+
+    if (Array.isArray(raw)) {
+      total = raw.length;
+      raw.forEach((row) => {
+        const morning = normalizeStudentStatus(row.morningStatus ?? row.status);
+        const afternoon = normalizeStudentStatus(row.afternoonStatus ?? row.status);
+        const isMarked =
+          Boolean(row.isAttendanceMarked) ||
+          (morning !== null && morning !== undefined) ||
+          (afternoon !== null && afternoon !== undefined);
+        if (isMarked) {
+          marked++;
+          if (
+            morning === "Half Day" ||
+            afternoon === "Half Day" ||
+            (morning === "Present" && afternoon === "Absent") ||
+            (afternoon === "Present" && morning === "Absent") ||
+            Number(row.status) === 4
+          ) {
+            halfDay++;
+          } else if (morning === "Present" || afternoon === "Present" || Number(row.status) === 1) {
+            present++;
+          } else if (morning === "Absent" || afternoon === "Absent" || Number(row.status) === 2) {
+            absent++;
+          }
+        }
+      });
+      percentage = marked > 0 && total > 0 ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1)) : 0;
+    } else {
+      total = Number(raw.totalStudents ?? raw.total ?? raw.totalCount ?? 0);
+      marked = Number(
+        raw.markedStudents ??
+          raw.markedCount ??
+          ((raw.presentCount ?? raw.present ?? 0) + (raw.absentCount ?? raw.absent ?? 0) + (raw.halfDayCount ?? raw.halfDay ?? 0))
+      );
+      present = Number(raw.presentCount ?? raw.present ?? 0);
+      absent = Number(raw.absentCount ?? raw.absent ?? 0);
+      halfDay = Number(raw.halfDayCount ?? raw.halfDay ?? raw.lateCount ?? raw.late ?? 0);
+      percentage =
+        raw.attendancePercentage ??
+        raw.percentage ??
+        (marked > 0 && total > 0 ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1)) : 0);
+    }
+
+    const hasMarkedRecords = marked > 0 || present + absent + halfDay > 0;
+    const chartData = hasMarkedRecords
+      ? [
+          { name: "Present", value: present, color: "#22a447" },
+          { name: "Absent", value: absent, color: "#ef4444" },
+          { name: "Half-day", value: halfDay, color: "#f59e0b" },
+        ]
+      : [{ name: "Not marked today", value: total || 1, color: "#cbd5e1" }];
+
+    return {
+      total,
+      marked,
+      present,
+      absent,
+      halfDay,
+      percentage: Number(percentage || 0).toFixed(1).replace(/\.0$/, ""),
+      hasMarkedRecords,
+      chartData,
+    };
+  }, [data.attendance]);
 
   const certificates = records(data.certificates).filter((row) => /^requested$/i.test(String(row.status || "")));
   const readyExams = data.readyExams || [];
@@ -301,17 +472,17 @@ export default function Dashboard() {
       icon: examImage,
       tone: "orange",
       trend: "Active",
-      subtext: "Scheduled examinations",
+      subtext: exams.length > 0 ? `${exams.length} upcoming examinations` : "No upcoming examinations",
       to: `${examCellBase}/exams`,
     },
     {
       label: "Marks Pending",
-      value: errors.evaluations ? null : pending.length,
-      error: errors.evaluations,
+      value: pending.length,
+      error: null,
       icon: marksImage,
       tone: "violet",
-      trend: "Pending",
-      subtext: "Evaluation in progress",
+      trend: pending.length > 0 ? "Pending" : "Active",
+      subtext: pending.length > 0 ? `${pending.length} pending evaluations` : "All marks up to date",
       to: `${examCellBase}/marks-entry`,
     },
     {
@@ -326,12 +497,12 @@ export default function Dashboard() {
     },
     {
       label: "Today's Attendance",
-      value: errors.attendance ? null : attendanceCount,
+      value: studentAttData.present,
       error: errors.attendance,
       icon: attendanceImage,
       tone: "green",
-      trend: "Marked",
-      subtext: totalStudentsToday > 0 ? `${attendanceCount} of ${totalStudentsToday} present` : "Sessions marked today",
+      trend: studentAttData.total > 0 ? `${studentAttData.percentage}% Marked` : "Active",
+      subtext: studentAttData.present > 0 ? `${studentAttData.present} students present` : "Attendance records active",
       to: `${examCellBase}/attendance`,
     },
     {
@@ -358,11 +529,9 @@ export default function Dashboard() {
 
   const quickActions = [
     { label: "Examination", to: `${examCellBase}/exams`, icon: examImage, tone: "orange" },
-    { label: "Time Table", to: `${examCellBase}/exam-timetable`, icon: timetableImage, tone: "cyan" },
     { label: "Marks Entry", to: `${examCellBase}/marks-entry`, icon: marksImage, tone: "violet" },
     { label: "Marks Verification", to: `${examCellBase}/marks-verification`, icon: verifyImage, tone: "blue" },
     { label: "Results", to: `${examCellBase}/results`, icon: resultsImage, tone: "emerald" },
-    { label: "Attendance", to: `${examCellBase}/attendance`, icon: attendanceImage, tone: "green" },
     { label: "My Attendance", to: `${examCellBase}/check-in-out`, icon: attendanceImage, tone: "green" },
     { label: "Certificates", to: `${examCellBase}/certificates`, icon: certificateImage, tone: "orange" },
     { label: "Promotions", to: `${examCellBase}/promotions`, icon: promotionImage, tone: "violet" },
@@ -412,9 +581,23 @@ export default function Dashboard() {
         {/* Quick Actions Row with 3D Icons & Admin Tones */}
         <nav className="dashboard-quick-actions" aria-label="Quick Actions">
           <h2>Quick Actions</h2>
-          <div className="dashboard-quick-actions-list" style={{ display: "flex", flexWrap: "wrap", gap: "6px", width: "100%", alignItems: "center" }}>
+          <div
+            className="dashboard-quick-actions-list"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(8, minmax(0, 1fr))",
+              gap: "6px",
+              width: "100%",
+              alignItems: "center",
+            }}
+          >
             {quickActions.map(({ label, to, icon, tone }) => (
-              <Link key={label} to={to} className={`dashboard-quick-action tone-${tone}`} style={{ flex: "1 1 auto", minWidth: "max-content", padding: "5px 12px" }}>
+              <Link
+                key={label}
+                to={to}
+                className={`dashboard-quick-action tone-${tone}`}
+                style={{ padding: "5px 6px", whiteSpace: "nowrap" }}
+              >
                 <span className="dashboard-quick-action-icon">
                   <img src={icon} alt="" aria-hidden="true" />
                 </span>
@@ -438,10 +621,10 @@ export default function Dashboard() {
           {/* Card 1: Upcoming Examinations */}
           <article className="dashboard-card">
             <header className="dashboard-card-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "12px", fontWeight: 800, color: "var(--cms-text)" }}>
                 <img src={examImage} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
                 Upcoming Examinations ({exams.length})
-              </h3>
+              </h2>
               <Link to={`${examCellBase}/exams`} className="dashboard-view-link">
                 View All <ChevronRight size={14} />
               </Link>
@@ -458,7 +641,7 @@ export default function Dashboard() {
               ) : exams.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Loading examinations..." : "No upcoming examinations scheduled."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No upcoming examinations scheduled."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">
@@ -496,21 +679,26 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+            <div className="dashboard-card-footer" style={{ marginTop: "auto" }}>
+              <Link to={`${examCellBase}/exams`} className="dashboard-footer-btn">
+                View All Examinations <ChevronRight size={14} />
+              </Link>
+            </div>
           </article>
 
           {/* Card 2: Marks Entry Progress */}
           <article className="dashboard-card">
             <header className="dashboard-card-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "12px", fontWeight: 800, color: "var(--cms-text)" }}>
                 <img src={marksImage} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
                 Marks Entry Progress ({evaluations.length})
-              </h3>
+              </h2>
               <Link to={`${examCellBase}/marks-verification`} className="dashboard-view-link">
                 View All <ChevronRight size={14} />
               </Link>
             </header>
             <div className="dashboard-card-body" style={{ padding: 0 }}>
-              {errors.evaluations ? (
+              {errors.evaluations && !/format|submitted/i.test(errors.evaluations) ? (
                 <div className="dashboard-card-error">
                   <AlertTriangle size={18} className="dashboard-error-icon" />
                   <span>{errors.evaluations}</span>
@@ -521,7 +709,7 @@ export default function Dashboard() {
               ) : evaluations.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Loading marks progress..." : "No marks evaluations pending."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No marks evaluations pending."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">
@@ -556,71 +744,148 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+            <div className="dashboard-card-footer" style={{ marginTop: "auto" }}>
+              <Link to={`${examCellBase}/marks-verification`} className="dashboard-footer-btn">
+                View All Evaluations <ChevronRight size={14} />
+              </Link>
+            </div>
           </article>
 
-          {/* Card 3: Results Ready for Processing */}
-          <article className="dashboard-card">
+          {/* Card 3: Students Attendance Overview (Today) */}
+          <article className="dashboard-card dashboard-attendance-today-card">
             <header className="dashboard-card-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <img src={resultsImage} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
-                Results Ready for Processing ({readyExams.length})
-              </h3>
-              <Link to={`${examCellBase}/publish-results`} className="dashboard-view-link">
+              <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "12px", fontWeight: 800, color: "var(--cms-text)" }}>
+                <img src={attendanceImage} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
+                Students Attendance Overview (Today)
+              </h2>
+              <Link to={`${examCellBase}/attendance`} className="dashboard-view-link">
                 View All <ChevronRight size={14} />
               </Link>
             </header>
-            <div className="dashboard-card-body" style={{ padding: 0 }}>
-              {errors.readiness || errors.exams ? (
-                <div className="dashboard-card-error">
-                  <AlertTriangle size={18} className="dashboard-error-icon" />
-                  <span>{errors.readiness || errors.exams}</span>
-                  <button type="button" className="dashboard-retry-btn" onClick={() => setRefresh((r) => r + 1)}>
-                    <RotateCcw size={13} /> Retry
-                  </button>
+
+            {loading ? (
+              <div className="dashboard-card-loading" style={{ padding: "16px 12px" }}>
+                <Skeleton style={{ width: "100%", height: 18, marginBottom: 8 }} />
+                <Skeleton style={{ width: "70%", height: 14 }} />
+              </div>
+            ) : errors.attendance ? (
+              <div className="dashboard-card-error">
+                <AlertTriangle size={18} className="dashboard-error-icon" />
+                <span>{errors.attendance}</span>
+                <button type="button" className="dashboard-retry-btn" onClick={() => setRefresh((r) => r + 1)}>
+                  <RotateCcw size={13} /> Retry
+                </button>
+              </div>
+            ) : (
+              <div className="dashboard-card-body dashboard-attendance-body">
+                {studentAttData.total === 0 ? (
+                  <div className="dashboard-card-empty">
+                    <Info size={18} className="dashboard-empty-icon" />
+                    <span>No student attendance data available for today.</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Donut Chart & Side Status Legend (Centered Together) */}
+                    <div className="dashboard-attendance-donut-row">
+                      <div className="dashboard-donut-chart-wrap">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={
+                                studentAttData.chartData.some((d) => d.value > 0)
+                                  ? studentAttData.chartData.filter((d) => d.value > 0)
+                                  : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                              }
+                              dataKey="value"
+                              nameKey="name"
+                              innerRadius="65%"
+                              outerRadius="90%"
+                              paddingAngle={studentAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
+                              stroke="var(--cms-surface)"
+                              strokeWidth={2}
+                            >
+                              {(studentAttData.chartData.some((d) => d.value > 0)
+                                ? studentAttData.chartData.filter((d) => d.value > 0)
+                                : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                              ).map((entry) => (
+                                <Cell key={entry.name} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              content={studentAttData.total > 0 ? <CustomDonutTooltip /> : () => null}
+                              wrapperStyle={{ pointerEvents: "none", zIndex: 100 }}
+                              allowEscapeViewBox={{ x: true, y: true }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="dashboard-donut-center">
+                          <strong>{studentAttData.percentage ?? 0}%</strong>
+                          <span>{studentAttData.hasMarkedRecords ? "Attendance" : "Not Marked"}</span>
+                        </div>
+                      </div>
+
+                      <div className="dashboard-attendance-legend-vertical">
+                        <div className="legend-item">
+                          <span className="legend-label">
+                            <span className="dot dot-present" /> Present
+                          </span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-label">
+                            <span className="dot dot-absent" /> Absent
+                          </span>
+                        </div>
+                        <div className="legend-item">
+                          <span className="legend-label">
+                            <span className="dot dot-halfday" /> Half-day
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 5 Summary KPI Chips */}
+                    <div className="dashboard-attendance-kpi-row">
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip">
+                        <small>Total Students</small>
+                        <strong>{formatNumber(studentAttData.total)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip text-present">
+                        <small>Present</small>
+                        <strong>{formatNumber(studentAttData.present)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip text-absent">
+                        <small>Absent</small>
+                        <strong>{formatNumber(studentAttData.absent)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip text-halfday text-late">
+                        <small>Half-day</small>
+                        <strong>{formatNumber(studentAttData.halfDay)}</strong>
+                      </Link>
+                      <Link to={`${examCellBase}/attendance`} className="att-kpi-chip">
+                        <small>Attendance</small>
+                        <strong>{formatNumber(studentAttData.percentage)}%</strong>
+                      </Link>
+                    </div>
+                  </>
+                )}
+
+                {/* Footer */}
+                <div className="dashboard-card-footer" style={{ marginTop: "auto" }}>
+                  <Link to={`${examCellBase}/attendance`} className="dashboard-footer-btn">
+                    View Attendance Details <ChevronRight size={14} />
+                  </Link>
                 </div>
-              ) : readyExams.length === 0 ? (
-                <div className="dashboard-card-empty">
-                  <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Checking results readiness..." : "No examination results ready for publishing."}</span>
-                </div>
-              ) : (
-                <div className="cms-table-wrap">
-                  <table className="cms-table" style={{ fontSize: "12px" }}>
-                    <thead>
-                      <tr>
-                        <th>Exam</th>
-                        <th>Group</th>
-                        <th>Approved Evaluations</th>
-                        <th>Eligible Students</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {readyExams.slice(0, 5).map((row, idx) => (
-                        <tr key={row.id || row.examinationId || idx}>
-                          <td className="cms-strong">{row.examinationName || row.examName || "—"}</td>
-                          <td>{row.groupName || "—"}</td>
-                          <td>
-                            <span className="exam-type-pill pill-green">
-                              {row.approvedEvaluationCount ?? 0} Approved
-                            </span>
-                          </td>
-                          <td>{row.totalEligibleStudents ?? "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </article>
 
           {/* Card 4: Pending Certificate Requests */}
           <article className="dashboard-card">
             <header className="dashboard-card-head">
-              <h3 style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0, fontSize: "12px", fontWeight: 800, color: "var(--cms-text)" }}>
                 <img src={certificateImage} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />
                 Pending Certificate Requests ({certificates.length})
-              </h3>
+              </h2>
               <Link to={`${examCellBase}/certificates`} className="dashboard-view-link">
                 View All <ChevronRight size={14} />
               </Link>
@@ -637,7 +902,7 @@ export default function Dashboard() {
               ) : certificates.length === 0 ? (
                 <div className="dashboard-card-empty">
                   <Info size={18} className="dashboard-empty-icon" />
-                  <span>{loading ? "Loading certificate requests..." : "No pending certificate requests."}</span>
+                  <span>{loading ? <Skeleton style={{ width: "100%", maxWidth: 180, height: 16 }} /> : "No pending certificate requests."}</span>
                 </div>
               ) : (
                 <div className="cms-table-wrap">
@@ -670,6 +935,11 @@ export default function Dashboard() {
                   </table>
                 </div>
               )}
+            </div>
+            <div className="dashboard-card-footer" style={{ marginTop: "auto" }}>
+              <Link to={`${examCellBase}/certificates`} className="dashboard-footer-btn">
+                View All Certificates <ChevronRight size={14} />
+              </Link>
             </div>
           </article>
         </section>

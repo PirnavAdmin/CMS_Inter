@@ -33,7 +33,7 @@ namespace CollegeManagement.API.DTOs.Holiday
         [MaxLength(500, ErrorMessage = "Description cannot exceed 500 characters.")]
         public string? Description { get; set; }
 
-        public int? CampusId { get; set; } = 1;
+        public int? CampusId { get; set; }
 
         public int? AcademicYearId { get; set; }
 

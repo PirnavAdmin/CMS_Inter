@@ -73,8 +73,17 @@ export default function NonTeachingDepartment() {
   const profile = nonTeachingService.getProfile();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const deptParam = (searchParams.get("dept") || searchParams.get("department") || "ADMINISTRATION").toUpperCase();
-  const validDept = DEPARTMENT_MODULES[deptParam] ? deptParam : "ADMINISTRATION";
+  // Resolve staff member's assigned department dynamically
+  const userDeptCode = useMemo(() => {
+    const raw = String(profile?.department || profile?.departmentName || "").toUpperCase();
+    if (raw.includes("TRANS")) return "TRANSPORT";
+    if (raw.includes("SEC")) return "SECURITY";
+    if (raw.includes("MAINT") || raw.includes("FACIL") || raw.includes("CLEAN") || raw.includes("HOUSEKEEP")) return "MAINTENANCE";
+    return "ADMINISTRATION";
+  }, [profile?.department, profile?.departmentName]);
+
+  const deptParam = (searchParams.get("dept") || searchParams.get("department") || userDeptCode).toUpperCase();
+  const validDept = DEPARTMENT_MODULES[deptParam] ? deptParam : userDeptCode;
   const statusParam = (searchParams.get("status") || "ALL").toUpperCase();
   const searchParam = searchParams.get("search") || "";
 
@@ -84,7 +93,7 @@ export default function NonTeachingDepartment() {
   const [liveData, setLiveData] = useState(null);
 
   useEffect(() => {
-    const d = (searchParams.get("dept") || searchParams.get("department") || "ADMINISTRATION").toUpperCase();
+    const d = (searchParams.get("dept") || searchParams.get("department") || userDeptCode).toUpperCase();
     if (DEPARTMENT_MODULES[d] && d !== activeDept) {
       setActiveDept(d);
     }

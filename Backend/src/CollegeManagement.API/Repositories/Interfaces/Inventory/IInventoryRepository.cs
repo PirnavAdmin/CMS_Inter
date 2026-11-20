@@ -32,5 +32,11 @@ namespace CollegeManagement.API.Repositories.Interfaces.Inventory
         Task<TransactionDto> RecordReturnAsync(int transactionId, int userId, string performedBy);
 
         Task<ReportResultDto> GetReportDataAsync(ReportRequest request);
+
+        Task<IEnumerable<PurchaseOrderDto>> GetPurchaseOrdersAsync(string? status, string? search);
+        Task<PurchaseOrderDto?> GetPurchaseOrderByIdAsync(int orderId);
+        Task<PurchaseOrderDto> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, int userId, string userName);
+        Task<bool> CancelPurchaseOrderAsync(int orderId, int userId, string userName, string? remarks = null);
+        Task<bool> UpdatePurchaseOrderStatusAsync(int orderId, string status, int userId, string userName, string? remarks = null);
     }
 }

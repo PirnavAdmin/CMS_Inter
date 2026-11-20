@@ -8,7 +8,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
             int? hostelId = null,
             int? staffId = null,
             string? status = null,
-            string? search = null);
+            string? search = null,
+            int? campusId = null);
 
         Task<HostelWardenAssignmentResponseDto?> GetByIdAsync(
             int wardenAssignmentId);

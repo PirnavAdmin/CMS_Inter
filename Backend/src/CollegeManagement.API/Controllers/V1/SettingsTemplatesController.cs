@@ -59,7 +59,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(string[]), StatusCodes.Status200OK)]
         public IActionResult GetCategories()
         {
-            var categories = new[] { "Certificate", "Document", "BulkUpload" };
+            var categories = new[] { "Certificate", "Document", "BulkUpload", "OfferLetter" };
             return Ok(categories);
         }
 
@@ -196,7 +196,73 @@ namespace CollegeManagement.API.Controllers.V1
         }
 
         /// <summary>
-        /// 9. POST /api/v1/settings/templates/preview
+        /// 9. POST /api/v1/settings/templates/{id}/duplicate
+        /// Clones an existing template into a new editable draft.
+        /// </summary>
+        [HttpPost("{id:int}/duplicate")]
+        [RequirePermission("settings")]
+        [ProducesResponseType(typeof(TemplateResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> Duplicate(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
+        {
+            if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
+
+            var result = await _templateService.DuplicateTemplateAsync(id, campusId, ct);
+            if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
+
+            return Ok(result);
+        }
+
+        /// <summary>
+        /// 10. PATCH /api/v1/settings/templates/{id}/set-default
+        /// Sets the specified template as the default for its category/type.
+        /// </summary>
+        [HttpPatch("{id:int}/set-default")]
+        [HttpPost("{id:int}/set-default")]
+        [RequirePermission("settings")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> SetDefault(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
+        {
+            if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
+
+            var success = await _templateService.SetDefaultTemplateAsync(id, campusId, ct);
+            if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
+
+            return Ok(new { success = true, message = "Template set as default successfully." });
+        }
+
+        /// <summary>
+        /// 11. POST /api/v1/settings/templates/upload-logo
+        /// Uploads an institutional logo to permanent server-side storage.
+        /// </summary>
+        [HttpPost("upload-logo")]
+        [RequirePermission("settings")]
+        [Consumes("multipart/form-data")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> UploadLogo(IFormFile file, CancellationToken ct = default)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(new { message = "No image file provided." });
+
+            try
+            {
+                var (url, relativePath) = await _templateService.SaveTemplateLogoAsync(file, ct);
+                return Ok(new { url, path = relativePath, message = "Logo uploaded and persisted successfully." });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// 12. POST /api/v1/settings/templates/preview
         /// Dynamically render a template with real or sample placeholders.
         /// </summary>
         [HttpPost("preview")]

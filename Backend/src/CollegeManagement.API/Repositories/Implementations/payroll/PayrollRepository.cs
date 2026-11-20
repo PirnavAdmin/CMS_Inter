@@ -5,6 +5,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Payroll;
 using CollegeManagement.API.Repositories.Interfaces.Payroll;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations.Payroll
@@ -13,10 +14,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
     {
         private readonly AppDbContext? _context;
         private readonly IDbConnection? _rawConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public PayrollRepository(AppDbContext context)
+        public PayrollRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public PayrollRepository(IDbConnection dbConnection)
@@ -24,10 +27,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             _rawConnection = dbConnection;
         }
 
-        public PayrollRepository(AppDbContext context, IDbConnection dbConnection)
+        public PayrollRepository(AppDbContext context, IDbConnection dbConnection, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
             _rawConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<IDbConnection> GetOpenConnectionAsync()
@@ -136,17 +148,38 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
         public async Task<IEnumerable<SalaryStructureDto>>
             GetSalaryStructuresAsync(
                 string? staffType,
-                string? search)
+                string? search,
+                int? campusId = null)
         {
+            if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<SalaryStructureDto>();
+            }
+
+            var collegeId = ResolveCollegeId();
             var parameters = new DynamicParameters();
 
             parameters.Add("p_StaffType", staffType);
             parameters.Add("p_Search", search);
+            parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
-            return await QueryAsync<SalaryStructureDto>(
+            var list = (await QueryAsync<SalaryStructureDto>(
                 "sp_PayrollSalaryStructure_GetAll",
                 parameters,
-                commandType: CommandType.StoredProcedure);
+                commandType: CommandType.StoredProcedure)).ToList();
+
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var conn = await GetOpenConnectionAsync();
+                var deptCampusRows = await conn.QueryAsync<(int DepartmentId, int CampusId)>(
+                    "SELECT DepartmentId, CampusId FROM Departments WHERE CampusId IS NOT NULL;");
+                var deptCampusMap = deptCampusRows.ToDictionary(x => x.DepartmentId, x => x.CampusId);
+
+                list = list.Where(s => s.DepartmentId.HasValue && deptCampusMap.TryGetValue(s.DepartmentId.Value, out var cId) && cId == campusId.Value).ToList();
+            }
+
+            return list;
         }
 
         public async Task<SalaryStructureDto?>
@@ -356,7 +389,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
 
 
         public async Task<int> GeneratePayslipAsync(
-            GeneratePayslipRequest request)
+            GeneratePayslipRequest request,
+            decimal lopDays = 0m,
+            decimal lopDeduction = 0m)
         {
             var parameters = new DynamicParameters();
 
@@ -367,6 +402,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
             parameters.Add(
                 "p_PayrollYear",
                 request.PayrollYear);
+            parameters.Add("p_LopDays", lopDays);
+            parameters.Add("p_LopDeduction", lopDeduction);
 
             return await QuerySingleAsync<int>(
                 "sp_PayrollPayslip_Generate",
@@ -392,6 +429,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Payroll
                 parameters.Add(
                     "p_PayrollYear",
                     request.PayrollYear);
+                parameters.Add("p_LopDays", 0m);
+                parameters.Add("p_LopDeduction", 0m);
 
                 var payslipId =
                     await QuerySingleAsync<int>(

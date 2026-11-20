@@ -16,13 +16,35 @@ namespace CollegeManagement.API.Repositories
     public class StudentRepository : IStudentRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public StudentRepository(AppDbContext context)
+        public StudentRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
+
+        private async Task<int> ResolveCollegeIdAsync(int? campusId)
+        {
+            if (campusId.HasValue && campusId.Value > 0 && campusId.Value != 999999999)
+            {
+                var cid = await Connection.ExecuteScalarAsync<int?>(
+                    "SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId;",
+                    new { CampusId = campusId.Value });
+                if (cid.HasValue && cid.Value > 0) return cid.Value;
+            }
+
+            if (_httpContextAccessor?.HttpContext?.User != null)
+            {
+                var claim = _httpContextAccessor.HttpContext.User.FindFirst("CollegeId")?.Value 
+                         ?? _httpContextAccessor.HttpContext.User.FindFirst("collegeId")?.Value;
+                if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            }
+
+            return 1;
+        }
 
         // =========================================================
         // GET ALL / PAGED STUDENTS (100% STORED PROCEDURE)
@@ -90,13 +112,26 @@ namespace CollegeManagement.API.Repositories
             string? search = null)
         {
             var connection = Connection;
+            int resolvedCollegeId = await ResolveCollegeIdAsync(campusId);
 
             if (!boardId.HasValue && !academicYearId.HasValue && !academicLevelId.HasValue && 
                 !groupId.HasValue && !programId.HasValue && !sectionId.HasValue && 
                 string.IsNullOrWhiteSpace(status) && !campusId.HasValue && string.IsNullOrWhiteSpace(search))
             {
                 var all = await connection.QueryAsync<StudentListItemDto>(
-                    "sp_GetAllStudents",
+                    "sp_GetAllStudents_V2",
+                    new
+                    {
+                        p_CollegeId = resolvedCollegeId,
+                        p_CampusId = campusId,
+                        p_BoardId = boardId,
+                        p_AcademicYearId = academicYearId,
+                        p_GroupId = groupId,
+                        p_SectionId = sectionId,
+                        p_SearchTerm = (string?)null,
+                        p_Page = 1,
+                        p_PageSize = 100000
+                    },
                     commandType: CommandType.StoredProcedure);
                 return all.ToList();
             }

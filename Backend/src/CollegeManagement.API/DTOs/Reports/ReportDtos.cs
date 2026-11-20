@@ -20,6 +20,7 @@ public class DashboardReportDto
 {
     public int Admissions { get; set; }
     public decimal Attendance { get; set; }
+    public decimal StaffAttendance { get; set; }
     public decimal FeeCollection { get; set; }
     public decimal DueFees { get; set; }
     public int Examinations { get; set; }
@@ -229,6 +230,7 @@ public class ResultAnalysisReportDto
     public string? SubjectName { get; set; } = string.Empty;
     public decimal TotalMarks { get; set; }
     public decimal MarksObtained { get; set; }
+    public decimal MaxMarks { get; set; } = 100m;
     public decimal InternalMarks { get; set; }
     public decimal ExternalMarks { get; set; }
     public string? Grade { get; set; } = "A";

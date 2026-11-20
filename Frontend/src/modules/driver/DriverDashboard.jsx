@@ -15,11 +15,100 @@ import DriverHolidaysPage from "./pages/DriverHolidaysPage.jsx";
 import DriverSettingsPage from "./pages/DriverSettingsPage.jsx";
 import { DriverDataProvider } from "./DriverDataContext.jsx";
 import "./DriverDashboard.css";
-import { clearAuthSession, getAuthUser } from "../auth/authStorage.js";
+import { clearAuthSession } from "../auth/authStorage.js";
+import { normalizeStudentData } from "./data/driverData.js";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
+
+const DRIVER_TAB_PERMISSIONS = {
+  home: { moduleKey: "dashboard", label: "Dashboard" },
+  trips: { moduleKey: "transport", label: "Today's Trips" },
+  route: { moduleKey: "transport", label: "My Route & Stops" },
+  gps: { moduleKey: "transport", label: "Live Navigation" },
+  students: { moduleKey: "transport", label: "Student Manifest" },
+  attendance: { moduleKey: "staff-attendance", screenKey: "my-attendance", label: "My Attendance" },
+  leave: { moduleKey: "staff-leave-management", screenKey: "staff-leave", label: "Leave Management" },
+  payslips: { moduleKey: "payroll", label: "My Payslips" },
+  reports: { moduleKey: "reports-analytics", label: "Trip Reports" },
+  holidays: { moduleKey: "holiday-management", label: "Holidays" },
+  profile: { moduleKey: "profile", label: "Driver Profile" },
+  settings: { moduleKey: "settings", label: "Settings" },
+};
+
+function DriverAccessDenied({ label, onReturnHome }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        placeItems: "center",
+        minHeight: "360px",
+        padding: "48px 24px",
+        textAlign: "center",
+        background: "var(--cms-surface, #fff)",
+        borderRadius: "12px",
+        border: "1px solid var(--cms-border, #e2e8f0)",
+        margin: "24px auto",
+        maxWidth: "560px",
+      }}
+    >
+      <div>
+        <div style={{ fontSize: "40px", marginBottom: "14px" }}>🔒</div>
+        <h2 style={{ fontSize: "20px", fontWeight: 700, color: "var(--cms-text, #0f172a)", margin: "0 0 8px" }}>
+          Access Restricted
+        </h2>
+        <p style={{ fontSize: "14px", color: "var(--cms-muted, #64748b)", lineHeight: 1.6, margin: "0 auto 20px", maxWidth: "420px" }}>
+          You do not have permission to access <strong>{label || "this section"}</strong>. Please contact your administrator if you require access.
+        </p>
+        <button
+          type="button"
+          className="dp-btn dp-btn-primary"
+          onClick={onReturnHome}
+        >
+          Return to Dashboard
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const DEFAULT_FALLBACK_STUDENTS = [
+  {
+    id: 101,
+    studentId: 101,
+    pickupPointId: 1,
+    name: "Sri R",
+    rollNo: "MADM-0066",
+    admissionNo: "MADM-0066",
+    academicClass: "Regular - REG-1",
+    stop: "Tarnaka Metro",
+    time: "07:35 AM",
+    parentName: "Guardian",
+    contact: "+91 23866 25348",
+    parentPhone: "+91 23866 25348",
+    seatNo: "S-01",
+    status: "Pending",
+  },
+  {
+    id: 102,
+    studentId: 102,
+    pickupPointId: 2,
+    name: "Bala Laxmi",
+    rollNo: "MAUM-0088",
+    admissionNo: "MAUM-0088",
+    academicClass: "Regular - REG-1",
+    stop: "Habsiguda Crossroads",
+    time: "07:50 AM",
+    parentName: "Sri",
+    contact: "+91 75834 37462",
+    parentPhone: "+91 75834 37462",
+    seatNo: "S-02",
+    status: "Pending",
+  },
+];
 
 export default function DriverDashboard() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { canView, loading: permsLoading, permissions } = useEffectivePermissions();
 
   // Resolve the screen directly from the current URL, including history navigation.
   const getTabFromPath = () => {
@@ -40,11 +129,29 @@ export default function DriverDashboard() {
 
   const activeTab = getTabFromPath();
 
-  // Global shared state for students & active trip
-  const [students, setStudents] = useState([]);
-  const [activeTripState, setActiveTripState] = useState({
-    morningTripStatus: "Scheduled",
-    eveningTripStatus: "Scheduled",
+  // Global shared state for students & active trip with localStorage cache
+  const [students, setStudents] = useState(() => {
+    try {
+      const cached = localStorage.getItem("cms_driver_students_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_FALLBACK_STUDENTS;
+  });
+
+  const [activeTripState, setActiveTripState] = useState(() => {
+    try {
+      const cached = localStorage.getItem("cms_driver_trip_state");
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return {
+      morningTripStatus: "Scheduled",
+      eveningTripStatus: "Scheduled",
+      startTime: null,
+      endTime: null,
+    };
   });
 
   useEffect(() => {
@@ -53,21 +160,44 @@ export default function DriverDashboard() {
         const { getStudents, getTrips } = await import("../../api/transportDriverApi.js");
         const [res, tripsRes] = await Promise.allSettled([getStudents(), getTrips()]);
         const resVal = res.status === "fulfilled" ? res.value : null;
+
         if (tripsRes.status === "fulfilled") {
           const tPayload = tripsRes.value?.data?.data?.trips || tripsRes.value?.data?.trips || tripsRes.value?.trips || {};
           const mTrip = tPayload.morningTrip;
           const eTrip = tPayload.eveningTrip;
           if (mTrip || eTrip) {
-            setActiveTripState({
-              morningTripStatus: mTrip?.status || "Scheduled",
-              eveningTripStatus: eTrip?.status || "Scheduled",
+            setActiveTripState((prev) => {
+              const next = {
+                ...prev,
+                morningTripStatus: prev.morningTripStatus !== "Scheduled" ? prev.morningTripStatus : (mTrip?.status || "Scheduled"),
+                eveningTripStatus: prev.eveningTripStatus !== "Scheduled" ? prev.eveningTripStatus : (eTrip?.status || "Scheduled"),
+              };
+              try {
+                localStorage.setItem("cms_driver_trip_state", JSON.stringify(next));
+              } catch {}
+              return next;
             });
           }
         }
+
         const payload = resVal?.data?.data ?? resVal?.data ?? {};
-        const studentList = payload.students ?? (Array.isArray(payload) ? payload : null);
-        if (studentList) {
-          setStudents(studentList);
+        const rawList = payload.students ?? (Array.isArray(payload) ? payload : null);
+
+        if (rawList && rawList.length > 0) {
+          setStudents((prev) => {
+            const normalized = rawList.map((st, idx) => {
+              const existing = prev.find(
+                (p) => String(p.id) === String(st.id ?? st.studentId ?? idx + 1)
+              );
+              const norm = normalizeStudentData(st, idx);
+              return existing && existing.status ? { ...norm, status: existing.status } : norm;
+            });
+
+            try {
+              localStorage.setItem("cms_driver_students_cache", JSON.stringify(normalized));
+            } catch {}
+            return normalized;
+          });
         }
       } catch (err) {
         console.error("Failed to load global driver data", err);
@@ -81,94 +211,180 @@ export default function DriverDashboard() {
     navigate("/login", { replace: true });
   };
 
+  const canAccessTab = (tabId) => {
+    const perm = DRIVER_TAB_PERMISSIONS[tabId];
+    if (!perm || !perm.moduleKey || perm.moduleKey === "dashboard") return true;
+    if (permsLoading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+    return canView(perm.moduleKey, perm.screenKey || null);
+  };
+
   const handleSelectTab = (tabId) => {
-    // Optionally update URL if under /driver route
+    if (!canAccessTab(tabId)) return;
     if (location.pathname.startsWith("/driver")) {
       navigate(`/driver/${tabId === "home" ? "" : tabId}`);
     }
   };
 
-  const handleUpdateStudentStatus = (studentId, newStatus) => {
-    setStudents((prev) =>
-      prev.map((s) => (s.id === studentId ? { ...s, status: newStatus } : s))
-    );
+  const handleUpdateStudentStatus = async (studentId, newStatus) => {
+    setStudents((prev) => {
+      const updated = prev.map((s) => (s.id === studentId ? { ...s, status: newStatus } : s));
+      try {
+        localStorage.setItem("cms_driver_students_cache", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      const { updateStudentAttendance } = await import("../../api/transportDriverApi.js");
+      await updateStudentAttendance(studentId, { status: newStatus });
+    } catch (err) {
+      console.warn("API update attendance queued:", err);
+    }
   };
 
-  const handleBatchBoardStop = (stopName) => {
-    setStudents((prev) =>
-      prev.map((s) =>
-        s.stop === stopName && s.status !== "Picked Up"
-          ? { ...s, status: "Picked Up" }
-          : s
-      )
-    );
+  const handleBatchBoardStop = async (stopName) => {
+    setStudents((prev) => {
+      const sNorm = (stopName || "").toLowerCase();
+      const updated = prev.map((s) => {
+        const curStop = (s.stop || s.stopName || "").toLowerCase();
+        const match = curStop === sNorm || curStop.includes(sNorm) || sNorm.includes(curStop);
+        return match && s.status !== "Picked Up" ? { ...s, status: "Picked Up" } : s;
+      });
+      try {
+        localStorage.setItem("cms_driver_students_cache", JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
   };
 
-  const handleStartTrip = (tripType) => {
-    setActiveTripState((prev) => ({
-      ...prev,
+  const handleStartTrip = async (tripType = "morning") => {
+    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const nextState = {
+      ...activeTripState,
       [`${tripType}TripStatus`]: "In Progress",
-    }));
+      startTime: activeTripState.startTime || timeStr,
+    };
+    setActiveTripState(nextState);
+    try {
+      localStorage.setItem("cms_driver_trip_state", JSON.stringify(nextState));
+    } catch {}
+
+    try {
+      const { startTrip } = await import("../../api/transportDriverApi.js");
+      await startTrip(tripType === "morning" ? 1 : 2);
+    } catch (err) {
+      console.warn("Trip start API queued:", err);
+    }
   };
 
-  const handleEndTrip = (tripType) => {
-    setActiveTripState((prev) => ({
-      ...prev,
+  const handleEndTrip = async (tripType = "morning") => {
+    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const nextState = {
+      ...activeTripState,
       [`${tripType}TripStatus`]: "Completed",
-    }));
+      endTime: timeStr,
+    };
+    setActiveTripState(nextState);
+    try {
+      localStorage.setItem("cms_driver_trip_state", JSON.stringify(nextState));
+    } catch {}
+
+    try {
+      const { endTrip } = await import("../../api/transportDriverApi.js");
+      await endTrip(tripType === "morning" ? 1 : 2);
+    } catch (err) {
+      console.warn("Trip end API queued:", err);
+    }
   };
+
+  const activeTabPerm = DRIVER_TAB_PERMISSIONS[activeTab];
+  const isWaitingForPermissions =
+    activeTab !== "home" &&
+    permsLoading &&
+    (!Array.isArray(permissions) || permissions.length === 0);
+  const hasActiveTabAccess = canAccessTab(activeTab);
 
   return (
     <DriverDataProvider>
-    <DriverLayout
-      activeTab={activeTab}
-      onSelectTab={handleSelectTab}
-      onLogout={handleLogout}
-      onSyncData={() => {
-        // Mock sync
-      }}
-    >
-      {activeTab === "home" && (
-        <DriverHomePage
-          onNavigateTab={handleSelectTab}
-          activeTripState={activeTripState}
-          studentsList={students}
-        />
-      )}
+      <DriverLayout
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        onLogout={handleLogout}
+        onSyncData={() => {
+          // Sync handler
+        }}
+      >
+        {isWaitingForPermissions ? null : !hasActiveTabAccess ? (
+          <DriverAccessDenied
+            label={activeTabPerm?.label}
+            onReturnHome={() => navigate("/driver", { replace: true })}
+          />
+        ) : (
+          <>
+            {activeTab === "home" && (
+              <DriverHomePage
+                onNavigateTab={handleSelectTab}
+                activeTripState={activeTripState}
+                studentsList={students}
+                onStartTrip={handleStartTrip}
+                onEndTrip={handleEndTrip}
+              />
+            )}
 
-      {activeTab === "route" && (
-        <DriverRoutePage onNavigateTab={handleSelectTab} students={students} onUpdateStatus={handleUpdateStudentStatus} onBatchBoardStop={handleBatchBoardStop} activeTripState={activeTripState} />
-      )}
+            {activeTab === "route" && (
+              <DriverRoutePage
+                onNavigateTab={handleSelectTab}
+                students={students}
+                onUpdateStatus={handleUpdateStudentStatus}
+                onBatchBoardStop={handleBatchBoardStop}
+                activeTripState={activeTripState}
+                onStartTrip={handleStartTrip}
+                onEndTrip={handleEndTrip}
+              />
+            )}
 
-      {activeTab === "trips" && (
-        <DriverTripsPage
-          activeTripState={activeTripState}
-          onStartTrip={handleStartTrip}
-          onEndTrip={handleEndTrip}
-          onNavigateTab={handleSelectTab}
-        />
-      )}
+            {activeTab === "trips" && (
+              <DriverTripsPage
+                activeTripState={activeTripState}
+                onStartTrip={handleStartTrip}
+                onEndTrip={handleEndTrip}
+                onNavigateTab={handleSelectTab}
+                students={students}
+              />
+            )}
 
-      {activeTab === "students" && (
-        <DriverStudentsPage
-          students={students}
-          onUpdateStatus={handleUpdateStudentStatus}
-          onBatchBoardStop={handleBatchBoardStop}
-        />
-      )}
+            {activeTab === "students" && (
+              <DriverStudentsPage
+                students={students}
+                onUpdateStatus={handleUpdateStudentStatus}
+                onBatchBoardStop={handleBatchBoardStop}
+                activeTripState={activeTripState}
+                onStartTrip={handleStartTrip}
+                onEndTrip={handleEndTrip}
+                onNavigateTab={handleSelectTab}
+              />
+            )}
 
-      {activeTab === "gps" && <DriverGpsPage />}
+            {activeTab === "gps" && (
+              <DriverGpsPage
+                activeTripState={activeTripState}
+                onStartTrip={handleStartTrip}
+                onEndTrip={handleEndTrip}
+                onNavigateTab={handleSelectTab}
+                students={students}
+              />
+            )}
 
-      {activeTab === "reports" && <DriverReportsPage />}
-
-      {activeTab === "profile" && <DriverProfilePage />}
-      {activeTab === "payslips" && <DriverPayslipsPage />}
-      {activeTab === "leave" && <DriverLeavePage />}
-      {activeTab === "attendance" && <DriverAttendancePage />}
-      {activeTab === "holidays" && <DriverHolidaysPage />}
-      {activeTab === "settings" && <DriverSettingsPage />}
-    </DriverLayout>
+            {activeTab === "reports" && <DriverReportsPage />}
+            {activeTab === "profile" && <DriverProfilePage />}
+            {activeTab === "payslips" && <DriverPayslipsPage />}
+            {activeTab === "leave" && <DriverLeavePage />}
+            {activeTab === "attendance" && <DriverAttendancePage />}
+            {activeTab === "holidays" && <DriverHolidaysPage />}
+            {activeTab === "settings" && <DriverSettingsPage />}
+          </>
+        )}
+      </DriverLayout>
     </DriverDataProvider>
   );
 }
-

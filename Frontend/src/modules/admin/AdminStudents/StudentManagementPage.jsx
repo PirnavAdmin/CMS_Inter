@@ -12,6 +12,30 @@ import "./StudentManagementPage.css";
 
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
 const STUDENT_PAGE_SIZE = 5;
+const STUDENT_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
+function StudentManagementPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange }) {
+  const [customMode, setCustomMode] = useState(!STUDENT_PAGE_SIZE_OPTIONS.includes(pageSize));
+  const [customSize, setCustomSize] = useState(String(pageSize));
+  const pages = Math.max(1, Math.ceil(totalRows / pageSize));
+  const current = Math.min(page, pages);
+  const navStyle = { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
+  return <nav aria-label="Student pagination" style={navStyle}>
+    <span className="cms-page-info" aria-live="polite" style={{ marginRight: "auto" }}>
+      Showing {totalRows === 0 ? 0 : (current - 1) * pageSize + 1}-{Math.min(current * pageSize, totalRows)} of {totalRows} students
+    </span>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
+      <select aria-label="Rows per page" value={customMode || !STUDENT_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
+        if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
+        setCustomMode(false); onPageSizeChange(Number(event.target.value));
+      }}>{STUDENT_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}<option value="custom">Custom</option></select>
+      {customMode ? <input aria-label="Custom rows per page" title="Enter any positive number of rows, then press Enter or leave the field" type="number" min="1" step="1" value={customSize} style={{ ...controlStyle, width: 66, padding: "0 8px", textAlign: "center" }} onChange={(event) => setCustomSize(event.target.value)} onBlur={() => { if (/^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} onKeyDown={(event) => { if (event.key === "Enter" && /^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} /> : null}
+    </label>
+    <button type="button" disabled={current <= 1} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: current <= 1 ? 0.48 : 1 }} onClick={() => onPageChange(current - 1)}>Previous</button>
+    <span aria-live="polite" style={{ minWidth: 36, textAlign: "center", whiteSpace: "nowrap" }}>{current} / {pages}</span>
+    <button type="button" disabled={current >= pages} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: current >= pages ? 0.48 : 1 }} onClick={() => onPageChange(current + 1)}>Next</button>
+  </nav>;
+}
 const list = (payload) => {
   let source = payload;
   for (let depth = 0; depth < 5 && source; depth += 1) {
@@ -23,47 +47,18 @@ const list = (payload) => {
   return [];
 };
 const value = (record, ...keys) => keys.map((key) => record?.[key]).find((item) => item != null && item !== "");
-const flagIsTrue = (flag) => flag === true || flag === 1 || ["true", "1"].includes(String(flag ?? "").trim().toLowerCase());
-const flagIsFalse = (flag) => flag === false || flag === 0 || ["false", "0"].includes(String(flag ?? "").trim().toLowerCase());
-const isEligibleAdmission = (admission) => {
-  const status = String(value(admission, "status", "Status", "admissionStatus", "AdmissionStatus") ?? "").trim().toLowerCase();
-  return flagIsTrue(value(admission, "isApproved", "IsApproved"))
-    && flagIsTrue(value(admission, "isVerified", "IsVerified"))
-    && !flagIsTrue(value(admission, "isRejected", "IsRejected"))
-    && !flagIsFalse(value(admission, "isActive", "IsActive"))
-    && (!status || status === "approved");
-};
 const admissionKey = (record) => String(value(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "").trim().toLowerCase();
 const matchesStudentContext = (record, params) => ["campusId", "boardId", "academicYearId", "academicLevelId", "groupId", "programId", "sectionId"].every((key) => {
   if (params[key] == null || params[key] === "") return true;
   const actual = value(record, key, key[0].toUpperCase() + key.slice(1));
   return actual == null || String(actual) === String(params[key]);
 });
-const hasCompletedPlacement = (record) => {
-  const sectionId = Number(value(record, "sectionId", "SectionId", "allocatedSectionId", "AllocatedSectionId", "assignedSectionId", "AssignedSectionId"));
-  const roll = value(record, "rollNumber", "RollNumber", "rollNo", "RollNo", "roll", "Roll");
-  if (!["string", "number"].includes(typeof roll)) return false;
-  const normalizedRoll = String(roll).trim().toLowerCase();
-  return Number.isInteger(sectionId) && sectionId > 0 && Boolean(normalizedRoll)
-    && !["-", "—", "–", "null", "undefined", "n/a", "not assigned", "unassigned", "unallocated", "pending"].includes(normalizedRoll)
-    && !/^0+$/.test(normalizedRoll);
-};
 const admissionSequence = (record) => {
   const admission = String(value(record, "admissionNo", "AdmissionNo", "admissionNumber", "AdmissionNumber") ?? "");
   const suffix = admission.match(/(\d+)\s*$/);
   return suffix ? Number(suffix[1]) : -1;
 };
 const loadStudentsForNumberOrder = async (url, { params }) => {
-  const { campusId, boardId, academicYearId, academicLevelId, groupId, programId } = params;
-  const admissionsResponse = await apiClient.get(apiEndpoints.admissions.getAll, {
-    params: { campusId, boardId, academicYearId, academicLevelId, groupId, programId },
-  });
-  const admissionContext = { campusId, boardId, academicYearId, academicLevelId, groupId, programId };
-  const admissionsByNumber = new Map();
-  list(admissionsResponse.data).filter((admission) => matchesStudentContext(admission, admissionContext)).forEach((admission) => {
-    const key = admissionKey(admission);
-    if (key) admissionsByNumber.set(key, admissionsByNumber.has(key) ? null : admission);
-  });
   const records = [];
   const fetchSize = 100;
   let previousPage = "";
@@ -79,14 +74,9 @@ const loadStudentsForNumberOrder = async (url, { params }) => {
     if (!batch.length || (total != null ? records.length >= Number(total) : Array.isArray(response.data) || batch.length < fetchSize)) break;
     if (pageNumber >= 100) throw new Error("Unable to verify the complete student list. Narrow your filters and try again.");
   }
-  const eligibleRecords = records.filter((record) => {
-    const studentId = Number(value(record, "studentId", "StudentId", "id", "Id"));
-    return Number.isInteger(studentId) && studentId > 0 && matchesStudentContext(record, params)
-      && hasCompletedPlacement(record) && isEligibleAdmission(admissionsByNumber.get(admissionKey(record)));
-  });
-  eligibleRecords.sort((a, b) => admissionSequence(b) - admissionSequence(a)
+  records.sort((a, b) => admissionSequence(b) - admissionSequence(a)
     || Number(value(b, "studentId", "StudentId", "id", "Id") ?? 0) - Number(value(a, "studentId", "StudentId", "id", "Id") ?? 0));
-  return { data: { items: eligibleRecords, totalCount: eligibleRecords.length, totalPages: Math.max(1, Math.ceil(eligibleRecords.length / STUDENT_PAGE_SIZE)) } };
+  return { data: { items: records, totalCount: records.length, totalPages: Math.max(1, Math.ceil(records.length / STUDENT_PAGE_SIZE)) } };
 };
 const saveDownload = (data, filename) => {
   const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
@@ -169,6 +159,7 @@ export default function StudentManagementPage() {
   const [programmeOptions, setProgrammeOptions] = useState([]);
   const [sectionOptions, setSectionOptions] = useState([]);
   const [page, setPage] = useState(restoredState?.page ?? 1);
+  const [pageSize, setPageSize] = useState(STUDENT_PAGE_SIZE);
 
   useEffect(() => {
     setUploadFile(null);
@@ -357,7 +348,6 @@ export default function StudentManagementPage() {
       .catch(() => active && setCredentialSections([]));
     return () => { active = false; };
   }, [credentialFilters.group, credentialFilters.level, credentialFilters.program, selectedBoardId, selectedAcademicYearId]);
-  const pageSize = STUDENT_PAGE_SIZE;
   const matchingStudents = useMemo(() => {
     const searchText = query.trim().toLowerCase();
     if (!searchText) return students;
@@ -393,7 +383,7 @@ export default function StudentManagementPage() {
         saveDownload(response.data, downloadName(response.headers?.["content-disposition"], `Student_${studentForPdf.id}_Profile.pdf`));
         return;
       }
-      if (!matchingStudents.length) throw new Error("No students with approved, verified admissions and completed section and roll number allocation are available to export.");
+      if (!matchingStudents.length) throw new Error("No students match the current filters to export.");
       const XLSX = await import("xlsx");
       const sheet = XLSX.utils.json_to_sheet(matchingStudents.map((student) => ({
         "Admission No": student.admissionNo,
@@ -514,7 +504,7 @@ export default function StudentManagementPage() {
   return (
     <DashboardLayout
       title="Student Management"
-      subtitle="View students with completed admission and academic placement."
+      subtitle="View and manage student records."
       breadcrumb={["People"]}
     >
       <section className="cms-card">
@@ -638,23 +628,14 @@ export default function StudentManagementPage() {
               ) : (
                 <tr>
                   <td colSpan="10">
-                    <div className="cms-empty">{error || "No students with approved, verified admissions and completed section and roll number allocation match your search."}</div>
+                    <div className="cms-empty">{error || "No students match your search and filters."}</div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-        {!loading && <footer className="student-management-pagination">
-          <span>
-            Showing {rows.length ? (currentPage - 1) * pageSize + 1 : 0}-{rows.length ? Math.min((currentPage - 1) * pageSize + rows.length, studentTotalCount) : 0} of {studentTotalCount} students
-          </span>
-          <div className="student-management-pagination-actions">
-            <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Previous</button>
-            <span>Page {currentPage} of {totalPages}</span>
-            <button disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Next</button>
-          </div>
-        </footer>}
+        {!loading && <StudentManagementPagination page={currentPage} totalRows={studentTotalCount} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />}
       </section>
       {importOpen && (
         <Modal

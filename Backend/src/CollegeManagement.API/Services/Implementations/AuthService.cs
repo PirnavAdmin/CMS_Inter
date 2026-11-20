@@ -121,22 +121,70 @@ namespace CollegeManagement.API.Services.Implementations
                 };
             }
 
-            // Centralized Login Contract: Authenticate strictly by Email only.
-            // Reject phone numbers or invalid formats without '@'
-            if (!rawIdentifier.Contains('@'))
-            {
-                return new AuthResult
-                {
-                    Status = false,
-                    Message = "Invalid Email or Password"
-                };
-            }
-
-            var normalizedEmail = rawIdentifier.ToLowerInvariant();
             var connection = _context.Database.GetDbConnection();
             if (connection.State != ConnectionState.Open)
             {
                 await connection.OpenAsync();
+            }
+
+            var normalizedEmail = rawIdentifier.ToLowerInvariant();
+
+            // Support Login by Employee ID, Roll No, or Mobile in addition to Email
+            if (!rawIdentifier.Contains('@'))
+            {
+                // 1. Try Staff lookup by EmployeeId, ActiveEmployeeId, or Mobile
+                var staffEmail = await connection.QueryFirstOrDefaultAsync<string>(
+                    @"SELECT Email 
+                      FROM Staff 
+                      WHERE (LOWER(EmployeeId) = LOWER(@rawId) 
+                             OR LOWER(ActiveEmployeeId) = LOWER(@rawId)
+                             OR Mobile = @rawId)
+                        AND IsDeleted = 0 
+                      LIMIT 1;",
+                    new { rawId = rawIdentifier });
+
+                if (!string.IsNullOrWhiteSpace(staffEmail))
+                {
+                    normalizedEmail = staffEmail.ToLowerInvariant();
+                }
+                else
+                {
+                    // 2. Try Student lookup by AdmissionNo, RollNo, or Mobile
+                    var studentEmail = await connection.QueryFirstOrDefaultAsync<string>(
+                        @"SELECT Email 
+                          FROM Students 
+                          WHERE (LOWER(AdmissionNo) = LOWER(@rawId) 
+                                 OR LOWER(RollNo) = LOWER(@rawId)
+                                 OR MobileNumber = @rawId)
+                            AND IsDeleted = 0 
+                          LIMIT 1;",
+                        new { rawId = rawIdentifier });
+
+                    if (!string.IsNullOrWhiteSpace(studentEmail))
+                    {
+                        normalizedEmail = studentEmail.ToLowerInvariant();
+                    }
+                    else
+                    {
+                        // 3. Try Users lookup by PhoneNumber
+                        var userByPhone = await connection.QueryFirstOrDefaultAsync<string>(
+                            @"SELECT Email FROM Users WHERE PhoneNumber = @rawId AND IsActive = 1 LIMIT 1;",
+                            new { rawId = rawIdentifier });
+
+                        if (!string.IsNullOrWhiteSpace(userByPhone))
+                        {
+                            normalizedEmail = userByPhone.ToLowerInvariant();
+                        }
+                        else
+                        {
+                            return new AuthResult
+                            {
+                                Status = false,
+                                Message = "Invalid Email, Employee ID, or Password"
+                            };
+                        }
+                    }
+                }
             }
 
             // 1. Authoritative Users table lookup
@@ -177,14 +225,7 @@ namespace CollegeManagement.API.Services.Implementations
 
                     if (!selfHealed)
                     {
-                        await _auditService.LogAsync(
-                            action: "Failed login attempt",
-                            module: "Authentication",
-                            target: normalizedEmail,
-                            severity: "Warning",
-                            status: "Failed",
-                            details: "Invalid password provided during login."
-                        );
+                        _logger.LogWarning("Failed login attempt for {Email}: Invalid password provided.", normalizedEmail);
 
                         return new AuthResult
                         {
@@ -200,7 +241,7 @@ namespace CollegeManagement.API.Services.Implementations
                     return new AuthResult
                     {
                         Status = false,
-                        Message = "Invalid Email or Password"
+                        Message = "Your account is inactive. Please contact your administrator."
                     };
                 }
 
@@ -251,9 +292,9 @@ namespace CollegeManagement.API.Services.Implementations
                     staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
                         @"SELECT s.Id, d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, 
                                  s.CampusId, s.BoardId, s.StaffType, s.PhotoPath, s.ProfileStatus, s.ProfileCompletionPercentage, s.DepartmentSpecificJson 
-                          FROM Staffs s 
+                          FROM Staff s 
                           LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId 
-                          WHERE s.Id = @Id", 
+                          WHERE s.Id = @Id AND s.IsDeleted = 0", 
                         new { Id = user.StaffId.Value });
                     if (staffInfo != null)
                     {
@@ -342,11 +383,6 @@ namespace CollegeManagement.API.Services.Implementations
                     resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT PhotoPath FROM admins WHERE Email = @Email AND PhotoPath IS NOT NULL AND PhotoPath != '' LIMIT 1",
                         new { Email = user.Email });
-                    if (string.IsNullOrWhiteSpace(resolvedPhotoPath))
-                    {
-                        resolvedPhotoPath = await connection.QueryFirstOrDefaultAsync<string>(
-                            "SELECT PhotoPath FROM admins WHERE PhotoPath IS NOT NULL AND PhotoPath != '' ORDER BY id ASC LIMIT 1");
-                    }
                 }
                 if (string.IsNullOrWhiteSpace(resolvedPhotoPath) && user.StudentId.HasValue && user.StudentId.Value > 0)
                 {
@@ -355,15 +391,23 @@ namespace CollegeManagement.API.Services.Implementations
                         new { Id = user.StudentId.Value });
                 }
 
+                string? collegeName = null;
+                string? collegeLogo = null;
+                if (user.CollegeId.HasValue && user.CollegeId.Value > 0)
+                {
+                    var collegeInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
+                        "SELECT CollegeName, LogoUrl FROM Colleges WHERE CollegeId = @CollegeId AND IsDeleted = 0 LIMIT 1;",
+                        new { CollegeId = user.CollegeId.Value });
+                    if (collegeInfo != null)
+                    {
+                        collegeName = (string?)collegeInfo.CollegeName;
+                        collegeLogo = (string?)collegeInfo.LogoUrl;
+                    }
+                }
+
                 var token = await _jwtTokenHelper.GenerateTokenAsync(user);
 
-                await _auditService.LogAsync(
-                    action: "User logged in",
-                    module: "Authentication",
-                    target: user.Email,
-                    severity: "Info",
-                    status: "Success",
-                    details: $"Successful login for {user.Email}", overrideUser: user.FullName ?? user.Email, overrideRole: user.Role?.RoleName ?? "Unknown");
+                _logger.LogInformation("Successful login for {Email} ({Role})", user.Email, user.Role?.RoleName ?? "Unknown");
 
                 return new AuthResult
                 {
@@ -376,6 +420,9 @@ namespace CollegeManagement.API.Services.Implementations
                     StaffId = user.StaffId,
                     StudentId = user.StudentId,
                     AdminId = user.AdminId,
+                    CollegeId = user.CollegeId,
+                    CollegeName = collegeName,
+                    CollegeLogo = collegeLogo,
                     Designation = (string?)staffInfo?.Designation ?? user.Designation,
                     DesignationId = staffInfo?.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null,
                     Department = (string?)staffInfo?.Department ?? string.Empty,
@@ -395,6 +442,9 @@ namespace CollegeManagement.API.Services.Implementations
                     IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase)
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "Submitted", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "PendingApproval", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals((string?)staffInfo?.ProfileStatus, "UnderVerification", StringComparison.OrdinalIgnoreCase)
                 };
             }
 
@@ -1309,6 +1359,8 @@ namespace CollegeManagement.API.Services.Implementations
             string? refreshDept = null;
             int? refreshDeptId = null;
             int? refreshDesigId = null;
+            string? refreshProfileStatus = null;
+            int refreshProfileCompletionPct = 0;
 
             if (user.AdminId.HasValue && user.AdminId.Value > 0)
             {
@@ -1318,10 +1370,10 @@ namespace CollegeManagement.API.Services.Implementations
             else if (user.StaffId.HasValue && user.StaffId.Value > 0)
             {
                 var staffInfo = await connection.QueryFirstOrDefaultAsync<dynamic>(
-                    @"SELECT d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, s.StaffType, s.PhotoPath 
-                      FROM Staffs s 
+                    @"SELECT d.DepartmentName AS Department, s.DepartmentId, s.Designation, s.DesignationId, s.EmployeeId, s.StaffType, s.PhotoPath, s.ProfileStatus, s.ProfileCompletionPercentage 
+                      FROM Staff s 
                       LEFT JOIN Departments d ON s.DepartmentId = d.DepartmentId 
-                      WHERE s.Id = @Id", 
+                      WHERE s.Id = @Id AND s.IsDeleted = 0", 
                     new { Id = user.StaffId.Value });
                 if (staffInfo != null)
                 {
@@ -1332,6 +1384,8 @@ namespace CollegeManagement.API.Services.Implementations
                     refreshDept = (string?)staffInfo.Department;
                     refreshDeptId = staffInfo.DepartmentId != null ? Convert.ToInt32(staffInfo.DepartmentId) : null;
                     refreshDesigId = staffInfo.DesignationId != null ? Convert.ToInt32(staffInfo.DesignationId) : null;
+                    refreshProfileStatus = (string?)staffInfo.ProfileStatus;
+                    refreshProfileCompletionPct = staffInfo.ProfileCompletionPercentage != null ? Convert.ToInt32(staffInfo.ProfileCompletionPercentage) : 0;
                 }
             }
 
@@ -1360,7 +1414,15 @@ namespace CollegeManagement.API.Services.Implementations
                 DepartmentId = refreshDeptId,
                 EmployeeId = user.EmployeeId,
                 PhotoPath = refreshPhotoPath,
-                PhotoUrl = refreshPhotoPath
+                PhotoUrl = refreshPhotoPath,
+                ProfileStatus = refreshProfileStatus ?? (user.AdminId.HasValue ? "Approved" : "PendingLink"),
+                ProfileCompletionPercentage = refreshProfileCompletionPct,
+                IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue
+                    || string.Equals(refreshProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(refreshProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(refreshProfileStatus, "Submitted", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(refreshProfileStatus, "PendingApproval", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(refreshProfileStatus, "UnderVerification", StringComparison.OrdinalIgnoreCase)
             };
         }
     }

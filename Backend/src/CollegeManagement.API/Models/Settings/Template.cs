@@ -27,6 +27,10 @@ namespace CollegeManagement.API.Models.Settings
         [Column("Category")]
         public string Category { get; set; } = "Certificate";
 
+        [MaxLength(100)]
+        [Column("CertificateType")]
+        public string? CertificateType { get; set; }
+
         [Required]
         [Column("ContentBody")]
         public string ContentBody { get; set; } = string.Empty;
@@ -34,6 +38,17 @@ namespace CollegeManagement.API.Models.Settings
         [Required]
         [Column("PlaceholdersJson")]
         public string PlaceholdersJson { get; set; } = "[]";
+
+        [MaxLength(500)]
+        [Column("LogoPath")]
+        public string? LogoPath { get; set; }
+
+        [MaxLength(500)]
+        [Column("DocumentFilePath")]
+        public string? DocumentFilePath { get; set; }
+
+        [Column("IsDefault")]
+        public bool? IsDefault { get; set; } = false;
 
         [Column("IsActive")]
         public bool IsActive { get; set; } = true;

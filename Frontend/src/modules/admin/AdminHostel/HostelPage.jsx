@@ -49,6 +49,7 @@ import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.js
 import { Modal, ConfirmDialog, StatusBadge, Toast, Skeleton, SkeletonRow, SkeletonInput, SkeletonButton } from "@/shared/components/Ui.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { useCampusContext } from "@/context/CampusContext.jsx";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
@@ -407,10 +408,16 @@ export default function HostelPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAuthUser();
+  const { selectedCampus } = useCampusContext();
+  const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
+  const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
   const adminView = useMemo(() => resolveHostelView(location.pathname, location.search), [location.pathname, location.search]);
   const isAdminHostelRoute = Boolean(adminView);
   const isWardenRoute = /^\/warden(?:-|\/|$)/i.test(location.pathname);
   const isWarden = isWardenRole(user?.role, user) || isWardenRoute;
+  // Warden scope is always resolved from the logged-in account, never from a
+  // display name or a user-selectable hostel value.
+  const wardenStaffId = user?.staffId ?? user?.StaffId ?? user?.staff?.staffId ?? "";
   const isAdmin = Boolean(user?.isAdmin || String(user?.role || "").toLowerCase().includes("admin"));
   const canAccessAdminEndpoints = isAdmin && !isWarden;
 
@@ -569,8 +576,8 @@ export default function HostelPage() {
     const matchedBlk = blks.find(
       (b) => Number(b.id) === Number(r.hostelId) || b.code === r.hostelCode || b.name === r.hostelName
     );
-    const resolvedBlockName = (r.hostelName || "").trim() || matchedBlk?.name || r.blockName || r.block || (Number(r.hostelId) === 1 ? "Boys Hostel 1" : (r.hostelId ? `Hostel Block #${r.hostelId}` : "Boys Hostel 1"));
-    const resolvedBlockCode = (r.hostelCode || "").trim() || matchedBlk?.code || r.blockCode || (Number(r.hostelId) === 1 ? "BH-1" : (r.hostelId ? `BLK-${r.hostelId}` : "BH-1"));
+    const resolvedBlockName = (r.hostelName || "").trim() || matchedBlk?.name || r.blockName || r.block || (r.hostelId ? `Hostel Block #${r.hostelId}` : "—");
+    const resolvedBlockCode = (r.hostelCode || "").trim() || matchedBlk?.code || r.blockCode || (r.hostelId ? `BLK-${r.hostelId}` : "—");
 
     const matchedCat = cats.find(
       (c) => Number(c.id) === Number(r.roomTypeId) || c.name === r.roomTypeSpecification || c.specification === r.roomTypeSpecification
@@ -704,7 +711,7 @@ export default function HostelPage() {
     );
     const sName = o.studentName || alloc?.studentName || (o.studentId ? `Student #${o.studentId}` : "Resident Student");
     const admNo = o.admissionNo || alloc?.admissionNo || "-";
-    const bName = o.blockName || o.hostelName || alloc?.blockName || alloc?.hostelName || "Boys Hostel 1";
+    const bName = o.blockName || o.hostelName || alloc?.blockName || alloc?.hostelName || (o.hostelId ? `Block #${o.hostelId}` : "—");
     const rNo = o.roomNumber || o.roomNo || alloc?.roomNumber || alloc?.room || "-";
     const cleanRNo = String(rNo).replace("Room #", "").trim();
 
@@ -743,7 +750,7 @@ export default function HostelPage() {
     );
     const sName = t.studentName || alloc?.studentName || (t.studentId ? `Student #${t.studentId}` : "Resident Student");
     const admNo = t.admissionNo || alloc?.admissionNo || "-";
-    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || "Boys Hostel 1";
+    const fromB = t.fromHostelName || t.currentBlock || alloc?.blockName || alloc?.hostelName || (t.fromHostelId ? `Block #${t.fromHostelId}` : "—");
     const fromR = t.fromRoomNumber || t.currentRoom || alloc?.roomNumber || alloc?.room || "-";
     const cleanFromR = String(fromR).replace("Room #", "").trim();
     const actType = t.actionType || (t.requestType === "Vacate" ? "Bed Vacate" : "Room Transfer");
@@ -825,42 +832,89 @@ export default function HostelPage() {
     setIsLoading(true);
     setApiError(null);
     try {
+      if (isTenantCollege && !curCampusId) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setCandidateAdmissions([]); setCandidateStudents([]);
+        setDashboardData(null);
+        setIsLoading(false);
+        return;
+      }
+      if (isWarden && !wardenStaffId) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setCandidateAdmissions([]); setCandidateStudents([]);
+        setDashboardData(null);
+        setApiError("Your warden account is not linked to a Staff ID. Please contact Admin.");
+        return;
+      }
       const shouldFetchStaff = canAccessAdminEndpoints;
       const shouldFetchAdmissions = canAccessAdminEndpoints;
       const shouldFetchAllStudents = canAccessAdminEndpoints;
 
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
+
       const [blocksRes, catsRes, roomsRes, bedsRes, wardensRes, allocsRes, outpassRes, transferRes, dashRes, hostelStaffRes, staffRes, staffDropRes, admRes, certStudentsRes, allStudentsRes, attRes] = await Promise.allSettled([
-        hostelApi.getHostelBlocks().catch(() => null),
-        hostelApi.getRoomTypes().catch(() => null),
-        hostelApi.getRooms().catch(() => null),
-        hostelApi.getBeds().catch(() => null),
-        hostelApi.getWardens().catch(() => null),
-        hostelApi.getStudentAllocations().catch(() => null),
-        hostelApi.getOutpassLeave().catch(() => null),
-        hostelApi.getTransferVacate().catch(() => null),
-        hostelApi.getHostelDashboard().catch(() => null),
-        apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
-        apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)),
-        apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null),
-        apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => null),
-        apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)),
-        hostelApi.getAttendance().catch(() => null),
+        hostelApi.getHostelBlocks(campusParams).catch(() => null),
+        hostelApi.getRoomTypes(campusParams).catch(() => null),
+        hostelApi.getRooms(campusParams).catch(() => null),
+        hostelApi.getBeds(campusParams).catch(() => null),
+        hostelApi.getWardens({ ...(campusParams || {}), ...(isWarden ? { staffId: wardenStaffId, status: "Active" } : {}) }).catch(() => null),
+        hostelApi.getStudentAllocations(campusParams).catch(() => null),
+        hostelApi.getOutpassLeave(campusParams).catch(() => null),
+        hostelApi.getTransferVacate(campusParams).catch(() => null),
+        isWarden ? Promise.resolve(null) : hostelApi.getHostelDashboard(campusParams).catch(() => null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null))
+          : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff?staffType=Non-Teaching&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => apiClient.get("/api/v1/staff?pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        shouldFetchStaff ? apiClient.get("/api/v1/staff/dropdown?staffType=Non-Teaching", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAdmissions ? apiClient.get("/api/v1/student-admissions", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/certificates/students-dropdown", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => null)
+          : Promise.resolve(null),
+        shouldFetchAllStudents ? apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+          .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)) : Promise.resolve(null),
+        hostelApi.getAttendance(campusParams).catch(() => null),
       ]);
+
+      const rawWardenAssignments = wardensRes.status === "fulfilled" ? extractCollection(wardensRes.value?.data) : [];
+      const activeAssignments = isWarden
+        ? rawWardenAssignments.filter((assignment) =>
+          String(assignment?.staffId ?? assignment?.StaffId ?? "") === String(wardenStaffId) &&
+          !/inactive|revoked|deleted/i.test(String(assignment?.status ?? assignment?.Status ?? "Active"))
+        )
+        : rawWardenAssignments;
+
+      if (isWarden && activeAssignments.length === 0) {
+        setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+        setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+        setDashboardData(null);
+        setApiError("No active hostel block is assigned to your account. Please contact Admin.");
+        return;
+      }
+
+      const assignedBlockIds = new Set(activeAssignments.map((assignment) => assignment?.hostelId ?? assignment?.HostelId ?? assignment?.blockId ?? assignment?.BlockId).filter((id) => id !== undefined && id !== null && id !== "").map(String));
+      const assignedBlockNames = new Set(activeAssignments.flatMap((assignment) => [assignment?.hostelName, assignment?.HostelName, assignment?.blockName, assignment?.BlockName, assignment?.assignedHostels]).filter(Boolean).flatMap((name) => String(name).split(",")).map((name) => name.trim().toLowerCase()).filter(Boolean));
+      const isAssignedBlockRecord = (record) => {
+        if (!isWarden) return true;
+        const id = record?.hostelId ?? record?.HostelId ?? record?.blockId ?? record?.BlockId ?? record?.fromHostelId;
+        if (id !== undefined && id !== null && id !== "" && assignedBlockIds.has(String(id))) return true;
+        const names = [record?.hostelName, record?.HostelName, record?.blockName, record?.BlockName, record?.block, record?.hostelCode, record?.blockCode]
+          .filter(Boolean).map((name) => String(name).trim().toLowerCase());
+        return names.some((name) => assignedBlockNames.has(name));
+      };
 
       let uniqueBlocks = [];
       if (blocksRes.status === "fulfilled") {
-        const rawBlocks = extractCollection(blocksRes.value?.data);
+        const rawBlocks = extractCollection(blocksRes.value?.data).filter(isAssignedBlockRecord);
         const mappedBlocks = Array.isArray(rawBlocks) ? rawBlocks.map(mapBlock) : [];
         uniqueBlocks = Array.from(new Map(mappedBlocks.map((b) => [String(b.id || b.code), b])).values());
       }
 
       // Discover and preserve all hostel blocks present in rooms and allocations
-      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data) : [];
-      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data) : [];
+      const rawRoomsList = roomsRes.status === "fulfilled" ? extractCollection(roomsRes.value?.data).filter(isAssignedBlockRecord) : [];
+      const rawAllocsList = allocsRes.status === "fulfilled" ? extractCollection(allocsRes.value?.data).filter(isAssignedBlockRecord) : [];
       const seenBlockKeys = new Set(uniqueBlocks.map((b) => (b.name || b.code || "").toLowerCase()));
 
       if (Array.isArray(rawRoomsList)) {
@@ -928,26 +982,27 @@ export default function HostelPage() {
         setCategories(uniqueCats);
       }
       if (roomsRes.status === "fulfilled") {
-        const rawRooms = extractCollection(roomsRes.value?.data);
+        const rawRooms = rawRoomsList;
         const mappedRooms = Array.isArray(rawRooms) ? rawRooms.map((r) => mapRoom(r, uniqueBlocks, uniqueCats)) : [];
-        const uniqueRooms = Array.from(new Map(mappedRooms.map((r) => [String(r.id || `${r.hostelId}-${r.roomNo}`), r])).values());
+        const uniqueRooms = Array.from(new Map(mappedRooms.map((r) => [String(r.id || `${r.hostelId}-${r.floor || ''}-${r.roomNo}`), r])).values());
         setRooms(uniqueRooms);
       }
       if (bedsRes.status === "fulfilled") {
-        const rawBeds = extractCollection(bedsRes.value?.data);
+        const assignedRoomIds = new Set(rawRoomsList.map((room) => room?.roomId ?? room?.RoomId ?? room?.id).filter(Boolean).map(String));
+        const rawBeds = extractCollection(bedsRes.value?.data).filter((bed) => isAssignedBlockRecord(bed) || assignedRoomIds.has(String(bed?.roomId ?? bed?.RoomId ?? "")));
         const mappedBeds = Array.isArray(rawBeds) ? rawBeds.map(mapBed) : [];
         const uniqueBeds = Array.from(new Map(mappedBeds.map((bd) => [String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd])).values());
         setBeds(uniqueBeds);
       }
       if (wardensRes.status === "fulfilled") {
-        const rawWardens = extractCollection(wardensRes.value?.data);
+        const rawWardens = activeAssignments;
         const mappedWardens = Array.isArray(rawWardens) ? rawWardens.map((w) => mapWarden(w, uniqueBlocks)) : [];
         const uniqueWardens = Array.from(new Map(mappedWardens.map((w) => [String(w.id || `${w.hostelId}-${w.staffId}`), w])).values());
         setWardens(uniqueWardens);
       }
       let derivedStudents = [];
       if (allocsRes.status === "fulfilled") {
-        const rawAllocs = extractCollection(allocsRes.value?.data);
+        const rawAllocs = rawAllocsList;
         const mapped = Array.isArray(rawAllocs) ? rawAllocs.map((a) => mapAllocation(a, uniqueBlocks)) : [];
         const uniqueAllocs = Array.from(new Map(mapped.map((a) => [String(a.id || `${a.studentId}-${a.bedId}`), a])).values());
         setAllocations(uniqueAllocs);
@@ -992,19 +1047,25 @@ export default function HostelPage() {
         }));
       }
       if (outpassRes.status === "fulfilled") {
-        const rawOutpass = extractCollection(outpassRes.value?.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawOutpass = extractCollection(outpassRes.value?.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedOutpass = Array.isArray(rawOutpass) ? rawOutpass.map(mapOutpass) : [];
         const uniqueOutpass = Array.from(new Map(mappedOutpass.map((o) => [String(o.id), o])).values());
         setOutpasses(uniqueOutpass);
       }
       if (transferRes.status === "fulfilled") {
-        const rawTransfer = extractCollection(transferRes.value?.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawTransfer = extractCollection(transferRes.value?.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedTransfer = Array.isArray(rawTransfer) ? rawTransfer.map(mapTransfer) : [];
         const uniqueTransfer = Array.from(new Map(mappedTransfer.map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-      if (dashRes.status === "fulfilled") {
+      if (!isWarden && dashRes.status === "fulfilled") {
         setDashboardData(dashRes.value?.data?.data ?? dashRes.value?.data ?? null);
+      } else if (isWarden) {
+        // The generic dashboard endpoint is campus-wide. Warden totals below
+        // are calculated exclusively from the assignment-filtered collections.
+        setDashboardData(null);
       }
       let loadedStaff = [];
       if (hostelStaffRes?.status === "fulfilled" && hostelStaffRes.value?.data) {
@@ -1089,7 +1150,8 @@ export default function HostelPage() {
       }
       if (loadedStudents.length > 0) setCandidateStudents(loadedStudents);
       if (attRes?.status === "fulfilled" && attRes.value?.data) {
-        const rawAtt = extractCollection(attRes.value.data);
+        const assignedStudentIds = new Set(rawAllocsList.map((allocation) => allocation?.studentId ?? allocation?.StudentId).filter(Boolean).map(String));
+        const rawAtt = extractCollection(attRes.value.data).filter((record) => isAssignedBlockRecord(record) || assignedStudentIds.has(String(record?.studentId ?? record?.StudentId ?? "")));
         const mappedAtt = Array.isArray(rawAtt) ? rawAtt.map(mapAttendanceRecord).filter(Boolean) : [];
         setAttendanceRecords(mappedAtt);
       }
@@ -1098,12 +1160,9 @@ export default function HostelPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [canAccessAdminEndpoints, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord]);
+  }, [canAccessAdminEndpoints, isWarden, mapBlock, mapCategory, mapRoom, mapBed, mapWarden, mapAllocation, mapOutpass, mapTransfer, mapAttendanceRecord, wardenStaffId, curCampusId, isTenantCollege]);
 
-  const hasFetchedInitialRef = useRef(false);
   useEffect(() => {
-    if (hasFetchedInitialRef.current) return;
-    hasFetchedInitialRef.current = true;
     fetchHostelData();
   }, [fetchHostelData]);
 
@@ -1144,8 +1203,8 @@ export default function HostelPage() {
         const serverRooms = raw.map((r) => mapRoom(r, blocksRef.current, categoriesRef.current));
         setRooms((prev) => {
           const map = new Map();
-          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
-          serverRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.roomNo}`), r));
+          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.floor || ''}-${r.roomNo}`), r));
+          serverRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.floor || ''}-${r.roomNo}`), r));
           return Array.from(map.values());
         });
       }
@@ -1235,7 +1294,9 @@ export default function HostelPage() {
         const uniqueTransfer = Array.from(new Map(raw.map(mapTransfer).map((t) => [String(t.id), t])).values());
         setTransfers(uniqueTransfer);
       }
-    } catch (_) { /* Intentionally ignored. */ }
+    } catch (err) {
+      console.error("Failed to refresh transfers:", err);
+    }
   }, [mapTransfer]);
 
   const refreshDashboard = useCallback(async () => {
@@ -1247,7 +1308,7 @@ export default function HostelPage() {
 
   const refreshAttendance = useCallback(async () => {
     try {
-      const res = await hostelApi.getAttendance();
+      const res = await hostelApi.getAttendance(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setAttendanceRecords(raw.map(mapAttendanceRecord).filter(Boolean));
     } catch (_) { /* Intentionally ignored. */ }
@@ -1537,11 +1598,25 @@ export default function HostelPage() {
         (db) => Number(db.hostelId) === Number(b.id) || db.hostelCode === b.code || db.hostelName === b.name
       );
       const blockRooms = rooms.filter(
-        (r) => Number(r.hostelId) === Number(b.id) || r.block === b.name || r.blockName === b.name || r.block === b.code
+        (r) =>
+          Number(r.hostelId) === Number(b.id) ||
+          String(r.hostelId) === String(b.id) ||
+          r.block === b.name ||
+          r.blockName === b.name ||
+          r.block === b.code ||
+          r.blockCode === b.code ||
+          (b.code && String(r.block || "").toLowerCase() === String(b.code).toLowerCase()) ||
+          (b.name && String(r.block || r.blockName || "").toLowerCase() === String(b.name).toLowerCase())
       );
-      const totalRoomsCount = dbBlock?.totalRooms ?? blockRooms.length;
-      const blockBeds = beds.filter((bd) => Number(bd.hostelId) === Number(b.id) || blockRooms.some((r) => Number(r.id) === Number(bd.roomId)));
-      const totalBedsCount = dbBlock?.totalBeds ?? (blockBeds.length > 0 ? blockBeds.length : blockRooms.reduce((acc, r) => acc + (Number(r.capacity) || 1), 0));
+      const totalRoomsCount = Math.max(blockRooms.length, Number(dbBlock?.totalRooms) || 0);
+      const blockBeds = beds.filter(
+        (bd) =>
+          Number(bd.hostelId) === Number(b.id) ||
+          String(bd.hostelId) === String(b.id) ||
+          blockRooms.some((r) => Number(r.id) === Number(bd.roomId))
+      );
+      const liveCapacityFromRooms = blockRooms.reduce((acc, r) => acc + (Number(r.capacity || r.bedCapacity) || 1), 0);
+      const totalBedsCount = Math.max(blockBeds.length, liveCapacityFromRooms, Number(dbBlock?.totalBeds) || 0);
       const occupiedCount = allocations.filter((a) => (Number(a.hostelId) === Number(b.id) || a.blockName === b.name || a.blockCode === b.code || a.hostelName === b.name || a.hostelCode === b.code) && ((a.status || "").toLowerCase() === "active" || (a.status || "").toLowerCase() === "allocated")).length;
       const vacantCount = Math.max(0, totalBedsCount - occupiedCount);
       const assignedWarden = wardens.find((w) => (w.status || "").toLowerCase() === "active" && (Number(w.hostelId) === Number(b.id) || String(w.hostelId) === String(b.id) || w.assignedHostels === b.name || (w.assignedHostels || "").includes(b.name)));
@@ -1617,13 +1692,13 @@ export default function HostelPage() {
 
   // ── Computed Metrics ────────────────────────────────────────────────
   const totalRooms = useMemo(
-    () => dashboardData?.totalRooms ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0),
-    [dashboardData, enrichedBlocks]
+    () => Math.max(rooms.length, enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalRooms) || 0), 0), Number(dashboardData?.totalRooms) || 0),
+    [dashboardData, enrichedBlocks, rooms.length]
   );
 
   const totalBeds = useMemo(
-    () => dashboardData?.totalBeds ?? enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0),
-    [dashboardData, enrichedBlocks]
+    () => Math.max(beds.length, enrichedBlocks.reduce((acc, b) => acc + (Number(b.totalBeds) || 0), 0), Number(dashboardData?.totalBeds) || 0),
+    [dashboardData, enrichedBlocks, beds.length]
   );
 
   const activeAllocations = useMemo(
@@ -1634,12 +1709,6 @@ export default function HostelPage() {
   const occupiedBeds = activeAllocations.length;
   const vacantBeds = Math.max(0, totalBeds - occupiedBeds);
   const occupancyRate = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
-  const monthlyRevenue = useMemo(() => {
-    return activeAllocations.reduce((sum, a) => {
-      const num = parseFloat(String(a.monthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
-      return sum + num;
-    }, 0);
-  }, [activeAllocations]);
 
   // Enriched Student Fee & Dues Records tied to active allocations
   const revenueStudentRecords = useMemo(() => {
@@ -1698,6 +1767,18 @@ export default function HostelPage() {
       efficiencyRate,
     };
   }, [revenueStudentRecords]);
+
+  const monthlyRevenue = useMemo(() => {
+    if (revenueSummary?.totalBilled > 0) return revenueSummary.totalBilled;
+    return activeAllocations.reduce((sum, a) => {
+      const raw = parseFloat(String(a.monthlyFee || a.fee || "").replace(/[^0-9.]/g, "")) || 0;
+      if (raw > 0) return sum + raw;
+      const rm = rooms.find((r) => Number(r.id) === Number(a.roomId) || r.roomNo === a.roomNumber);
+      const rmFee = parseFloat(String(rm?.fee || "").replace(/[^0-9.]/g, "")) || 0;
+      return sum + (rmFee > 0 ? rmFee : 6000);
+    }, 0);
+  }, [revenueSummary, activeAllocations, rooms]);
+
   const activeWardensCount = wardens.filter((w) => (w.status || "").toLowerCase() === "active").length || (dashboardData?.activeWardens ?? 0);
   const pendingOutpasses = useMemo(
     () => outpasses.filter((o) => o.status === "Pending" || o.status === "Pending Approval" || o.status === "Under Review").length,
@@ -1706,6 +1787,10 @@ export default function HostelPage() {
 
   // Students who opted for hostel during admission or registration and await room allocation
   const unallocatedHostelStudents = useMemo(() => {
+    if (isTenantCollege && !curCampusId) {
+      return [];
+    }
+
     const activeAllocStudentIds = new Set();
     allocations.forEach((a) => {
       if (String(a.status || "").toLowerCase() === "active") {
@@ -1719,6 +1804,14 @@ export default function HostelPage() {
 
     const considerStudent = (st) => {
       if (!st) return;
+      if (curCampusId) {
+        const studentCampusId = st.campusId ?? st.CampusId;
+        if (studentCampusId && Number(studentCampusId) !== Number(curCampusId)) return;
+      }
+      if (isTenantCollege && user?.collegeId) {
+        const studentCollegeId = st.collegeId ?? st.CollegeId;
+        if (studentCollegeId && Number(studentCollegeId) !== Number(user.collegeId)) return;
+      }
       const sId = st.studentId || st.id || st.admissionId;
       const admNo = String(st.admissionNo || st.admissionNumber || "").trim();
       const sName = st.studentName || [st.firstName, st.middleName, st.lastName].filter(Boolean).join(" ") || st.name || "";
@@ -1766,18 +1859,20 @@ export default function HostelPage() {
     if (Array.isArray(candidateStudents)) candidateStudents.forEach(considerStudent);
     if (Array.isArray(candidateAdmissions)) candidateAdmissions.forEach(considerStudent);
 
-    try {
-      const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
-      if (Array.isArray(localAdms)) {
-        localAdms.forEach((entry) => {
-          const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
-          considerStudent(x);
-        });
-      }
-    } catch (_) { /* Intentionally ignored. */ }
+    if (!isTenantCollege) {
+      try {
+        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+        if (Array.isArray(localAdms)) {
+          localAdms.forEach((entry) => {
+            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+            considerStudent(x);
+          });
+        }
+      } catch (_) { /* Intentionally ignored. */ }
+    }
 
     return list;
-  }, [allocations, candidateStudents, candidateAdmissions, blocks]);
+  }, [allocations, candidateStudents, candidateAdmissions, blocks, isTenantCollege, curCampusId, user?.collegeId]);
 
   // ── Block CRUD ──────────────────────────────────────────────────────
   const handleSaveBlock = async (blockData) => {
@@ -1926,6 +2021,7 @@ export default function HostelPage() {
             let newRoomId = null;
             const existingRoom = rooms.find(
               (r) => (Number(r.hostelId) === targetHostelId || r.block === blockCode || r.blockName === blockName) &&
+                     isFloorMatch(r.floor, fc.floorLabel || `Floor ${fc.floorIndex || 1}`) &&
                      String(r.roomNo || r.roomNumber).replace(/^Room #/i, "").trim().toLowerCase() === roomNum.toLowerCase()
             );
 
@@ -2383,16 +2479,16 @@ export default function HostelPage() {
           const cleanTarget = String(rNum).replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
           const targetNum = parseInt(cleanTarget, 10);
 
-          // Check if room number already exists in this hostel block
+          // Check if room number already exists in this hostel block on the same floor
           const existingRoom = rooms.find((r) => {
             const matchesBlock =
               (r.hostelId && Number(r.hostelId) === Number(hostelId)) ||
               (blk?.code && r.block && String(r.block).trim().toLowerCase() === String(blk.code).trim().toLowerCase()) ||
               (blk?.name && r.blockName && String(r.blockName).trim().toLowerCase() === String(blk.name).trim().toLowerCase());
             if (!matchesBlock) return false;
+            if (roomData.floor && !isFloorMatch(r.floor, roomData.floor)) return false;
             const rClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
-            const rParsed = parseInt(rClean, 10);
-            return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
+            return rClean === cleanTarget;
           });
 
           // Determine specific AC vs Non-AC, capacity, and category for this individual room
@@ -2500,9 +2596,9 @@ export default function HostelPage() {
               (blk?.code && r.block && String(r.block).trim().toLowerCase() === String(blk.code).trim().toLowerCase()) ||
               (blk?.name && r.blockName && String(r.blockName).trim().toLowerCase() === String(blk.name).trim().toLowerCase());
             if (!matchesBlock) return false;
+            if (roomData.floor && !isFloorMatch(r.floor, roomData.floor)) return false;
             const rClean = String(r.roomNo || r.roomNumber || "").replace(/^Room\s*#?\s*/i, "").trim().toLowerCase();
-            const rParsed = parseInt(rClean, 10);
-            return rClean === cleanTarget || (!isNaN(targetNum) && !isNaN(rParsed) && targetNum === rParsed);
+            return rClean === cleanTarget;
           });
           const targetAc = roomData.roomAcMap?.[rNum] || er?.acType || "Non-AC";
           const targetCap = Number(roomData.roomCapMap?.[rNum] || er?.capacity || er?.bedCapacity || 2);
@@ -3243,14 +3339,76 @@ export default function HostelPage() {
         effectiveDate: new Date(Date.now() + 86400000).toISOString(),
         reason: transData.reason || (isVacate ? "Student vacating bed" : "Student room transfer"),
         refundAmount: isVacate ? (transData.refundAmount || 2000) : null,
+        autoApprove: true,
+        approvalStatus: "Approved",
       };
 
-      await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
+      const res = await hostelApi.createTransferVacate(payload, { skipErrorLog: true });
+      const createdData = res?.data?.data || res?.data;
+      const createdId = createdData?.requestId || createdData?.id;
+
+      if (createdId && (!createdData?.approvalStatus || createdData.approvalStatus === "Pending")) {
+        try {
+          await hostelApi.approveTransferVacate(
+            createdId,
+            {
+              approvalStatus: "Approved",
+              approvalRemarks: isVacate ? "Vacate approved and bed released" : "Transfer approved and new bed assigned",
+            },
+            { skipErrorLog: true }
+          );
+          await hostelApi.completeTransferVacate(createdId, { skipErrorLog: true });
+        } catch (_) { /* Intentionally ignored if already completed by server */ }
+      }
+
+      if (isVacate) {
+        try {
+          const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+          const record = {
+            studentId: payload.studentId,
+            admissionNo: payload.admissionNo,
+            studentName: payload.studentName,
+            allocationId: payload.allocationId,
+            reason: payload.reason,
+            vacatedAt: new Date().toISOString(),
+          };
+          const filtered = (Array.isArray(stored) ? stored : []).filter(
+            (s) =>
+              !(
+                (record.studentId && String(s.studentId) === String(record.studentId)) ||
+                (record.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(record.admissionNo).trim().toLowerCase())
+              )
+          );
+          filtered.push(record);
+          localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+        } catch (_) {}
+
+        setAllocations((prev) =>
+          prev.map((a) =>
+            (payload.allocationId && Number(a.id || a.allocationId) === Number(payload.allocationId)) ||
+            (payload.studentId && Number(a.studentId) === Number(payload.studentId)) ||
+            (payload.admissionNo && String(a.admissionNo).trim().toLowerCase() === String(payload.admissionNo).trim().toLowerCase())
+              ? { ...a, status: "Vacated", isActive: false, isVacated: true }
+              : a
+          )
+        );
+      }
+
       closeModal();
-      showToast(`${isVacate ? "Bed vacate request" : "Room transfer request"} submitted for ${payload.studentName}.`);
-      (async () => {
-        try { await refreshTransfers(); } catch (_) { /* Intentionally ignored. */ }
-      })();
+      showToast(
+        isVacate
+          ? `Bed vacated and released successfully for ${payload.studentName}.`
+          : `Room transfer approved and bed allocated for ${payload.studentName}.`,
+        "success"
+      );
+
+      await Promise.allSettled([
+        refreshTransfers(),
+        refreshAllocations(),
+        refreshRooms(),
+        refreshBlocks(),
+        refreshDashboard(),
+      ]);
     } catch (err) {
       showToast(getApiErrorMessage(err), "danger");
     }
@@ -4077,8 +4235,11 @@ export default function HostelPage() {
             </p>
           </div>
           <div className="cms-dash-live-badge">
-            <span className="cms-dash-live-dot" />
-            <span>Live Status • All Blocks Operational</span>
+            <span
+              className="cms-dash-live-dot"
+              style={{ background: blocks.length > 0 ? "var(--cms-green)" : "var(--cms-muted)" }}
+            />
+            <span>{blocks.length > 0 ? "Live Status • All Blocks Operational" : "No Active Blocks Registered"}</span>
           </div>
         </div>
 
@@ -4333,13 +4494,13 @@ export default function HostelPage() {
           <div className="cms-dash-progress-track">
             <div
               className="cms-dash-progress-fill"
-              style={{ width: `${Math.max(3, occupancyRate)}%` }}
+              style={{ width: `${totalBeds > 0 ? Math.max(3, occupancyRate) : 0}%` }}
             />
           </div>
           <div className="cms-dash-occ-footer">
             <div style={{ display: "flex", gap: 18 }}>
-              <span>Occupied Beds ({occupancyRate}%)</span>
-              <span>Vacant Beds ({100 - occupancyRate}%)</span>
+              <span>Occupied Beds ({totalBeds > 0 ? occupancyRate : 0}%)</span>
+              <span>Vacant Beds ({totalBeds > 0 ? (100 - occupancyRate) : 0}%)</span>
             </div>
             <span style={{ fontWeight: 600 }}>Live Status</span>
           </div>
@@ -9152,13 +9313,12 @@ export default function HostelPage() {
   // ═════════════════════════════════════════════════════════════════════
   return (
     <DashboardLayout
-      title={isWardenRoute ? "Hostel Warden Portal" : "Hostel Management"}
+      title={isWardenRoute ? undefined : "Hostel Management"}
       subtitle={
-        isWardenRoute
-          ? "Resident student oversight, room & bed allocations, daily attendance, outpass approvals, and hostel analytics."
-          : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
+        isWardenRoute ? undefined : "Manage hostel blocks, room categories, inventory, wardens, resident student allocations, outpasses, attendance and audit reports."
       }
       breadcrumb={isWardenRoute ? undefined : ["Hostel Management"]}
+      hidePageHeader={isWardenRoute}
     >
       <div className="cms-hostel-page">
         {/* Toast Notification */}
@@ -9302,6 +9462,8 @@ export default function HostelPage() {
             blocks={blocks}
             wardens={wardens}
             candidateStaff={candidateStaff}
+            isTenantCollege={isTenantCollege}
+            curCampusId={curCampusId}
             handleSaveWarden={handleSaveWarden}
             showToast={showToast}
           />
@@ -9318,6 +9480,8 @@ export default function HostelPage() {
             candidateAdmissions={candidateAdmissions}
             candidateStudents={candidateStudents}
             canAccessAdminEndpoints={canAccessAdminEndpoints}
+            isTenantCollege={isTenantCollege}
+            curCampusId={curCampusId}
             handleSaveAllocation={handleSaveAllocation}
             showToast={showToast}
           />
@@ -9679,7 +9843,7 @@ function StudentAttendanceModal({
         <div className="cms-student-att-filter-row">
           {activeMode === "daily" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Date:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Date:</label>
               <input
                 type="date"
                 value={selectedDate}
@@ -9699,7 +9863,7 @@ function StudentAttendanceModal({
               {/* Quick Roll Call Marker for this student on selectedDate if it's attendanceDate */}
               {selectedDate === attendanceDate && (
                 <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--cms-muted)" }}>
+                  <span style={{ fontSize: 11.5, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>
                     Mark for Today ({attendanceShift}):
                   </span>
                   <div className="cms-att-status-group" style={{ transform: "scale(0.9)", transformOrigin: "right center" }}>
@@ -9739,7 +9903,7 @@ function StudentAttendanceModal({
 
           {activeMode === "monthly" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Select Month:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Select Month:</label>
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
@@ -9757,7 +9921,7 @@ function StudentAttendanceModal({
 
           {activeMode === "custom" && (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", width: "100%" }}>
-              <label style={{ fontSize: 12, fontWeight: 700, color: "var(--cms-muted)" }}>Date Range:</label>
+              <label style={{ fontSize: 12, fontWeight: 750, color: "var(--cms-hostel-label-color, #1e293b)" }}>Date Range:</label>
               <input
                 type="date"
                 value={rangeStart}
@@ -13202,7 +13366,7 @@ function RoomModal({
                 }}
               >
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Floor Rooms Breakdown</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Floor Rooms Breakdown</span>
                   <strong style={{ fontSize: 12.5, color: "var(--cms-text)" }}>
                     <span style={{ color: "#2563eb" }}>❄️ {summaryStats.acRooms} AC</span>
                     {" / "}
@@ -13210,13 +13374,13 @@ function RoomModal({
                   </strong>
                 </div>
                 <div>
-                  <span style={{ fontSize: 11, color: "var(--cms-muted)", display: "block" }}>Total Bed Capacity</span>
+                  <span style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block" }}>Total Bed Capacity</span>
                   <strong style={{ fontSize: 13, color: "var(--cms-text)" }}>
                     {summaryStats.totalBeds} Beds across {summaryStats.totalRooms} Room{summaryStats.totalRooms !== 1 ? "s" : ""}
                   </strong>
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: "var(--cms-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--cms-hostel-label-color, #1e293b)", fontWeight: 700, display: "block", marginBottom: 3 }}>
                     Monthly Tariff
                   </label>
                   <input
@@ -14478,7 +14642,7 @@ function RoomModal({
 }
 
 // Warden Modal (Matching Screenshot 2: exactly 3 fields)
-function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handleSaveWarden, showToast }) {
+function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, isTenantCollege = false, curCampusId = null, handleSaveWarden, showToast }) {
     const isView = modal.mode === "view";
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -14486,9 +14650,14 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
     const [hostelStaff, setHostelStaff] = useState([]);
     useEffect(() => {
       let isMounted = true;
+      if (isTenantCollege && !curCampusId) {
+        setHostelStaff([]);
+        return;
+      }
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
       // Fetch fresh Hostel department staff
-      apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
-        .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }))
+      apiClient.get("/api/v1/staff?Department=hostel&pageSize=500", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true })
+        .catch(() => apiClient.get("/api/v1/staff?Department=hostel", { params: campusParams, skipGlobalLoader: true, optionalAuth: true, skipErrorLog: true }))
         .then((res) => {
           if (isMounted && res?.data) {
             const items = extractCollection(res.data);
@@ -14497,7 +14666,7 @@ function WardenModal({ modal, closeModal, blocks, wardens, candidateStaff, handl
         })
         .catch(() => {});
       return () => { isMounted = false; };
-    }, []);
+    }, [isTenantCollege, curCampusId]);
 
     const effectiveStaff = useMemo(() => {
       const merged = [];
@@ -14793,6 +14962,8 @@ function AllocationModal({
   candidateAdmissions,
   candidateStudents,
   canAccessAdminEndpoints = false,
+  isTenantCollege = false,
+  curCampusId = null,
   handleSaveAllocation,
   showToast,
 }) {
@@ -14911,17 +15082,23 @@ function AllocationModal({
 
     useEffect(() => {
       let cancelled = false;
+      if (isTenantCollege && !curCampusId) {
+        setModalAdmissions([]);
+        setModalStudents([]);
+        return;
+      }
       const needAdm = !candidateAdmissions || candidateAdmissions.length === 0;
       const needStu = !candidateStudents || candidateStudents.length === 0;
+      const campusParams = curCampusId ? { campusId: curCampusId } : undefined;
       if (canAccessAdminEndpoints && (needAdm || needStu)) {
         Promise.allSettled([
-          needAdm ? apiClient.get("/api/v1/student-admissions", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
+          needAdm ? apiClient.get("/api/v1/student-admissions", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/students/active", { skipGlobalLoader: true, skipErrorLog: true })
-              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
+            apiClient.get("/api/v1/students/active", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true })
+              .catch(() => apiClient.get("/api/v1/students?pageSize=500", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null))
           ) : Promise.resolve(null),
           needStu ? (
-            apiClient.get("/api/v1/certificates/students-dropdown", { skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
+            apiClient.get("/api/v1/certificates/students-dropdown", { params: campusParams, skipGlobalLoader: true, skipErrorLog: true }).catch(() => null)
           ) : Promise.resolve(null),
         ]).then(([admR, stuActiveR, stuCertR]) => {
           if (cancelled) return;
@@ -14966,6 +15143,10 @@ function AllocationModal({
 
     // Student candidate suggestions: prioritized by Hostel opt-in during admission
     const allCandidates = useMemo(() => {
+      if (isTenantCollege && !curCampusId) {
+        return [];
+      }
+
       const admissionsMap = new Map();
       const registerAdmission = (ca) => {
         if (!ca) return;
@@ -14989,18 +15170,20 @@ function AllocationModal({
 
       let localAdmissionsList = [];
       let localAssignments = null;
-      try {
-        const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
-        if (Array.isArray(localAdms) && localAdms.length > 0) {
-          localAdmissionsList = localAdms;
-          localAdms.forEach((entry) => {
-            const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
-            registerAdmission(x);
-          });
+      if (!isTenantCollege) {
+        try {
+          const localAdms = JSON.parse(localStorage.getItem("studentAdmissionRecords") || "[]");
+          if (Array.isArray(localAdms) && localAdms.length > 0) {
+            localAdmissionsList = localAdms;
+            localAdms.forEach((entry) => {
+              const x = { ...(entry.raw || {}), ...(entry.values || {}), ...entry };
+              registerAdmission(x);
+            });
+          }
+          localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
+        } catch {
+          // ignore storage errors
         }
-        localAssignments = JSON.parse(localStorage.getItem("studentAcademicAssignments") || "{}");
-      } catch {
-        // ignore storage errors
       }
 
       const checkHostelOpted = (student, admission) => {
@@ -15246,7 +15429,7 @@ function AllocationModal({
       }
 
       return hostelCandidates;
-    }, [effectiveStudents, effectiveAdmissions, activeAllocationsMap, modal.mode, modal.data, blocks]);
+    }, [effectiveStudents, effectiveAdmissions, activeAllocationsMap, modal.mode, modal.data, blocks, isTenantCollege, curCampusId]);
 
     // Handle student select change - matching Warden selection behavior
     const handleStudentChange = (selectedVal) => {

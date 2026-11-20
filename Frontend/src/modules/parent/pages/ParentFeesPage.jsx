@@ -4,11 +4,13 @@ import { useSearchParams } from "react-router-dom";
 import { Wallet, CreditCard, CheckCircle2, Download, Printer, Users, Eye, AlertCircle, Clock } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal } from "../context/ParentPortalContext.jsx";
-import { getStoredFeeRecords, saveStoredFeeRecords } from "../parentData.js";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
+import ParentPayFeeScreen from "./ParentPayFeeScreen.jsx";
+import ParentCollectPaymentModal from "../components/ParentCollectPaymentModal.jsx";
+import { printReceiptElement } from "../utils/printReceipt.js";
 import "../ParentDashboard.css";
 
-export default function ParentFeesPage() {
+export default function ParentFeesPage({ initialView }) {
   const {
     availableChildren: rawChildren,
     activeChildId,
@@ -18,11 +20,26 @@ export default function ParentFeesPage() {
     dataKey,
     currentAcademicYear,
     loading,
+    refreshActiveChild,
   } = useParentPortal();
   const availableChildren = (rawChildren || []).filter((c) => String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
   const [searchParams, setSearchParams] = useSearchParams();
-  const [feeRecords, setFeeRecords] = useState(getStoredFeeRecords());
   const [selectedReceipt, setSelectedReceipt] = useState(null);
+  const [isCollectPaymentOpen, setIsCollectPaymentOpen] = useState(false);
+
+  const isPayView = initialView === "pay" || searchParams.get("view") === "pay";
+
+  const handleOpenPayFee = () => {
+    setIsCollectPaymentOpen(true);
+  };
+
+  const handleClosePayFee = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("view");
+      return next;
+    });
+  };
 
   const handleOpenReceipt = (rec) => {
     setSelectedReceipt(rec);
@@ -43,32 +60,60 @@ export default function ParentFeesPage() {
   };
   const [toastMessage, setToastMessage] = useState("");
 
-  const isCurrentYear = currentAcademicYear === "2026-2027";
-  const feeKey = dataKey || child?.id;
   const rawChildFee = contextChildFee && contextChildFee.total !== undefined
     ? contextChildFee
-    : (child
-        ? (feeRecords[feeKey] || (isCurrentYear ? feeRecords[child?.id] || child?.fees : null)) || {
-            total: 0,
-            paid: 0,
-            pending: 0,
-            status: "—",
-            dueDate: "—",
-            breakdown: [],
-            receipts: [],
-          }
-        : { total: 0, paid: 0, pending: 0, status: "—", dueDate: "—", breakdown: [], receipts: [] });
+    : (child?.fees || {
+        total: 0,
+        paid: 0,
+        pending: 0,
+        status: "—",
+        dueDate: "—",
+        breakdown: [],
+        receipts: [],
+      });
 
-  const breakdownTotal = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.amount || 0), 0);
-  const breakdownPaid = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.paid || 0), 0);
-  const breakdownPending = (rawChildFee.breakdown || []).reduce((acc, b) => acc + (b.pending || 0), 0);
+  const receiptsList = rawChildFee.receipts || [];
+  const approvedReceiptsTotal = receiptsList
+    .filter((r) => !/reject|fail|cancel|pending/i.test(r.status || ""))
+    .reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+
+  const paidAmount = Math.max(Number(rawChildFee.paid || 0), approvedReceiptsTotal);
+  const totalAmount = Math.max(Number(rawChildFee.total || 0), paidAmount);
+  const pendingAmount = Math.max(0, totalAmount - paidAmount);
+  const feeStatus = pendingAmount === 0 && totalAmount > 0 ? "Paid" : paidAmount > 0 ? "Partial" : (totalAmount > 0 ? "Due" : "—");
+  const dueDateStr = pendingAmount === 0 ? "All Dues Cleared" : (rawChildFee.dueDate || "—");
+
+  let remPaid = paidAmount;
+  const rawBreakdownItems = (rawChildFee.breakdown && rawChildFee.breakdown.length > 0)
+    ? rawChildFee.breakdown
+    : [];
+
+  const reconciledBreakdown = rawBreakdownItems.map((b) => {
+    const bAmt = Number(b.amount || 0);
+    const bPaid = Math.min(bAmt, remPaid);
+    remPaid = Math.max(0, remPaid - bPaid);
+    const bPending = Math.max(0, bAmt - bPaid);
+    const bStatus = bPending === 0 && bAmt > 0 ? "Paid" : bPaid > 0 ? "Partial" : "Due";
+    return {
+      ...b,
+      category: b.category || b.feeType || "Fee Component",
+      amount: bAmt,
+      paid: bPaid,
+      pending: bPending,
+      due: dueDateStr,
+      status: bStatus,
+    };
+  });
 
   const childFee = {
     ...rawChildFee,
-    total: breakdownTotal > 0 ? breakdownTotal : rawChildFee.total,
-    paid: breakdownTotal > 0 ? breakdownPaid : rawChildFee.paid,
-    pending: breakdownTotal > 0 ? breakdownPending : rawChildFee.pending,
-    status: breakdownTotal > 0 ? (breakdownPending === 0 ? "Paid" : breakdownPaid > 0 ? "Partial" : "Due") : rawChildFee.status,
+    total: totalAmount,
+    paid: paidAmount,
+    pending: pendingAmount,
+    status: feeStatus,
+    dueDate: dueDateStr,
+    breakdown: reconciledBreakdown,
+    receipts: receiptsList,
   };
 
   useEffect(() => {
@@ -78,6 +123,34 @@ export default function ParentFeesPage() {
       if (match) setSelectedReceipt(match);
     }
   }, [searchParams, childFee?.receipts]);
+
+  useEffect(() => {
+    const handleFeeSettled = () => {
+      refreshActiveChild?.();
+      setToastMessage("✓ Payment records updated from Accounts Office.");
+    };
+
+    window.addEventListener?.("cms-fee-settled", handleFeeSettled);
+    window.addEventListener?.("cms-fee-utr-approved", handleFeeSettled);
+
+    let bc = null;
+    try {
+      bc = new BroadcastChannel("cms-fee-events");
+      bc.onmessage = (msg) => {
+        if (msg?.data?.type === "UTR_APPROVED" || msg?.data?.type === "PAYMENT_SETTLED") {
+          refreshActiveChild?.();
+          const amt = Number(msg.data?.amount || 0);
+          setToastMessage(amt > 0 ? `✓ Payment of ₹${amt.toLocaleString()} approved by Accounts Office!` : "✓ Fee payment approved by Accounts Office!");
+        }
+      };
+    } catch {}
+
+    return () => {
+      window.removeEventListener?.("cms-fee-settled", handleFeeSettled);
+      window.removeEventListener?.("cms-fee-utr-approved", handleFeeSettled);
+      if (bc) bc.close();
+    };
+  }, [refreshActiveChild]);
 
   const handleSelectChild = (id) => {
     setActiveChildId(id);
@@ -114,6 +187,18 @@ export default function ParentFeesPage() {
             </p>
           </div>
         </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (isPayView) {
+    return (
+      <DashboardLayout
+        title="Pay Fee"
+        subtitle={`Pay fees for your child securely online • ${child.name} (${child.group})`}
+        breadcrumb={["Parent Portal", "Fees & Payments", "Pay Fee"]}
+      >
+        <ParentPayFeeScreen onBack={handleClosePayFee} />
       </DashboardLayout>
     );
   }
@@ -201,6 +286,40 @@ export default function ParentFeesPage() {
               </div>
             </div>
           </div>
+
+          {/* 5th Card: PAY FEE */}
+          <div
+            className="parent-stat-card parent-pay-fee-stat-card"
+            onClick={handleOpenPayFee}
+            role="button"
+            tabIndex={0}
+          >
+            <div className="parent-stat-icon-wrap green">
+              <Wallet size={24} />
+            </div>
+            <div className="parent-stat-info">
+              <div className="parent-stat-label">PAY FEE</div>
+              <div className="parent-stat-value" style={{ fontSize: 18 }}>{(childFee?.pending || 0) === 0 ? "Paid in Full" : "Pay Online"}</div>
+              <div className="parent-stat-subtext">
+                {(childFee?.pending || 0) === 0 ? (
+                  <span className="cms-badge cms-badge-active" style={{ fontSize: 12, padding: "3px 8px", display: "inline-block" }}>
+                    ✓ All Dues Cleared
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="parent-pay-now-action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenPayFee();
+                    }}
+                  >
+                    Pay Now →
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Fee Category Breakdown */}
@@ -273,6 +392,7 @@ export default function ParentFeesPage() {
                     <th>Payment Method</th>
                     <th>Transaction Ref</th>
                     <th>Purpose / Narration</th>
+                    <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -287,6 +407,11 @@ export default function ParentFeesPage() {
                         <td style={{ fontSize: 12, color: "var(--cms-muted)" }}>{rec.txnId}</td>
                         <td>{rec.paidFor}</td>
                         <td>
+                          <span className={`cms-badge ${rec.status === "Approved" || !rec.status || rec.status === "Success" ? "cms-badge-active" : /pending|awaiting/i.test(rec.status) ? "cms-badge-warn" : "cms-badge-danger"}`}>
+                            {rec.status === "Approved" || !rec.status || rec.status === "Success" ? "Approved" : /pending|awaiting/i.test(rec.status) ? "Pending Approval" : rec.status}
+                          </span>
+                        </td>
+                        <td>
                           <button
                             type="button"
                             className="cms-btn cms-btn-sm cms-btn-outline"
@@ -299,7 +424,7 @@ export default function ParentFeesPage() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
+                      <td colSpan="8" style={{ textAlign: "center", padding: "36px 16px", color: "var(--cms-muted)" }}>
                         No payment receipts recorded for Academic Year {currentAcademicYear}.
                       </td>
                     </tr>
@@ -317,66 +442,84 @@ export default function ParentFeesPage() {
           <Modal
             title={`Fee Payment Receipt — ${selectedReceipt.receiptNo}`}
             onClose={handleCloseReceipt}
-            size="lg"
+            className="parent-fee-receipt-modal"
             footer={
-              <>
-                <button type="button" className="cms-btn cms-btn-outline" onClick={handleCloseReceipt}>Close</button>
-                <button type="button" className="cms-btn cms-btn-primary" onClick={() => window.print()}>
-                  <Printer size={15} /> Print Receipt
+              <div className="parent-receipt-modal-actions">
+                <button type="button" className="cms-btn cms-btn-ghost parent-close-btn" onClick={handleCloseReceipt}>
+                  Close
                 </button>
-              </>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary parent-done-btn"
+                  onClick={() => printReceiptElement("parent-fee-receipt-printable", `Fee Payment Receipt — ${selectedReceipt.receiptNo}`)}
+                >
+                  <Printer size={15} style={{ marginRight: 6 }} /> Print Receipt
+                </button>
+              </div>
             }
           >
-            <div className="parent-receipt-sheet">
+            <div id="parent-fee-receipt-printable" className="parent-receipt-sheet">
               <div className="parent-receipt-header">
                 <h2>PIRNAV JUNIOR COLLEGE</h2>
                 <p>Campus Road, Jubilee Hills, Hyderabad - 500033</p>
-                <strong style={{ display: "block", marginTop: 6, fontSize: 15 }}>OFFICIAL FEE PAYMENT RECEIPT</strong>
+                <div className="receipt-title-badge">OFFICIAL FEE PAYMENT RECEIPT</div>
               </div>
 
-              <div className="parent-profile-meta-grid" style={{ marginBottom: 16 }}>
-                <div className="parent-meta-item"><span>Receipt No:</span> <strong>{selectedReceipt.receiptNo}</strong></div>
-                <div className="parent-meta-item"><span>Date of Payment:</span> <strong>{selectedReceipt.date}</strong></div>
-                <div className="parent-meta-item"><span>Student Name:</span> <strong>{child.name}</strong></div>
-                <div className="parent-meta-item"><span>Admission No:</span> <strong>{child.admissionNo}</strong></div>
-                <div className="parent-meta-item"><span>Course & Group:</span> <strong>{child.programme}</strong></div>
-                <div className="parent-meta-item"><span>Payment Mode:</span> <strong>{selectedReceipt.method}</strong></div>
+              <div className="parent-receipt-meta-grid">
+                <div><span>Receipt Number:</span> <strong>{selectedReceipt.receiptNo}</strong></div>
+                <div><span>Date of Payment:</span> <strong>{selectedReceipt.date}</strong></div>
+                <div><span>Student Name:</span> <strong>{child?.name || "Student"}</strong></div>
+                <div><span>Admission Number:</span> <strong>{child?.admissionNo || `ADM-${child?.id}`}</strong></div>
+                <div><span>Course & Group:</span> <strong>{child?.programme || child?.group || "Intermediate 1st Year (MPC)"}</strong></div>
+                <div><span>Payment Mode:</span> <strong>{selectedReceipt.method || "Online"}</strong></div>
               </div>
 
               <table className="parent-receipt-table">
                 <thead>
                   <tr>
-                    <th>Description</th>
-                    <th>Transaction Reference</th>
-                    <th>Amount Paid</th>
-                    <th>Status</th>
+                    <th style={{ width: "36%" }}>Description</th>
+                    <th style={{ width: "28%" }}>Transaction Reference</th>
+                    <th style={{ width: "18%", textAlign: "right" }}>Amount Paid</th>
+                    <th style={{ width: "18%", textAlign: "center" }}>Payment Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>{selectedReceipt.paidFor}</td>
-                    <td>{selectedReceipt.txnId}</td>
-                    <td style={{ fontWeight: 700 }}>₹{selectedReceipt.amount.toLocaleString()}</td>
-                    <td>
-                      <span className="cms-badge cms-badge-active">Success</span>
+                    <td className="cell-desc">{selectedReceipt.paidFor}</td>
+                    <td className="cell-txn">{selectedReceipt.txnId}</td>
+                    <td className="cell-amount">₹{Number(selectedReceipt.amount || 0).toLocaleString()}</td>
+                    <td className="cell-status">
+                      <span className={`cms-badge ${/pending/i.test(selectedReceipt.status) ? "cms-badge-warn" : /reject|fail/i.test(selectedReceipt.status) ? "cms-badge-danger" : "cms-badge-active"}`}>
+                        {selectedReceipt.status || "Success"}
+                      </span>
                     </td>
                   </tr>
                 </tbody>
               </table>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginTop: 30, paddingTop: 16, borderTop: "1px solid #cbd5e1" }}>
-                <div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>This is a computer-generated fee receipt.</div>
-                  <div style={{ fontSize: 12, color: "#64748b" }}>Valid for Income Tax deduction under section 80C.</div>
+              <div className="parent-receipt-foot-block">
+                <div className="parent-receipt-foot-legal">
+                  <div>This is an official computer-generated fee receipt.</div>
+                  <div>Valid for Income Tax deduction under section 80C.</div>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ height: 35 }}></div>
-                  <div style={{ borderTop: "1px solid #334155", paddingTop: 4, fontSize: 12, fontWeight: 600 }}>Accounts Officer / Cashier</div>
+                <div className="parent-receipt-foot-signature">
+                  <div style={{ height: 20 }}></div>
+                  <div className="sig-line">Accounts Officer / Cashier</div>
                 </div>
               </div>
             </div>
           </Modal>
         )}
+
+        {/* Collect Payment Omnichannel Modal */}
+        <ParentCollectPaymentModal
+          isOpen={isCollectPaymentOpen}
+          onClose={() => setIsCollectPaymentOpen(false)}
+          initialChildId={activeChildId}
+          onPaymentSuccess={() => {
+            refreshActiveChild?.();
+          }}
+        />
       </div>
     </DashboardLayout>
   );

@@ -20,6 +20,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> IsEmailUniqueAsync(string email, int? excludeId = null);
         Task<bool> IsMobileUniqueAsync(string mobile, int? excludeId = null);
         Task<bool> IsAadhaarUniqueAsync(string aadhaar, int? excludeId = null);
+        Task<Staff?> GetByDrivingLicenseAsync(string drivingLicense, int? excludeId = null);
+        Task<bool> IsDrivingLicenseUniqueAsync(string drivingLicense, int? excludeId = null);
 
         Task<(List<Staff> Items, int TotalCount)> GetPagedStaffAsync(StaffQueryParams queryParams);
         Task<IEnumerable<StaffDropdownDto>> GetStaffDropdownAsync(string? staffType = null, int? campusId = null);
@@ -30,6 +32,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task AddRangeAsync(IEnumerable<Staff> staffs);
         Task UpdateAsync(Staff staff);
         Task UpdatePhotoPathAsync(int id, string photoPath);
+        Task<string?> GetOfferLetterPathAsync(int id);
+        Task UpdateOfferLetterPathAsync(int id, string offerLetterPath);
+        Task UpdateOfferLetterInfoAsync(int id, string offerLetterPath, string offerLetterNumber);
         Task SoftDeleteAsync(Staff staff);
         Task BulkUpdateLinkSentAsync(List<int> staffIds, DateTime sentAt, DateTime expiresAt);
         Task UpdateProfileStatusAsync(int staffId, string profileStatus, int completionPercentage, string? correctionNotes = null);

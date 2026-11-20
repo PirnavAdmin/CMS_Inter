@@ -12,7 +12,36 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<StudentAdmissionResponseDto> CreateAsync(
             CreateStudentAdmissionRequest request,
-            string? studentPhoto);
+            string? studentPhoto,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null);
+
+        Task ValidateMasterReferencesAsync(CreateStudentAdmissionRequest request);
+
+        Task ValidateFeeSelectionInputsAsync(int admissionId, IReadOnlyCollection<int> componentIds);
+
+        Task<AdmissionIdempotencyRecordDto?> TryBeginIdempotencyAsync(
+            string idempotencyKey,
+            int? campusId,
+            int? createdByUserId,
+            string requestHash,
+            DateTime expiresAtUtc);
+
+        Task CompleteIdempotencyAsync(
+            string idempotencyKey,
+            int admissionId,
+            string? admissionNo,
+            int httpStatusCode,
+            string responseJson,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null);
+
+        Task FailIdempotencyAsync(
+            string idempotencyKey,
+            int httpStatusCode,
+            string errorMessage);
+
+        Task<AdmissionIdempotencyRecordDto?> GetIdempotencyRecordAsync(string idempotencyKey);
 
         Task<StudentAdmissionResponseDto?> GetByIdAsync(
             int admissionId);
@@ -32,7 +61,9 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<bool> UpdateAdmissionNumberAsync(
             int admissionId,
-            string admissionNo);
+            string admissionNo,
+            IDbConnection? connection = null,
+            IDbTransaction? transaction = null);
 
         Task<int> SaveAdmissionFeeSelectionsAsync(
             int admissionId,
@@ -56,9 +87,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
             return Task.FromResult(bloodGroups);
         }
 
-        Task<string> GenerateAdmissionNumberAsync(int? campusId = null, int? boardId = null, int? academicYearId = null);
-        Task<int> GetActualAdmissionCountAsync(int campusId, int boardId, int academicYearId);
-        Task SyncAdmissionSequenceAsync(int campusId, int boardId, int academicYearId, int correctSequence);
+
 
         // =====================================================
         // VERIFY / APPROVE / REJECT
@@ -69,7 +98,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
 
         Task<IEnumerable<StudentAdmissionResponseDto>> GetOutgoingRequestsAsync(int campusId);
         Task<IEnumerable<StudentAdmissionResponseDto>> GetIncomingRequestsAsync(int campusId);
-        Task<bool> ApproveAdmissionRequestAsync(int admissionId, string generatedAdmissionNo, string? remarks);
+        Task<bool> ApproveAdmissionRequestAsync(int admissionId, string generatedAdmissionNo, string? remarks, IDbConnection? connection = null, IDbTransaction? transaction = null);
         Task<bool> RejectAdmissionRequestAsync(int admissionId, string rejectionReason, string? remarks);
         Task<bool> ApproveAsync(
             ApproveStudentAdmissionRequest request,

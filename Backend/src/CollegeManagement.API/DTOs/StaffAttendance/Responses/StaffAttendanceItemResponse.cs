@@ -5,6 +5,7 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
 {
     public class StaffAttendanceItemResponse
     {
+        public int? StaffAttendanceId { get; set; }
         public int FacultyId { get; set; }
         public string EmployeeId { get; set; } = string.Empty;
         public string StaffName { get; set; } = string.Empty;
@@ -19,6 +20,10 @@ namespace CollegeManagement.API.DTOs.StaffAttendance.Responses
         public string? Remarks { get; set; }
         public bool IsLate { get; set; }
         public bool IsEarlyCheckout { get; set; }
+        public bool IsMissedCheckout { get; set; }
+        public bool IsMissedCheckoutResolved { get; set; }
+        public int? UpdatedByUserId { get; set; }
+        public string? UpdatedByRole { get; set; }
         public StaffType StaffType { get; set; } = StaffType.Teaching;
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace CollegeManagement.API.DTOs.Payroll
+namespace CollegeManagement.API.DTOs.Payroll
 {
     public class PayslipEmailDetailsDto
     {
@@ -15,6 +15,10 @@
         public int PayrollMonth { get; set; }
 
         public int PayrollYear { get; set; }
+
+        public decimal LopDays { get; set; }
+
+        public decimal LopDeduction { get; set; }
 
         public decimal GrossSalary { get; set; }
 

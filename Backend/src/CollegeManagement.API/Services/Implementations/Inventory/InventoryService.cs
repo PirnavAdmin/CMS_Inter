@@ -294,5 +294,74 @@ namespace CollegeManagement.API.Services.Implementations.Inventory
         {
             return await _repository.GetReportDataAsync(request);
         }
+
+        #region Purchase Orders
+        public async Task<IEnumerable<PurchaseOrderDto>> GetPurchaseOrdersAsync(string? status, string? search)
+        {
+            return await _repository.GetPurchaseOrdersAsync(status, search);
+        }
+
+        public async Task<PurchaseOrderDto?> GetPurchaseOrderByIdAsync(int orderId)
+        {
+            return await _repository.GetPurchaseOrderByIdAsync(orderId);
+        }
+
+        public async Task<PurchaseOrderDto> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, int userId, string userName)
+        {
+            if (request.ItemId <= 0)
+                throw new ArgumentException("Valid Item is required.");
+            if (request.SupplierId <= 0)
+                throw new ArgumentException("Valid Supplier is required.");
+            if (request.Quantity <= 0)
+                throw new ArgumentException("Quantity must be greater than zero.");
+
+            var po = await _repository.CreatePurchaseOrderAsync(request, userId, userName);
+
+            await _auditLoggingService.LogAsync(
+                action: "Create Purchase Order",
+                module: "Inventory Management",
+                target: po.OrderNumber,
+                severity: "Info",
+                status: "Success",
+                details: $"Created purchase order {po.OrderNumber} for item {po.ItemName} ({po.Quantity} units) with supplier {po.SupplierName}",
+                overrideUser: userName);
+
+            return po;
+        }
+
+        public async Task<bool> CancelPurchaseOrderAsync(int orderId, int userId, string userName, string? remarks = null)
+        {
+            var success = await _repository.CancelPurchaseOrderAsync(orderId, userId, userName, remarks);
+            if (success)
+            {
+                await _auditLoggingService.LogAsync(
+                    action: "Cancel Purchase Order",
+                    module: "Inventory Management",
+                    target: $"PO #{orderId}",
+                    severity: "Warning",
+                    status: "Success",
+                    details: $"Cancelled purchase order #{orderId}. Remarks: {remarks ?? "None"}",
+                    overrideUser: userName);
+            }
+            return success;
+        }
+
+        public async Task<bool> UpdatePurchaseOrderStatusAsync(int orderId, string status, int userId, string userName, string? remarks = null)
+        {
+            var success = await _repository.UpdatePurchaseOrderStatusAsync(orderId, status, userId, userName, remarks);
+            if (success)
+            {
+                await _auditLoggingService.LogAsync(
+                    action: "Update Purchase Order Status",
+                    module: "Inventory Management",
+                    target: $"PO #{orderId}",
+                    severity: "Info",
+                    status: "Success",
+                    details: $"Updated purchase order #{orderId} status to '{status}'. Remarks: {remarks ?? "None"}",
+                    overrideUser: userName);
+            }
+            return success;
+        }
+        #endregion
     }
 }

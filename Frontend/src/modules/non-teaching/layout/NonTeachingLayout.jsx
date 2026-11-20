@@ -7,25 +7,26 @@ const nonTeachingMenu = [
   {
     section: "STAFF OVERVIEW",
     items: [
-      { to: "/non-teaching-dashboard", label: "Dashboard", icon: adminIconAssets.dashboard },
-      { to: "/non-teaching-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile },
+      { to: "/non-teaching-dashboard", label: "Dashboard", icon: adminIconAssets.dashboard, moduleKey: "dashboard" },
+      { to: "/non-teaching-dashboard/profile", label: "My Profile", icon: adminIconAssets.profile, moduleKey: "profile" },
     ],
   },
   {
     section: "MY WORKPLACE",
     items: [
-      { to: "/non-teaching-dashboard/attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact },
-      { to: "/non-teaching-dashboard/leave", label: "Leave Management", icon: generatedSidebarIcons.staffLeave },
-      { to: "/non-teaching-dashboard/tasks", label: "My Tasks", icon: generatedSidebarIcons.department },
-      { to: "/non-teaching-dashboard/payslip", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll },
-      { to: "/non-teaching-dashboard/announcements", label: "Announcements", icon: adminIconAssets.financialReports },
+      { to: "/non-teaching-dashboard/attendance", label: "My Attendance", icon: adminIconAssets.attendanceImpact, moduleKey: "staff-attendance", screenKey: "my-attendance" },
+      { to: "/non-teaching-dashboard/leave", label: "Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management", screenKey: "staff-leave" },
+      { to: "/non-teaching-dashboard/tasks", label: "My Tasks", icon: generatedSidebarIcons.department, moduleKey: "dashboard" },
+      { to: "/non-teaching-dashboard/payslip", label: "Salary & Payslips", icon: generatedSidebarIcons.payroll, moduleKey: "payroll" },
+      { to: "/non-teaching-dashboard/announcements", label: "Announcements", icon: adminIconAssets.financialReports, moduleKey: "reports-analytics" },
     ],
   },
   {
     section: "OPERATIONS & HELP",
     items: [
-      { to: "/non-teaching-dashboard/department", label: "Department Portal", icon: generatedSidebarIcons.admission },
-      { to: "/non-teaching-dashboard/support", label: "Help & Support", icon: adminIconAssets.notifications },
+      { to: "/non-teaching-dashboard/enquiries", label: "Front Desk & Enquiries", icon: generatedSidebarIcons.admission, moduleKey: "enquiry-management" },
+      { to: "/non-teaching-dashboard/department", label: "Department Portal", icon: generatedSidebarIcons.admission, moduleKey: "department-designation" },
+      { to: "/non-teaching-dashboard/support", label: "Help & Support", icon: adminIconAssets.notifications, moduleKey: "settings" },
     ],
   },
 ];

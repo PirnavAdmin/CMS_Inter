@@ -52,7 +52,7 @@ public class FeeStructureComponent
 {
     [Key] public int FeeStructureComponentId { get; set; }
     [Required] public int FeeStructureId { get; set; }
-    [Required, Column("FeeComponentId")] public int FeeTypeId { get; set; }
+    [Required] public int FeeTypeId { get; set; }
     [Column("IsMandatory")] public bool IsMandatory { get; set; } = true;
     [NotMapped] public string Rule { get => IsMandatory ? "Mandatory" : "Optional"; set => IsMandatory = (value == "Mandatory"); }
     [Column(TypeName = "decimal(18,2)")] public decimal Amount { get; set; }

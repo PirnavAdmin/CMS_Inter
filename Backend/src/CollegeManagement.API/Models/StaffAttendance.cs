@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using CollegeManagement.API.Enums;
@@ -41,7 +41,14 @@ namespace CollegeManagement.API.Models
 
         public bool IsActive { get; set; } = true;
 
+        public bool IsMissedCheckoutResolved { get; set; } = false;
+
         public int? CreatedByUserId { get; set; }
+
+        public int? UpdatedByUserId { get; set; }
+
+        [MaxLength(50)]
+        public string? UpdatedByRole { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
@@ -58,4 +65,3 @@ namespace CollegeManagement.API.Models
         #endregion
     }
 }
-

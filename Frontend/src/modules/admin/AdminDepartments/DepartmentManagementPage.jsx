@@ -19,6 +19,7 @@ import {
 import * as XLSX from "xlsx";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -182,10 +183,32 @@ export const DEFAULT_NON_TEACHING_DEPARTMENTS = [];
 export const DEFAULT_TEACHING_DESIGNATIONS = [];
 export const DEFAULT_NON_TEACHING_DESIGNATIONS = [];
 
+export const getDeptCacheKey = () => {
+  try {
+    const user = getAuthUser();
+    return user?.collegeId ? `cms_cached_departments_${user.collegeId}` : "cms_cached_departments";
+  } catch {
+    return "cms_cached_departments";
+  }
+};
+
+export const getDesigCacheKey = () => {
+  try {
+    const user = getAuthUser();
+    return user?.collegeId ? `cms_cached_designations_${user.collegeId}` : "cms_cached_designations";
+  } catch {
+    return "cms_cached_designations";
+  }
+};
+
 export const loadCachedDepartments = () => {
   try {
+    const user = getAuthUser();
+    const isTenant = Boolean(user?.collegeId && Number(user.collegeId) > 1);
+    if (isTenant) return [];
+
     if (typeof window !== "undefined" && window.sessionStorage) {
-      const stored = window.sessionStorage.getItem("cms_cached_departments");
+      const stored = window.sessionStorage.getItem(getDeptCacheKey());
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -199,8 +222,12 @@ export const loadCachedDepartments = () => {
 
 export const loadCachedDesignations = () => {
   try {
+    const user = getAuthUser();
+    const isTenant = Boolean(user?.collegeId && Number(user.collegeId) > 1);
+    if (isTenant) return [];
+
     if (typeof window !== "undefined" && window.sessionStorage) {
-      const stored = window.sessionStorage.getItem("cms_cached_designations");
+      const stored = window.sessionStorage.getItem(getDesigCacheKey());
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -215,7 +242,7 @@ export const loadCachedDesignations = () => {
 export const setCachedDepartments = (depts) => {
   try {
     if (typeof window !== "undefined" && window.sessionStorage && Array.isArray(depts)) {
-      window.sessionStorage.setItem("cms_cached_departments", JSON.stringify(depts));
+      window.sessionStorage.setItem(getDeptCacheKey(), JSON.stringify(depts));
     }
   } catch {
     // Silently continue
@@ -225,7 +252,7 @@ export const setCachedDepartments = (depts) => {
 export const setCachedDesignations = (desigs) => {
   try {
     if (typeof window !== "undefined" && window.sessionStorage && Array.isArray(desigs)) {
-      window.sessionStorage.setItem("cms_cached_designations", JSON.stringify(desigs));
+      window.sessionStorage.setItem(getDesigCacheKey(), JSON.stringify(desigs));
     }
   } catch {
     // Silently continue
@@ -885,6 +912,20 @@ export default function DepartmentManagementPage() {
     const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
     const curBoardId = selectedBoard?.id ?? selectedBoard?.boardId;
 
+    const authUser = getAuthUser();
+    const isTenantCollege = Boolean(authUser?.collegeId && Number(authUser.collegeId) > 1);
+
+    if (isTenantCollege && !curCampusId) {
+      if (requestSeqRef.current === currentSeq) {
+        setDepartments([]);
+        setDesignations([]);
+        setDepartmentsLoading(false);
+        setDesignationsLoading(false);
+        setIsRefreshing(false);
+      }
+      return;
+    }
+
     try {
       // 1. Fetch Departments (GET /api/v1/departments)
       const deptParams = {};
@@ -960,15 +1001,34 @@ export default function DepartmentManagementPage() {
     fetchMasterData(false);
   }, [fetchMasterData]);
 
+  // Listen for real-time updates from roles/other modules
+  useEffect(() => {
+    const handleUpdate = () => {
+      fetchMasterData(false);
+    };
+    window.addEventListener("departments-updated", handleUpdate);
+    window.addEventListener("designations-updated", handleUpdate);
+    window.addEventListener("roles-updated", handleUpdate);
+    return () => {
+      window.removeEventListener("departments-updated", handleUpdate);
+      window.removeEventListener("designations-updated", handleUpdate);
+      window.removeEventListener("roles-updated", handleUpdate);
+    };
+  }, [fetchMasterData]);
+
   // Department Client-side Filtering
   const filteredDepartments = useMemo(() => {
+    const authUser = getAuthUser();
+    const isTenantCollege = Boolean(authUser?.collegeId && Number(authUser.collegeId) > 1);
+    const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
+    if (isTenantCollege && !curCampusId) return [];
+
     const isTeaching = staffType === "Teaching";
     const seen = new Set();
     const result = [];
 
     const sourceList = Array.isArray(departments) ? departments : [];
 
-    const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
     const curCampusName = (selectedCampus?.name || selectedCampus?.campusName || "").trim().toLowerCase();
     const curBoardId = selectedBoard?.id ?? selectedBoard?.boardId;
     const curBoardName = (selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "").trim().toLowerCase();
@@ -1026,13 +1086,17 @@ export default function DepartmentManagementPage() {
 
   // Designation Client-side Filtering
   const filteredDesignations = useMemo(() => {
+    const authUser = getAuthUser();
+    const isTenantCollege = Boolean(authUser?.collegeId && Number(authUser.collegeId) > 1);
+    const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
+    if (isTenantCollege && !curCampusId) return [];
+
     const isTeaching = staffType === "Teaching";
     const seen = new Set();
     const result = [];
 
     const sourceList = Array.isArray(designations) ? designations : [];
 
-    const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
     const curCampusName = (selectedCampus?.name || selectedCampus?.campusName || "").trim().toLowerCase();
     const curBoardId = selectedBoard?.id ?? selectedBoard?.boardId;
     const curBoardName = (selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "").trim().toLowerCase();
@@ -1489,13 +1553,7 @@ export default function DepartmentManagementPage() {
           </article>
         </section>
 
-        <aside className="master-note">
-          <Info />
-          <span>
-            Departments and Designations created here are retrieved live from the backend server API
-            and available across the Staff Management module.
-          </span>
-        </aside>
+
       </main>
 
       {/* DEPARTMENT DELETE CONFIRM DIALOG (DELETE /api/v1/departments/{id}) */}

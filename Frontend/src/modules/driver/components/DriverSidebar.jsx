@@ -4,36 +4,38 @@ import { X, LogOut } from "lucide-react";
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useDriverData } from "../DriverDataContext.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, onClose }) {
   const { driverProfile } = useDriverData();
+  const { canView, loading, permissions } = useEffectivePermissions();
 
   const menuSections = [
     {
       title: "DAILY OPERATIONS",
       items: [
-        { id: "home", label: "Dashboard", icon: "dashboard" },
-        { id: "trips", label: "Today's Trips", icon: "transport" },
-        { id: "route", label: "My Route & Stops", icon: "campus" },
-        { id: "gps", label: "Live Navigation", icon: "campus" },
-        { id: "students", label: "Student Manifest", icon: "students" },
+        { id: "home", label: "Dashboard", icon: "dashboard", moduleKey: "dashboard" },
+        { id: "trips", label: "Today's Trips", icon: "transport", moduleKey: "transport" },
+        { id: "route", label: "My Route & Stops", icon: "campus", moduleKey: "transport" },
+        { id: "gps", label: "Live Navigation", icon: "campus", moduleKey: "transport" },
+        { id: "students", label: "Student Manifest", icon: "students", moduleKey: "transport" },
       ],
     },
     {
       title: "MY WORKSPACE",
       items: [
-        { id: "attendance", label: "My Attendance", icon: "staff-attendance" },
-        { id: "leave", label: "Leave Management", icon: "staff-leave" },
-        { id: "payslips", label: "My Payslips", icon: "payroll" },
-        { id: "reports", label: "Trip Reports", icon: "reports-analytics" },
-        { id: "holidays", label: "Holidays", icon: "holidays" },
+        { id: "attendance", label: "My Attendance", icon: "staff-attendance", moduleKey: "staff-attendance", screenKey: "my-attendance" },
+        { id: "leave", label: "Leave Management", icon: "staff-leave", moduleKey: "staff-leave-management", screenKey: "staff-leave" },
+        { id: "payslips", label: "My Payslips", icon: "payroll", moduleKey: "payroll" },
+        { id: "reports", label: "Trip Reports", icon: "reports-analytics", moduleKey: "reports-analytics" },
+        { id: "holidays", label: "Holidays", icon: "holidays", moduleKey: "holiday-management" },
       ],
     },
     {
       title: "ACCOUNT",
       items: [
-        { id: "profile", label: "Driver Profile", icon: "staff" },
-        { id: "settings", label: "Settings", icon: "settings" },
+        { id: "profile", label: "Driver Profile", icon: "staff", moduleKey: "profile" },
+        { id: "settings", label: "Settings", icon: "settings", moduleKey: "settings" },
       ],
     },
   ];
@@ -55,10 +57,17 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
       </div>
 
       <nav className="dp-sidebar-nav">
-        {menuSections.map((section) => (
-          <div key={section.title} className="dp-nav-section-group">
-            <div className="dp-nav-section-title">{section.title}</div>
-            {section.items.map((item) => {
+        {menuSections.map((section) => {
+          const visibleItems = section.items.filter((item) => {
+            if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+            if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+            return canView(item.moduleKey, item.screenKey || null);
+          });
+          if (!visibleItems.length) return null;
+          return (
+            <div key={section.title} className="dp-nav-section-group">
+              <div className="dp-nav-section-title">{section.title}</div>
+              {visibleItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button
@@ -77,7 +86,8 @@ export default function DriverSidebar({ activeTab, onSelectTab, onLogout, open, 
               );
             })}
           </div>
-        ))}
+        );
+      })}
       </nav>
 
       <div className="dp-sidebar-footer">

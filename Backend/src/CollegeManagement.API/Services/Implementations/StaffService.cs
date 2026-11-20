@@ -55,6 +55,7 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly INumberSeriesService _numberSeriesService;
         private readonly INotificationService _notificationService;
         private readonly IAuditLoggingService _auditLogger;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
         private const decimal HoursPerClassPeriod = 1.0m;
         private const long MaxPhotoFileSizeBytes = 5 * 1024 * 1024; // 5 MB
@@ -80,7 +81,8 @@ namespace CollegeManagement.API.Services.Implementations
             ILogger<StaffService> logger,
             INumberSeriesService numberSeriesService,
             INotificationService notificationService,
-            IAuditLoggingService auditLogger)
+            IAuditLoggingService auditLogger,
+            Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _staffRepository = staffRepository;
             _allocationRepository = allocationRepository;
@@ -100,6 +102,15 @@ namespace CollegeManagement.API.Services.Implementations
             _numberSeriesService = numberSeriesService;
             _notificationService = notificationService;
             _auditLogger = auditLogger;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCallerCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         public async Task<PagedResult<StaffResponseDto>> GetPagedStaffAsync(StaffQueryParams queryParams)
@@ -295,6 +306,19 @@ namespace CollegeManagement.API.Services.Implementations
             return await _staffRepository.GenerateNextEmployeeIdAsync(staffType, campusId);
         }
 
+        public async Task<string> GetNextEmployeeIdPreviewAsync(string staffType, int campusId = 1)
+        {
+            var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+            var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+            var preview = await _numberSeriesService.GetLivePreviewAsync(seriesCode, campusId: campusId);
+            
+            if (!string.IsNullOrWhiteSpace(preview) && preview != "0")
+            {
+                return preview;
+            }
+            return await _staffRepository.GenerateNextEmployeeIdAsync(staffType, campusId);
+        }
+
         public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)
         {
             return await _staffRepository.GetDashboardStatsAsync(boardId, campusId);
@@ -302,23 +326,51 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<StaffResponseDto> CreateStaffAsync(CreateStaffDto dto)
         {
+            var callerCollegeId = ResolveCallerCollegeId();
+            if (!dto.CampusId.HasValue || dto.CampusId.Value <= 0)
+            {
+                throw new Exceptions.ValidationException("CampusId is required. Please configure an active Campus before adding staff.");
+            }
+            if (callerCollegeId.HasValue)
+            {
+                var campusBelongs = await _context.Campuses.AnyAsync(c => c.CampusId == dto.CampusId.Value && c.CollegeId == callerCollegeId.Value && c.IsActive);
+                if (!campusBelongs)
+                {
+                    throw new Exceptions.ValidationException("The selected Campus does not exist, is inactive, or does not belong to your college.");
+                }
+            }
+            var targetCampusId = dto.CampusId.Value;
+
             var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? "Teaching" : dto.StaffType.Trim();
 
-            // Auto generate Employee ID if not supplied or empty
+            // Auto generate Employee ID if not supplied, or advance series sequence if supplied ID matches series
             string employeeId = dto.EmployeeId?.Trim() ?? string.Empty;
+            var isTeachingStaff = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
+            var activeSeriesCode = isTeachingStaff ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
+
             if (string.IsNullOrWhiteSpace(employeeId))
             {
-                var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
-                
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
                 if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
                 {
                     employeeId = generatedDto.GeneratedNumber;
                 }
                 else
                 {
-                    employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
+                    employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, targetCampusId);
+                }
+            }
+            else
+            {
+                // Advance series sequence in database so subsequent staff creation increments properly
+                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(activeSeriesCode, targetCampusId);
+                if (seriesConfig != null && (!string.IsNullOrWhiteSpace(seriesConfig.Prefix) && employeeId.StartsWith(seriesConfig.Prefix, StringComparison.OrdinalIgnoreCase)))
+                {
+                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
+                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                    {
+                        employeeId = generatedDto.GeneratedNumber;
+                    }
                 }
             }
 
@@ -438,10 +490,13 @@ namespace CollegeManagement.API.Services.Implementations
             {
                 var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
                 var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-                var prefix = isTeaching ? "PCTCH" : "PCNT";
+                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, dto.CampusId ?? 1);
+                var prefix = seriesConfig?.Prefix ?? (isTeaching ? "MTCH" : "MNT");
 
                 // If this matches the auto-generated series format and was taken concurrently, safely fetch the next fresh ID
-                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                    employeeId.StartsWith("PCTCH", StringComparison.OrdinalIgnoreCase) ||
+                    employeeId.StartsWith("PCNT", StringComparison.OrdinalIgnoreCase))
                 {
                     var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
                     if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && await _staffRepository.IsEmployeeIdUniqueAsync(generatedDto.GeneratedNumber))
@@ -552,25 +607,57 @@ namespace CollegeManagement.API.Services.Implementations
 
             staff.ProfileCompletionPercentage = CalculateCompletionPercentage(staff);
 
-            // Driver & Transport specific details: Use actual assigned role membership to identify drivers
-            bool isDriverRole = string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
-            staff.IsDriver = isDriverRole;
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
-            {
-                staff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
-            }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
-            {
-                staff.DrivingLicenseNumber = licVal.ToString()?.Trim();
-            }
+// Transport Driver Conditional Logic:
+            // Driver's License Number and Expiry Date apply when Department is Transport AND Designation is Driver, or Role is Driver
+            bool isDriverRole = string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(dto.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase);
+            bool isTransportDept = (dto.Department?.IndexOf("transport", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                  (dto.DepartmentId.HasValue && dto.DepartmentId.Value == 79);
+            bool isDriverDesignation = (dto.Designation?.IndexOf("driver", StringComparison.OrdinalIgnoreCase) >= 0);
+            bool isDriver = isDriverRole || (isTransportDept && isDriverDesignation);
 
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            staff.IsDriver = isDriver;
+            if (isDriver)
             {
-                staff.DrivingLicenseExpiryDate = expParsed;
+                string? dlNumber = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                    ? dto.DrivingLicenseNumber.Trim()
+                    : (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null
+                        ? licVal.ToString()?.Trim()
+                        : null);
+
+                if (!string.IsNullOrWhiteSpace(dlNumber))
+                {
+                    // Check Uniqueness
+                    var existingWithDl = await _staffRepository.GetByDrivingLicenseAsync(dlNumber);
+                    if (existingWithDl != null)
+                    {
+                        var staffFullName = $"{existingWithDl.FirstName} {existingWithDl.LastName}".Trim();
+                        throw new ValidationException($"Driving License Number already registered to another staff member: {existingWithDl.EmployeeId} ({staffFullName})");
+                    }
+                    staff.DrivingLicenseNumber = dlNumber;
+                }
+                else
+                {
+                    staff.DrivingLicenseNumber = null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+                {
+                    staff.DrivingLicenseExpiryDate = expParsed;
+                }
+                else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+                {
+                    staff.DrivingLicenseExpiryDate = expParsed2;
+                }
+                else
+                {
+                    staff.DrivingLicenseExpiryDate = null;
+                }
             }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            else
             {
-                staff.DrivingLicenseExpiryDate = expParsed2;
+                staff.DrivingLicenseNumber = null;
+                staff.DrivingLicenseExpiryDate = null;
             }
 
             // ==================================================================================
@@ -639,7 +726,8 @@ namespace CollegeManagement.API.Services.Implementations
                 }
 
                 // 2. Insert Staff domain record via EF Core inside this transaction
-                staff.IsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+                staff.IsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase);
                 await _staffRepository.AddAsync(staff);
 
                 var initialPhoto = dto.PhotoPath ?? dto.Photo;
@@ -677,9 +765,11 @@ namespace CollegeManagement.API.Services.Implementations
                 // 4b. Transactionally provision transport driver profile if role is Driver
                 bool effectiveIsDriver = (dto.IsDriver.HasValue && dto.IsDriver.Value)
                     || string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dto.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase));
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && (string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase) || string.Equals(resolvedDesignationName.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)));
                 if (dto.IsDriver.HasValue && !dto.IsDriver.Value)
                 {
                     effectiveIsDriver = false;
@@ -962,6 +1052,17 @@ namespace CollegeManagement.API.Services.Implementations
                 existingStaff.JoiningDate = dto.JoiningDate ?? dto.DateOfJoining!.Value;
             }
 
+            if (!string.IsNullOrWhiteSpace(dto.AccountNumber) || !string.IsNullOrWhiteSpace(dto.Ifsc ?? dto.IfscCode))
+            {
+                var existingBankForUpdate = DeserializeObject<StaffBankDetails>(existingStaff.BankDetailsJson);
+                ValidateBankDetails(
+                    !string.IsNullOrWhiteSpace(dto.BankName) ? dto.BankName : existingBankForUpdate?.BankName,
+                    dto.AccountNumber,
+                    dto.Ifsc ?? dto.IfscCode,
+                    null
+                );
+            }
+
             SyncFlattenedPropertiesToJson(existingStaff, dto.BankName, dto.AccountHolder ?? dto.AccountHolderName, dto.AccountNumber, dto.Ifsc ?? dto.IfscCode, dto.Branch, dto.AccountType, dto.BasicSalary,
                 dto.EmergencyName ?? dto.ContactName, dto.EmergencyRelationship ?? dto.Relationship, dto.EmergencyMobile, dto.EmergencyAlternate, dto.EmergencyAddress,
                 dto.HighestQualification, dto.University, dto.Specialization, dto.PassingYear, dto.Percentage,
@@ -980,23 +1081,58 @@ namespace CollegeManagement.API.Services.Implementations
             // Recalculate percentage
             existingStaff.ProfileCompletionPercentage = CalculateCompletionPercentage(existingStaff);
 
-            // Driver & Transport specific details: Use actual assigned role membership to identify drivers
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber))
-            {
-                existingStaff.DrivingLicenseNumber = dto.DrivingLicenseNumber.Trim();
-            }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null)
-            {
-                existingStaff.DrivingLicenseNumber = licVal.ToString()?.Trim();
-            }
+            // Transport Driver Conditional Logic (Update):
+            var effectiveDept = dto.Department ?? existingStaff.Department;
+            var effectiveDesig = dto.Designation ?? existingStaff.Designation;
+            bool isUpdTransport = (effectiveDept?.IndexOf("transport", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                  (dto.DepartmentId.HasValue && dto.DepartmentId.Value == 79) ||
+                                  (existingStaff.DepartmentId.HasValue && existingStaff.DepartmentId.Value == 79);
+            bool isUpdDriver = (effectiveDesig?.IndexOf("driver", StringComparison.OrdinalIgnoreCase) >= 0) ||
+                               string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase);
+            bool isDriverFinal = isUpdTransport && isUpdDriver;
 
-            if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+            existingStaff.IsDriver = isDriverFinal;
+            if (isDriverFinal)
             {
-                existingStaff.DrivingLicenseExpiryDate = expParsed;
+                string? dlNumber = !string.IsNullOrWhiteSpace(dto.DrivingLicenseNumber)
+                    ? dto.DrivingLicenseNumber.Trim()
+                    : (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseNumber", out var licVal) && licVal != null
+                        ? licVal.ToString()?.Trim()
+                        : null);
+
+                if (!string.IsNullOrWhiteSpace(dlNumber))
+                {
+                    // Check Uniqueness excluding self
+                    var existingWithDl = await _staffRepository.GetByDrivingLicenseAsync(dlNumber, existingStaff.Id);
+                    if (existingWithDl != null)
+                    {
+                        var staffFullName = $"{existingWithDl.FirstName} {existingWithDl.LastName}".Trim();
+                        throw new ValidationException($"Driving License Number already registered to another staff member: {existingWithDl.EmployeeId} ({staffFullName})");
+                    }
+                    existingStaff.DrivingLicenseNumber = dlNumber;
+                }
+                else
+                {
+                    existingStaff.DrivingLicenseNumber = null;
+                }
+
+                if (!string.IsNullOrWhiteSpace(dto.DrivingLicenseExpiryDate) && DateTime.TryParse(dto.DrivingLicenseExpiryDate, out var expParsed))
+                {
+                    existingStaff.DrivingLicenseExpiryDate = expParsed;
+                }
+                else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+                {
+                    existingStaff.DrivingLicenseExpiryDate = expParsed2;
+                }
+                else
+                {
+                    existingStaff.DrivingLicenseExpiryDate = null;
+                }
             }
-            else if (dto.DepartmentSpecific != null && dto.DepartmentSpecific.TryGetValue("licenseExpiry", out var expVal) && expVal != null && DateTime.TryParse(expVal.ToString(), out var expParsed2))
+            else
             {
-                existingStaff.DrivingLicenseExpiryDate = expParsed2;
+                existingStaff.DrivingLicenseNumber = null;
+                existingStaff.DrivingLicenseExpiryDate = null;
             }
 
             // Role resolution & validation for update
@@ -1073,9 +1209,11 @@ namespace CollegeManagement.API.Services.Implementations
 
                 bool isDriver = (dto.IsDriver.HasValue && dto.IsDriver.Value)
                     || string.Equals(dto.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(dto.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(effectiveRoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(effectiveRoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)
                     || (!string.IsNullOrWhiteSpace(deptName) && deptName.Contains("Transport", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(resolvedDesignationName) && resolvedDesignationName.Contains("Driver", StringComparison.OrdinalIgnoreCase))
-                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase));
+                    || (!string.IsNullOrWhiteSpace(resolvedDesignationName) && (string.Equals(resolvedDesignationName.Trim(), "Driver", StringComparison.OrdinalIgnoreCase) || string.Equals(resolvedDesignationName.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase)));
 
                 if (dto.IsDriver.HasValue && !dto.IsDriver.Value)
                 {
@@ -1311,6 +1449,17 @@ namespace CollegeManagement.API.Services.Implementations
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
+            if (dto.Bank != null)
+            {
+                var existingBank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson);
+                ValidateBankDetails(
+                    !string.IsNullOrWhiteSpace(dto.Bank.BankName) ? dto.Bank.BankName : existingBank?.BankName,
+                    dto.Bank.AccountNumber,
+                    dto.Bank.IfscCode,
+                    !string.IsNullOrWhiteSpace(dto.Bank.UanNumber) ? dto.Bank.UanNumber : dto.Bank.PfNumber
+                );
+            }
+
             ApplySectionUpdate(staff, dto);
 
             var photoDocItem = dto.Documents?.FirstOrDefault(d => string.Equals(d.type, "Photo", StringComparison.OrdinalIgnoreCase) || string.Equals(d.name, "Photo", StringComparison.OrdinalIgnoreCase));
@@ -1344,16 +1493,55 @@ namespace CollegeManagement.API.Services.Implementations
             return await SaveProfileDraftAsync(staff.Id, dto);
         }
 
+        private static bool HasOfferLetterBeenIssued(Staff staff) =>
+            staff.ApprovedAt.HasValue ||
+            string.Equals(staff.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase);
+
         public async Task<StaffProfileFullDto> SubmitProfileAsync(int id)
         {
             var staff = await _staffRepository.GetByIdAsync(id);
             if (staff == null)
                 throw new NotFoundException($"Staff record with ID {id} not found.");
 
-            var percentage = CalculateCompletionPercentage(staff);
-            if (percentage < 50)
+            var missingFields = GetMissingMandatoryFields(staff);
+            if (missingFields.Count > 0)
             {
-                throw new ValidationException($"Profile completion must be at least 50% to submit. Current completion is {percentage}%.");
+                throw new ValidationException($"All mandatory profile fields must be completed before submission. Missing fields: {string.Join(", ", missingFields)}");
+            }
+
+            var percentage = CalculateCompletionPercentage(staff);
+
+            // Offer letter generation & email dispatch is strictly one-time per staff member.
+            // Subsequent profile updates after onboarding completion preserve Completed/Approved status without regenerating or re-sending.
+            if (HasOfferLetterBeenIssued(staff))
+            {
+                if (!string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    staff.ProfileStatus = "Completed";
+                }
+                if (!staff.SubmittedAt.HasValue)
+                {
+                    staff.SubmittedAt = DateTime.UtcNow;
+                }
+                if (!staff.ApprovedAt.HasValue)
+                {
+                    staff.ApprovedAt = DateTime.UtcNow;
+                }
+                staff.ProfileCompletionPercentage = Math.Max(percentage, staff.ProfileCompletionPercentage);
+                staff.ProfileLinkToken = null;
+                await _staffRepository.UpdateAsync(staff);
+                await EnsureStaffPayrollStructureProvisionedAsync(staff);
+
+                try
+                {
+                    await _auditLogger.LogAsync("UpdateSubmittedProfile", "StaffOnboarding", staff.EmployeeId ?? staff.Id.ToString(), "Info", "Success", "Staff updated profile details after offer letter issuance. Skipped duplicate offer letter generation and email.");
+                }
+                catch { }
+
+                var updatedDto = MapToFullProfileDto(staff);
+                updatedDto.OfferLetterDispatchedNow = false;
+                return updatedDto;
             }
 
             var workflowConfig = await GetOfferLetterWorkflowConfigAsync();
@@ -1395,12 +1583,12 @@ namespace CollegeManagement.API.Services.Implementations
                 }
                 catch { }
 
-                return MapToFullProfileDto(staff);
+                var pendingDto = MapToFullProfileDto(staff);
+                pendingDto.OfferLetterDispatchedNow = false;
+                return pendingDto;
             }
 
-            // Workflow 1: Automatic Offer Letter Generation
-            bool alreadyCompleted = string.Equals(staff.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) && staff.SubmittedAt.HasValue;
-
+            // Workflow 1: Automatic Offer Letter Generation (first completion only)
             staff.ProfileStatus = "Completed";
             if (!staff.SubmittedAt.HasValue)
             {
@@ -1415,57 +1603,53 @@ namespace CollegeManagement.API.Services.Implementations
             await _staffRepository.UpdateAsync(staff);
             await EnsureStaffPayrollStructureProvisionedAsync(staff);
 
-            // Generate Offer Letter PDF and dispatch via Email (idempotent: skip duplicate generation if already completed)
-            if (!alreadyCompleted)
+            try
             {
-                try
+                var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                if (!string.IsNullOrWhiteSpace(staff.Email))
                 {
-                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
-                    if (!string.IsNullOrWhiteSpace(staff.Email))
+                    string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+                    string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                    subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
+
+                    string body = workflowConfig.EmailBody ?? $@"
+                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                            <h2>Welcome to Pirnav Educational Society</h2>
+                            <p>Dear {staffFullName},</p>
+                            <p>Congratulations! Your faculty profile onboarding has been submitted and verified.</p>
+                            <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
+                            <p>Your full access to the faculty portal and academic management modules is now active.</p>
+                            <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                        </div>";
+                    body = body.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
+
+                    await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+
+                    if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
                     {
-                        string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
-                        string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                        subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
-
-                        string body = workflowConfig.EmailBody ?? $@"
-                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
-                                <h2>Welcome to Pirnav Educational Society</h2>
-                                <p>Dear {staffFullName},</p>
-                                <p>Congratulations! Your faculty profile onboarding has been submitted and verified.</p>
-                                <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
-                                <p>Your full access to the faculty portal and academic management modules is now active.</p>
-                                <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
-                            </div>";
-                        body = body.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
-
-                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
-
-                        if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
+                        try
                         {
-                            try
-                            {
-                                await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
-                            }
-                            catch { }
+                            await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
                         }
-
-                        _logger.LogInformation("Offer Letter email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
+                        catch { }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Notice: Offer Letter email delivery notice for {Email}: {Msg}", staff.Email, ex.Message);
-                }
 
-                // Staff Portal Notification via existing notification infrastructure
-                try
-                {
-                    await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Generated", "Your official offer letter has been generated and sent to your registered email.", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+                    _logger.LogInformation("Offer Letter email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to deliver offer letter generated notification to staff #{StaffId}", staff.Id);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Notice: Offer Letter email delivery notice for {Email}: {Msg}", staff.Email, ex.Message);
+            }
+
+            // Staff Portal Notification via existing notification infrastructure
+            try
+            {
+                await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Generated", "Your official offer letter has been generated and sent to your registered email.", "OfferLetter", staff.Id, "/faculty-dashboard/profile");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to deliver offer letter generated notification to staff #{StaffId}", staff.Id);
             }
 
             try
@@ -1474,7 +1658,9 @@ namespace CollegeManagement.API.Services.Implementations
             }
             catch { }
 
-            return MapToFullProfileDto(staff);
+            var firstIssueDto = MapToFullProfileDto(staff);
+            firstIssueDto.OfferLetterDispatchedNow = true;
+            return firstIssueDto;
         }
 
         public async Task<StaffProfileFullDto> SubmitProfileByTokenAsync(string token)
@@ -1494,36 +1680,50 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (string.Equals(dto.Action, "Approve", StringComparison.OrdinalIgnoreCase))
             {
-                staff.ProfileStatus = "Completed";
-                staff.ApprovedAt = DateTime.UtcNow;
+                bool alreadyIssued = HasOfferLetterBeenIssued(staff);
+                if (!string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+                {
+                    staff.ProfileStatus = "Completed";
+                }
+                if (!staff.SubmittedAt.HasValue)
+                {
+                    staff.SubmittedAt = DateTime.UtcNow;
+                }
+                if (!staff.ApprovedAt.HasValue)
+                {
+                    staff.ApprovedAt = DateTime.UtcNow;
+                }
                 staff.CorrectionNotes = null;
                 staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
                 await _staffRepository.UpdateAsync(staff);
                 await EnsureStaffPayrollStructureProvisionedAsync(staff);
 
-                // Dispatch Offer Letter PDF via Email
-                try
+                // Dispatch Offer Letter PDF via Email once only
+                if (!alreadyIssued)
                 {
-                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
-                    if (!string.IsNullOrWhiteSpace(staff.Email))
+                    try
                     {
-                        string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                        string body = $@"
-                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
-                                <h2>Welcome to Pirnav Educational Society</h2>
-                                <p>Dear {staff.FirstName} {staff.LastName},</p>
-                                <p>Congratulations! Your faculty profile has been verified and approved by Human Resources.</p>
-                                <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
-                                <p>Your full access to the faculty portal and academic management modules is now active.</p>
-                                <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
-                            </div>";
+                        var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                        if (!string.IsNullOrWhiteSpace(staff.Email))
+                        {
+                            string subject = $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                            string body = $@"
+                                <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b;'>
+                                    <h2>Welcome to Pirnav Educational Society</h2>
+                                    <p>Dear {staff.FirstName} {staff.LastName},</p>
+                                    <p>Congratulations! Your faculty profile has been verified and approved by Human Resources.</p>
+                                    <p>Please find attached your official <strong>Letter of Appointment & Offer Letter</strong>.</p>
+                                    <p>Your full access to the faculty portal and academic management modules is now active.</p>
+                                    <p>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                                </div>";
 
-                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+                            await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+                        }
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to generate or email offer letter for approved staff ID {StaffId}", staff.Id);
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to generate or email offer letter for approved staff ID {StaffId}", staff.Id);
+                    }
                 }
             }
             else if (string.Equals(dto.Action, "RequestCorrection", StringComparison.OrdinalIgnoreCase))
@@ -2343,10 +2543,43 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateOfferLetterPdfAsync(int id)
         {
             var profile = await GetStaffProfileFullAsync(id);
+            var staff = await _staffRepository.GetByIdAsync(id);
+
+            // 1. Check if permanent file already exists on server disk
+            string? existingPath = staff?.OfferLetterPath;
+            if (!string.IsNullOrWhiteSpace(existingPath))
+            {
+                var checkStorageRoot = _configuration?["OfferLetterStorage:StorageRoot"]
+                    ?? Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "PrivateStorage", "OfferLetters");
+                var candidatePerm = Path.Combine(checkStorageRoot, existingPath.TrimStart('/', '\\'));
+                var checkWebRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                var candidateWeb = Path.Combine(checkWebRoot, existingPath.TrimStart('/', '\\'));
+
+                if (File.Exists(candidatePerm))
+                {
+                    var fileBytes = await File.ReadAllBytesAsync(candidatePerm);
+                    return (fileBytes, "application/pdf", Path.GetFileName(candidatePerm));
+                }
+                if (File.Exists(candidateWeb))
+                {
+                    var fileBytes = await File.ReadAllBytesAsync(candidateWeb);
+                    return (fileBytes, "application/pdf", Path.GetFileName(candidateWeb));
+                }
+            }
+
+            if (staff != null)
+            {
+                await EnsureStaffPayrollStructureProvisionedAsync(staff);
+            }
             var payroll = await GetStaffPayrollDetailsAsync(id);
 
-            var numRes = await _numberSeriesService.GenerateNextNumberAsync("OFFER_LETTER_NO", campusId: profile.CampusId);
-            string offerNo = numRes?.GeneratedNumber ?? $"PC-OL/{DateTime.UtcNow.Year}/{profile.EmployeeId}";
+            // 2. Reuse already allocated OfferLetterNumber, or generate atomically only if not yet assigned
+            string offerNo = staff?.OfferLetterNumber ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(offerNo))
+            {
+                var numRes = await _numberSeriesService.GenerateNextNumberAsync("OFFER_LETTER_NO", campusId: profile.CampusId);
+                offerNo = numRes?.GeneratedNumber ?? $"PC-OL/{DateTime.UtcNow.Year}/{profile.EmployeeId}";
+            }
 
             string staffFullName = string.IsNullOrWhiteSpace(profile.MiddleName)
                 ? $"{profile.FirstName} {profile.LastName}".Trim()
@@ -2461,6 +2694,47 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
+            // Resolve authentic staff salary components without fake mock fallbacks
+            decimal? basicSalary = payroll?.BasicSalary;
+            decimal? grossSalary = payroll?.GrossSalary;
+
+            if (staff != null && !string.IsNullOrWhiteSpace(staff.BankDetailsJson))
+            {
+                try
+                {
+                    using var bankDoc = System.Text.Json.JsonDocument.Parse(staff.BankDetailsJson);
+                    var root = bankDoc.RootElement;
+                    if ((!basicSalary.HasValue || basicSalary.Value == 0) && root.TryGetProperty("BasicSalary", out var bsProp))
+                    {
+                        if (bsProp.TryGetDecimal(out var bsVal)) basicSalary = bsVal;
+                        else if (decimal.TryParse(bsProp.GetString(), out var bsParsed)) basicSalary = bsParsed;
+                    }
+                    if ((!grossSalary.HasValue || grossSalary.Value == 0) && root.TryGetProperty("GrossSalary", out var gsProp))
+                    {
+                        if (gsProp.TryGetDecimal(out var gsVal)) grossSalary = gsVal;
+                        else if (decimal.TryParse(gsProp.GetString(), out var gsParsed)) grossSalary = gsParsed;
+                    }
+                    if ((!grossSalary.HasValue || grossSalary.Value == 0) && root.TryGetProperty("MonthlyGross", out var mgProp))
+                    {
+                        if (mgProp.TryGetDecimal(out var mgVal)) grossSalary = mgVal;
+                        else if (decimal.TryParse(mgProp.GetString(), out var mgParsed)) grossSalary = mgParsed;
+                    }
+                }
+                catch { }
+            }
+
+            string basicSalaryFormatted = basicSalary.HasValue && basicSalary.Value > 0
+                ? $"₹{basicSalary.Value:N0}"
+                : "As per institutional pay scale";
+
+            string grossSalaryFormatted = grossSalary.HasValue && grossSalary.Value > 0
+                ? $"₹{grossSalary.Value:N0}"
+                : "As per institutional pay scale";
+
+            string annualCtcFormatted = grossSalary.HasValue && grossSalary.Value > 0
+                ? $"₹{(grossSalary.Value * 12):N0}"
+                : "As per institutional pay scale";
+
             // Replace dynamic tokens in opening statement and terms
             string ResolveTokens(string input)
             {
@@ -2474,9 +2748,11 @@ namespace CollegeManagement.API.Services.Implementations
                     .Replace("{{BoardName}}", boardName)
                     .Replace("{{InstitutionName}}", institutionName)
                     .Replace("{{ReportingAuthority}}", reportingAuthority)
-                    .Replace("{{BasicSalary}}", payroll?.BasicSalary.HasValue == true ? $"₹{payroll.BasicSalary.Value:N0}" : "₹45,000")
-                    .Replace("{{GrossSalary}}", payroll?.GrossSalary.HasValue == true ? $"₹{payroll.GrossSalary.Value:N0}" : "₹68,500")
-                    .Replace("{{AnnualCTC}}", payroll?.GrossSalary.HasValue == true ? $"₹{(payroll.GrossSalary.Value * 12):N0}" : "₹8,22,000")
+                    .Replace("{{BasicSalary}}", basicSalaryFormatted)
+                    .Replace("{{GrossSalary}}", grossSalaryFormatted)
+                    .Replace("{{MonthlyGross}}", grossSalaryFormatted)
+                    .Replace("{{Salary}}", grossSalaryFormatted)
+                    .Replace("{{AnnualCTC}}", annualCtcFormatted)
                     .Replace("{{DateOfJoining}}", (profile.JoiningDate > DateTime.MinValue ? profile.JoiningDate : DateTime.UtcNow.Date).ToString("dd MMM yyyy"));
             }
 
@@ -2498,8 +2774,8 @@ namespace CollegeManagement.API.Services.Implementations
                 BoardName = boardName,
                 RoleCategory = roleCategory,
                 DateOfJoining = profile.JoiningDate > DateTime.MinValue ? profile.JoiningDate : DateTime.UtcNow.Date,
-                BasicSalary = payroll?.BasicSalary,
-                GrossSalary = payroll?.GrossSalary,
+                BasicSalary = basicSalary,
+                GrossSalary = grossSalary,
                 ReportingAuthority = reportingAuthority,
                 AuthorizedSignatoryName = signatoryName,
                 AuthorizedSignatoryRole = signatoryRole,
@@ -2508,7 +2784,44 @@ namespace CollegeManagement.API.Services.Implementations
 
             var doc = new CollegeManagement.API.Services.Exports.StaffOfferLetterDocument(model);
             byte[] bytes = doc.GeneratePdf();
-            return (bytes, "application/pdf", $"Offer_Letter_{profile.EmployeeId}.pdf");
+
+            // Persist generated Offer Letter PDF to server permanent storage
+            var storageRoot = _configuration?["OfferLetterStorage:StorageRoot"]
+                ?? Path.Combine(Directory.GetCurrentDirectory(), "App_Data", "PrivateStorage", "OfferLetters");
+            var now = DateTime.UtcNow;
+            var relativeFolder = Path.Combine("offer-letters", now.ToString("yyyy"), now.ToString("MM"));
+            var permFolder = Path.Combine(storageRoot, relativeFolder);
+            if (!Directory.Exists(permFolder)) Directory.CreateDirectory(permFolder);
+
+            var safeEmpId = string.Concat((profile.EmployeeId ?? $"staff_{id}").Split(Path.GetInvalidFileNameChars()));
+            var fileName = $"OfferLetter_{safeEmpId}_{id}.pdf";
+            var permPhysicalPath = Path.Combine(permFolder, fileName);
+            var relativePath = Path.Combine(relativeFolder, fileName).Replace('\\', '/');
+
+            // Also mirror to webroot for public download compatibility
+            var webRoot = _environment?.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+            var webFolder = Path.Combine(webRoot, "uploads", "offer-letters");
+            if (!Directory.Exists(webFolder)) Directory.CreateDirectory(webFolder);
+            var webPhysicalPath = Path.Combine(webFolder, fileName);
+
+            try
+            {
+                await File.WriteAllBytesAsync(permPhysicalPath, bytes);
+                try { File.Copy(permPhysicalPath, webPhysicalPath, overwrite: true); } catch { }
+
+                await _staffRepository.UpdateOfferLetterInfoAsync(id, relativePath, offerNo);
+                if (staff != null)
+                {
+                    staff.OfferLetterPath = relativePath;
+                    staff.OfferLetterNumber = offerNo;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist offer letter PDF file to disk for staff ID {StaffId}", id);
+            }
+
+            return (bytes, "application/pdf", fileName);
         }
 
         public async Task<StaffExperienceSummaryDto> GetStaffExperienceSummaryAsync(int id)
@@ -2959,7 +3272,13 @@ namespace CollegeManagement.API.Services.Implementations
                 dto.Ifsc = bank.IfscCode;
                 dto.Branch = bank.Branch;
                 dto.AccountType = bank.AccountType;
+                dto.PfNumber = !string.IsNullOrWhiteSpace(bank.PfNumber) ? bank.PfNumber : bank.UanNumber;
+                dto.UanNumber = !string.IsNullOrWhiteSpace(bank.UanNumber) ? bank.UanNumber : bank.PfNumber;
                 dto.BasicSalary = bank.BasicSalary;
+                if (string.IsNullOrWhiteSpace(dto.PanNumber) && !string.IsNullOrWhiteSpace(bank.PanNumber))
+                {
+                    dto.PanNumber = bank.PanNumber;
+                }
             }
 
             // Emergency Contact
@@ -3020,6 +3339,8 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
+            var computedPct = CalculateCompletionPercentage(staff);
+            dto.ProfileCompletionPercentage = computedPct;
             return dto;
         }
 
@@ -3072,19 +3393,32 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            if (dto.Experience != null && dto.Experience.Any())
+            if (dto.Experience != null && (dto.Experience.Any() || string.Equals(dto.SectionName, "Experience", StringComparison.OrdinalIgnoreCase)))
             {
                 staff.ExperienceJson = JsonSerializer.Serialize(dto.Experience);
                 var total = dto.Experience.Sum(e => e.TotalYears);
-                if (total > 0) staff.Experience = total;
+                staff.Experience = total;
             }
 
             if (dto.Bank != null)
             {
-                staff.BankDetailsJson = JsonSerializer.Serialize(dto.Bank);
+                var bank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson) ?? new StaffBankDetails();
+                if (dto.Bank.BankName != null) bank.BankName = dto.Bank.BankName.Trim();
+                if (dto.Bank.AccountHolderName != null) bank.AccountHolderName = dto.Bank.AccountHolderName.Trim();
+                if (dto.Bank.AccountNumber != null) bank.AccountNumber = dto.Bank.AccountNumber.Trim();
+                if (dto.Bank.IfscCode != null) bank.IfscCode = dto.Bank.IfscCode.Trim().ToUpperInvariant();
+                if (dto.Bank.Branch != null) bank.Branch = dto.Bank.Branch.Trim();
+                if (dto.Bank.AccountType != null) bank.AccountType = dto.Bank.AccountType.Trim();
+                if (dto.Bank.PanNumber != null) bank.PanNumber = dto.Bank.PanNumber.Trim().ToUpperInvariant();
+                if (dto.Bank.PfNumber != null) bank.PfNumber = dto.Bank.PfNumber.Trim();
+                if (dto.Bank.UanNumber != null) bank.UanNumber = dto.Bank.UanNumber.Trim();
+                if (string.IsNullOrWhiteSpace(bank.PfNumber) && !string.IsNullOrWhiteSpace(bank.UanNumber)) bank.PfNumber = bank.UanNumber;
+                if (string.IsNullOrWhiteSpace(bank.UanNumber) && !string.IsNullOrWhiteSpace(bank.PfNumber)) bank.UanNumber = bank.PfNumber;
+                if (dto.Bank.BasicSalary.HasValue) bank.BasicSalary = dto.Bank.BasicSalary.Value;
+                staff.BankDetailsJson = JsonSerializer.Serialize(bank);
                 if (!string.IsNullOrWhiteSpace(dto.Bank.PanNumber))
                 {
-                    staff.PanNumber = dto.Bank.PanNumber.Trim();
+                    staff.PanNumber = dto.Bank.PanNumber.Trim().ToUpperInvariant();
                 }
             }
 
@@ -3093,9 +3427,12 @@ namespace CollegeManagement.API.Services.Implementations
                 staff.EmergencyContactJson = JsonSerializer.Serialize(dto.Emergency);
             }
 
-            if (dto.Documents != null && dto.Documents.Any())
+            if (dto.Documents != null && (dto.Documents.Any() || string.Equals(dto.SectionName, "Documents", StringComparison.OrdinalIgnoreCase)))
             {
-                staff.DocumentsJson = JsonSerializer.Serialize(dto.Documents);
+                var cleanedDocs = dto.Documents
+                    .Where(d => d != null && (!string.IsNullOrWhiteSpace(d.type) || !string.IsNullOrWhiteSpace(d.name) || !string.IsNullOrWhiteSpace(d.url)))
+                    .ToList();
+                staff.DocumentsJson = JsonSerializer.Serialize(cleanedDocs);
             }
 
             if (dto.Employment != null)
@@ -3249,15 +3586,22 @@ namespace CollegeManagement.API.Services.Implementations
                 void AddOrUpdateDoc(string type, string? fileName)
                 {
                     if (string.IsNullOrWhiteSpace(fileName)) return;
+                    var trimmed = fileName.Trim();
+                    string resolvedUrl = trimmed.StartsWith("/", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                        || trimmed.StartsWith("blob:", StringComparison.OrdinalIgnoreCase)
+                        ? trimmed
+                        : $"/uploads/staff-documents/{trimmed}";
                     docList.RemoveAll(d => string.Equals(d.type, type, StringComparison.OrdinalIgnoreCase));
                     docList.Add(new StaffDocumentPayloadItem
                     {
                         id = System.Guid.NewGuid().ToString(),
                         type = type,
-                        name = fileName,
+                        name = trimmed,
                         size = "Unknown",
-                        url = $"/uploads/staff-documents/{fileName}",
-                        format = Path.GetExtension(fileName).TrimStart('.').ToUpper()
+                        url = resolvedUrl,
+                        format = Path.GetExtension(trimmed).TrimStart('.').ToUpper()
                     });
                 }
 
@@ -3269,7 +3613,10 @@ namespace CollegeManagement.API.Services.Implementations
                 AddOrUpdateDoc("BankProof", bankProof);
                 AddOrUpdateDoc("DrivingLicence", drivingLicence);
                 AddOrUpdateDoc("Other", otherDocs);
-                AddOrUpdateDoc("Photo", photo);
+                if (!string.IsNullOrWhiteSpace(photo) && !photo.Trim().StartsWith("/api/", StringComparison.OrdinalIgnoreCase))
+                {
+                    AddOrUpdateDoc("Photo", photo);
+                }
                 AddOrUpdateDoc("Signature", signature);
 
                 // Dynamic documents from frontend map
@@ -3404,74 +3751,143 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
+        private static readonly Dictionary<string, (int MinLen, int MaxLen, string[] IfscPrefixes)> BankValidationRules =
+            new(StringComparer.OrdinalIgnoreCase)
+            {
+                ["state bank of india"] = (11, 17, new[] { "SBIN0" }),
+                ["sbi"] = (11, 17, new[] { "SBIN0" }),
+                ["hdfc bank"] = (14, 14, new[] { "HDFC0" }),
+                ["hdfc"] = (14, 14, new[] { "HDFC0" }),
+                ["icici bank"] = (12, 12, new[] { "ICIC0" }),
+                ["icici"] = (12, 12, new[] { "ICIC0" }),
+                ["punjab national bank"] = (16, 16, new[] { "PUNB0" }),
+                ["pnb"] = (16, 16, new[] { "PUNB0" }),
+                ["bank of baroda"] = (14, 14, new[] { "BARB0" }),
+                ["bob"] = (14, 14, new[] { "BARB0" }),
+                ["canara bank"] = (13, 13, new[] { "CNRB0" }),
+                ["union bank of india"] = (15, 15, new[] { "UBIN0" }),
+                ["axis bank"] = (15, 15, new[] { "UTIB0" }),
+                ["kotak mahindra bank"] = (10, 14, new[] { "KKBK0" }),
+                ["indusind bank"] = (12, 12, new[] { "INDB0" }),
+                ["bank of india"] = (15, 15, new[] { "BKID0" }),
+                ["central bank of india"] = (10, 10, new[] { "CBIN0" }),
+                ["indian bank"] = (9, 12, new[] { "IDIB0" }),
+                ["indian overseas bank"] = (15, 15, new[] { "IOBA0" }),
+                ["uco bank"] = (14, 14, new[] { "UCBA0" }),
+                ["bank of maharashtra"] = (11, 11, new[] { "MAHB0" }),
+                ["punjab & sind bank"] = (14, 14, new[] { "PSIB0" }),
+                ["federal bank"] = (14, 14, new[] { "FDRL0" }),
+                ["idbi bank"] = (12, 16, new[] { "IBKL0" }),
+                ["yes bank"] = (15, 15, new[] { "YESB0" }),
+                ["south indian bank"] = (16, 16, new[] { "SIBL0" }),
+                ["karur vysya bank"] = (16, 16, new[] { "KVBL0" }),
+                ["city union bank"] = (15, 15, new[] { "CIUB0" }),
+                ["bandhan bank"] = (14, 14, new[] { "BDBL0" }),
+                ["rbl bank"] = (12, 12, new[] { "RATN0" }),
+                ["au small finance bank"] = (16, 16, new[] { "AUBL0" }),
+                ["equitas small finance bank"] = (12, 12, new[] { "ESFB0" }),
+                ["ujjivan small finance bank"] = (16, 16, new[] { "UJVN0" }),
+                ["jana small finance bank"] = (14, 16, new[] { "JSFB0" }),
+                ["andhra pragathi grameena bank"] = (11, 11, new[] { "APGB0" }),
+                ["chaitanya godavari grameena bank"] = (11, 15, new[] { "ANDC0", "CGGB0", "UBIN0" }),
+                ["telangana grameena bank"] = (11, 11, new[] { "SBIN0", "TGB00", "TGBX0", "IDIB0" }),
+                ["andhra pradesh grameena vikas bank"] = (11, 11, new[] { "APGV0", "SBIN0" })
+            };
+
+        private static void ValidateBankDetails(string? bankName, string? accountNumber, string? ifscCode, string? uanNumber)
+        {
+            var bankKey = (bankName ?? string.Empty).Trim();
+            var hasRule = BankValidationRules.TryGetValue(bankKey, out var rule);
+            int minLen = hasRule ? rule.MinLen : 9;
+            int maxLen = hasRule ? rule.MaxLen : 18;
+
+            if (!string.IsNullOrWhiteSpace(accountNumber))
+            {
+                var acc = accountNumber.Trim();
+                if (!Regex.IsMatch(acc, @"^\d+$"))
+                    throw new ValidationException("Account number must contain numeric digits only.");
+                if (Regex.IsMatch(acc, @"^(\d)\1+$"))
+                    throw new ValidationException("Please enter a valid bank account number.");
+                if (acc.Length < minLen || acc.Length > maxLen)
+                {
+                    var lenLabel = minLen == maxLen ? $"{minLen}" : $"{minLen}-{maxLen}";
+                    var bankLabel = string.IsNullOrWhiteSpace(bankKey) ? "Bank" : bankKey;
+                    throw new ValidationException($"{bankLabel} account number must be {lenLabel} digits.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(ifscCode))
+            {
+                var ifsc = ifscCode.Trim().ToUpperInvariant();
+                if (!Regex.IsMatch(ifsc, @"^[A-Z]{4}0[A-Z0-9]{6}$"))
+                    throw new ValidationException("IFSC code must be 11 characters (4 letters, '0', and 6 alphanumeric characters).");
+
+                if (hasRule && rule.IfscPrefixes.Length > 0 &&
+                    !rule.IfscPrefixes.Any(p => ifsc.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new ValidationException($"IFSC code must start with {string.Join(" or ", rule.IfscPrefixes)} for {bankKey}.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(uanNumber))
+            {
+                var uan = uanNumber.Trim();
+                if (!Regex.IsMatch(uan, @"^\d{12}$") || Regex.IsMatch(uan, @"^(\d)\1{11}$"))
+                    throw new ValidationException("PF / UAN number must be a valid 12-digit number.");
+            }
+        }
+
+        public static List<string> GetMissingMandatoryFields(Staff staff)
+        {
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(staff.FirstName)) missing.Add("First Name");
+            if (string.IsNullOrWhiteSpace(staff.LastName)) missing.Add("Last Name");
+            if (string.IsNullOrWhiteSpace(staff.Gender)) missing.Add("Gender");
+            if (staff.DateOfBirth == default || staff.DateOfBirth == DateTime.MinValue || staff.DateOfBirth.Year < 1920)
+                missing.Add("Date of Birth");
+            if (string.IsNullOrWhiteSpace(staff.Mobile)) missing.Add("Mobile Number");
+            if (string.IsNullOrWhiteSpace(staff.Email)) missing.Add("Email Address");
+            if (string.IsNullOrWhiteSpace(staff.Aadhaar) && string.IsNullOrWhiteSpace(staff.PanNumber) && string.IsNullOrWhiteSpace(staff.FatherOrHusbandName))
+                missing.Add("Aadhaar / National ID");
+
+            if (string.IsNullOrWhiteSpace(staff.CurrentAddress) && string.IsNullOrWhiteSpace(staff.PermanentAddress))
+                missing.Add("Address (Current / House / Street)");
+            if (string.IsNullOrWhiteSpace(staff.City)) missing.Add("City");
+            if (string.IsNullOrWhiteSpace(staff.State)) missing.Add("State");
+            if (string.IsNullOrWhiteSpace(staff.Pincode)) missing.Add("Pincode");
+
+            var edu = DeserializeList<StaffEducationItem>(staff.EducationJson);
+            if (edu.Count == 0 && string.IsNullOrWhiteSpace(staff.Qualification))
+                missing.Add("Educational Qualifications");
+
+            var bank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson);
+            if (bank == null || string.IsNullOrWhiteSpace(bank.AccountNumber) || string.IsNullOrWhiteSpace(bank.IfscCode))
+                missing.Add("Bank Details (Account Number & IFSC)");
+
+            var emergency = DeserializeObject<StaffEmergencyContact>(staff.EmergencyContactJson);
+            if (emergency == null || string.IsNullOrWhiteSpace(emergency.ContactName) || string.IsNullOrWhiteSpace(emergency.Mobile))
+                missing.Add("Emergency Contact");
+
+            var docs = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson)
+                .Where(d => d != null && (!string.IsNullOrWhiteSpace(d.type) || !string.IsNullOrWhiteSpace(d.name) || !string.IsNullOrWhiteSpace(d.url)))
+                .ToList();
+            if (docs.Count == 0 && string.IsNullOrWhiteSpace(staff.PhotoPath))
+                missing.Add("Identity Document / Photo");
+
+            if (staff.IsDriver && string.IsNullOrWhiteSpace(staff.DrivingLicenseNumber))
+                missing.Add("Driving License Number");
+
+            return missing;
+        }
+
         private static int CalculateCompletionPercentage(Staff staff)
         {
-            int score = 0;
-
-            // 1. Basic & Personal Details (20%)
-            if (!string.IsNullOrWhiteSpace(staff.FirstName) && !string.IsNullOrWhiteSpace(staff.LastName) && !string.IsNullOrWhiteSpace(staff.Gender) && staff.DateOfBirth > DateTime.MinValue)
-            {
-                score += 15;
-            }
-            if (!string.IsNullOrWhiteSpace(staff.Aadhaar) || !string.IsNullOrWhiteSpace(staff.PanNumber) || !string.IsNullOrWhiteSpace(staff.FatherOrHusbandName))
-            {
-                score += 5;
-            }
-
-            // 2. Contact & Address (15%)
-            if (!string.IsNullOrWhiteSpace(staff.CurrentAddress) || !string.IsNullOrWhiteSpace(staff.PermanentAddress))
-            {
-                score += 8;
-            }
-            if (!string.IsNullOrWhiteSpace(staff.City) && !string.IsNullOrWhiteSpace(staff.State) && !string.IsNullOrWhiteSpace(staff.Pincode))
-            {
-                score += 7;
-            }
-
-            // 3. Educational Qualifications (15%)
-            var edu = DeserializeList<StaffEducationItem>(staff.EducationJson);
-            if (edu.Count > 0 || !string.IsNullOrWhiteSpace(staff.Qualification))
-            {
-                score += 15;
-            }
-
-            // 4. Experience (10%)
-            var exp = DeserializeList<StaffExperienceItem>(staff.ExperienceJson);
-            if (exp.Count > 0 || staff.Experience > 0)
-            {
-                score += 10;
-            }
-            else
-            {
-                score += 10; // Treat 0 exp as Fresher filled
-            }
-
-            // 5. Documents Upload (15%)
-            var docs = DeserializeList<StaffDocumentPayloadItem>(staff.DocumentsJson);
-            if (docs.Count >= 2)
-            {
-                score += 15;
-            }
-            else if (docs.Count == 1)
-            {
-                score += 8;
-            }
-
-            // 6. Bank Details (15%)
-            var bank = DeserializeObject<StaffBankDetails>(staff.BankDetailsJson);
-            if (bank != null && !string.IsNullOrWhiteSpace(bank.AccountNumber) && !string.IsNullOrWhiteSpace(bank.IfscCode))
-            {
-                score += 15;
-            }
-
-            // 7. Emergency Contact (10%)
-            var emergency = DeserializeObject<StaffEmergencyContact>(staff.EmergencyContactJson);
-            if (emergency != null && !string.IsNullOrWhiteSpace(emergency.ContactName) && !string.IsNullOrWhiteSpace(emergency.Mobile))
-            {
-                score += 10;
-            }
-
-            return Math.Min(100, Math.Max(30, score));
+            var missing = GetMissingMandatoryFields(staff);
+            const int totalChecklist = 13;
+            int completed = Math.Max(0, totalChecklist - missing.Count);
+            if (missing.Count == 0) return 100;
+            int pct = (int)Math.Round((double)completed / totalChecklist * 100.0);
+            return Math.Min(95, Math.Max(10, pct));
         }
 
         public async Task<StaffPayrollDetailsDto?> GetStaffPayrollDetailsAsync(int id)
@@ -3853,7 +4269,8 @@ namespace CollegeManagement.API.Services.Implementations
                 Email = s.Email,
                 Mobile = s.Mobile,
                 Status = s.Status,
-                HasOfferLetter = string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
+                HasOfferLetter = !string.IsNullOrWhiteSpace(s.OfferLetterPath) || string.Equals(s.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase) || string.Equals(s.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase),
+                OfferLetterPath = s.OfferLetterPath
             }).ToList();
         }
 
@@ -3883,8 +4300,19 @@ namespace CollegeManagement.API.Services.Implementations
             var staff = await _staffRepository.GetByIdAsync(staffId);
             if (staff == null) throw new NotFoundException($"Staff #{staffId} not found.");
 
-            staff.ProfileStatus = "Completed";
-            staff.ApprovedAt = DateTime.UtcNow;
+            bool alreadyIssued = HasOfferLetterBeenIssued(staff);
+            if (!string.Equals(staff.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                staff.ProfileStatus = "Completed";
+            }
+            if (!staff.SubmittedAt.HasValue)
+            {
+                staff.SubmittedAt = DateTime.UtcNow;
+            }
+            if (!staff.ApprovedAt.HasValue)
+            {
+                staff.ApprovedAt = DateTime.UtcNow;
+            }
             staff.CorrectionNotes = null;
             staff.ProfileLinkToken = null; // Revoke onboarding token upon approval
             await _staffRepository.UpdateAsync(staff);
@@ -3892,66 +4320,69 @@ namespace CollegeManagement.API.Services.Implementations
 
             var workflowConfig = await GetOfferLetterWorkflowConfigAsync();
 
-            // Generate Offer Letter PDF and dispatch via Email
-            try
+            // Generate Offer Letter PDF and dispatch via Email once only
+            if (!alreadyIssued)
             {
-                var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
-                if (!string.IsNullOrWhiteSpace(staff.Email))
+                try
                 {
-                    string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
-                    string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
-                    subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
-
-                    string portalUrl = _configuration["App:ClientUrl"] ?? "http://localhost:5173/login";
-                    if (!portalUrl.EndsWith("/login") && !portalUrl.Contains("login"))
+                    var (pdfBytes, contentType, fileName) = await GenerateOfferLetterPdfAsync(staff.Id);
+                    if (!string.IsNullOrWhiteSpace(staff.Email))
                     {
-                        portalUrl = portalUrl.TrimEnd('/') + "/login";
-                    }
+                        string staffFullName = $"{staff.FirstName} {staff.LastName}".Trim();
+                        string subject = workflowConfig.EmailSubject ?? $"Official Appointment & Offer Letter - {staff.EmployeeId}";
+                        subject = subject.Replace("{{StaffName}}", staffFullName).Replace("{{EmployeeId}}", staff.EmployeeId ?? "");
 
-                    string body = $@"
-                        <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
-                            <div style='background: #355e3b; padding: 24px; text-align: center; color: #ffffff;'>
-                                <h2 style='margin: 0; font-size: 20px;'>Pirnav Educational Society</h2>
-                                <p style='margin: 4px 0 0; opacity: 0.9; font-size: 13px;'>Official Appointment &amp; Offer Letter</p>
-                            </div>
-                            <div style='padding: 28px; background: #ffffff;'>
-                                <p>Dear <strong>{staffFullName}</strong>,</p>
-                                <p>Your onboarding request has been reviewed and approved by Central Administration, and your offer letter has been generated successfully.</p>
-                                <p>You can now access the Staff Portal to view and download your offer letter.</p>
-                                <div style='margin: 30px 0; text-align: center;'>
-                                    <a href='{portalUrl}' style='background: #355e3b; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(53, 94, 59, 0.25);'>Access Your Staff Portal &rarr;</a>
-                                </div>
-                                <p style='font-size: 13px; color: #64748b; margin-top: 24px;'>Please find attached your official signed QuestPDF document for your personal records.</p>
-                                <p style='font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;'>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
-                            </div>
-                        </div>";
-
-                    await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
-
-                    if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
-                    {
-                        try
+                        string portalUrl = _configuration["App:ClientUrl"] ?? "http://localhost:5173/login";
+                        if (!portalUrl.EndsWith("/login") && !portalUrl.Contains("login"))
                         {
-                            await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
+                            portalUrl = portalUrl.TrimEnd('/') + "/login";
                         }
-                        catch { }
-                    }
-                    _logger.LogInformation("Offer Letter approval email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Notice: Offer Letter approval email delivery failure for {Email}: {Msg}", staff.Email, ex.Message);
-            }
 
-            // Staff Portal Notification via existing notification infrastructure
-            try
-            {
-                await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Available", "Your onboarding request has been approved and your official offer letter is now available in your portal.", "OfferLetter", staff.Id, "/faculty-dashboard/profile?tab=offerletter");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to deliver approval notification to staff #{StaffId}", staff.Id);
+                        string body = $@"
+                            <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;'>
+                                <div style='background: #355e3b; padding: 24px; text-align: center; color: #ffffff;'>
+                                    <h2 style='margin: 0; font-size: 20px;'>Pirnav Educational Society</h2>
+                                    <p style='margin: 4px 0 0; opacity: 0.9; font-size: 13px;'>Official Appointment &amp; Offer Letter</p>
+                                </div>
+                                <div style='padding: 28px; background: #ffffff;'>
+                                    <p>Dear <strong>{staffFullName}</strong>,</p>
+                                    <p>Your onboarding request has been reviewed and approved by Central Administration, and your offer letter has been generated successfully.</p>
+                                    <p>You can now access the Staff Portal to view and download your offer letter.</p>
+                                    <div style='margin: 30px 0; text-align: center;'>
+                                        <a href='{portalUrl}' style='background: #355e3b; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; display: inline-block; box-shadow: 0 4px 10px rgba(53, 94, 59, 0.25);'>Access Your Staff Portal &rarr;</a>
+                                    </div>
+                                    <p style='font-size: 13px; color: #64748b; margin-top: 24px;'>Please find attached your official signed QuestPDF document for your personal records.</p>
+                                    <p style='font-size: 12px; color: #94a3b8; border-top: 1px solid #f1f5f9; padding-top: 16px;'>Best regards,<br/><strong>Central HR Administration</strong><br/>Pirnav Educational Society</p>
+                                </div>
+                            </div>";
+
+                        await _emailService.SendEmailWithAttachmentAsync(staff.Email, subject, body, pdfBytes, fileName, contentType);
+
+                        if (!string.IsNullOrWhiteSpace(workflowConfig.CcHrEmail) && workflowConfig.CcHrEmail != staff.Email)
+                        {
+                            try
+                            {
+                                await _emailService.SendEmailWithAttachmentAsync(workflowConfig.CcHrEmail, $"[HR Audit Copy] {subject}", body, pdfBytes, fileName, contentType);
+                            }
+                            catch { }
+                        }
+                        _logger.LogInformation("Offer Letter approval email dispatched to {Email} for staff #{StaffId}", staff.Email, staff.Id);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Notice: Offer Letter approval email delivery failure for {Email}: {Msg}", staff.Email, ex.Message);
+                }
+
+                // Staff Portal Notification via existing notification infrastructure
+                try
+                {
+                    await _notificationService.SendToStaffAsync(staff.Id, "Offer Letter Available", "Your onboarding request has been approved and your official offer letter is now available in your portal.", "OfferLetter", staff.Id, "/faculty-dashboard/profile?tab=offerletter");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to deliver approval notification to staff #{StaffId}", staff.Id);
+                }
             }
 
             try

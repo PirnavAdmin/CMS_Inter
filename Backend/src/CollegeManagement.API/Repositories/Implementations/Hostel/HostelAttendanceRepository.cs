@@ -22,7 +22,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             DateTime? attendanceDate = null,
             string? session = null,
             string? attendanceStatus = null,
-            string? search = null)
+            string? search = null,
+            int? campusId = null)
         {
             var parameters = new
             {
@@ -32,7 +33,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_AttendanceDate = attendanceDate?.Date,
                 p_Session = session,
                 p_AttendanceStatus = attendanceStatus,
-                p_Search = search
+                p_Search = search,
+                p_CampusId = campusId
             };
 
             return await _dbConnection.QueryAsync<HostelAttendance>(

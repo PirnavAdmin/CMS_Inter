@@ -1,0 +1,172 @@
+/* ==========================================================================
+   SUPER ADMIN STANDARDIZED PAGINATION
+   Matches Image 5 (media_1794206433530_1d49e2f5.png): [ Previous ]  Page X of Y  [ Next ]
+   Adapts perfectly to Light / Dark Mode & Active Theme Palette
+   ========================================================================== */
+
+.sa-pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--cms-surface, #ffffff);
+  border-top: 1px solid var(--cms-border, #e2e8f0);
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+  flex-wrap: wrap;
+  gap: 14px;
+  color: var(--cms-text, #1e293b);
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+}
+
+.sa-pagination-info-left {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--cms-muted, #64748b);
+}
+
+.sa-pagination-info-left strong {
+  font-weight: 700;
+  color: var(--cms-text, #1e293b);
+}
+
+.sa-pagination-controls-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sa-pagination-rows-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cms-muted, #64748b);
+}
+
+.sa-pagination-rows-label {
+  white-space: nowrap;
+}
+
+.sa-pagination-rows-select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  border-radius: 8px;
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #1e293b);
+  font-size: 12px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sa-pagination-rows-select:hover {
+  border-color: var(--cms-primary, #1e4529);
+}
+
+.sa-pagination-rows-select:focus {
+  border-color: var(--cms-primary, #1e4529);
+  box-shadow: 0 0 0 2px var(--cms-primary-soft, rgba(30, 69, 41, 0.15));
+}
+
+.sa-pagination-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Pill Button matching Image 5: [ Previous ]  Page X of Y  [ Next ] ── */
+.sa-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 18px;
+  min-height: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--cms-border, #e2e8f0);
+  background: var(--cms-surface, #ffffff);
+  color: var(--cms-text, #1e293b);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.sa-pagination-btn:hover:not(:disabled) {
+  background: var(--cms-primary-soft, #edf5ef);
+  color: var(--cms-primary, #1e4529);
+  border-color: var(--cms-primary, #1e4529);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.sa-pagination-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.sa-pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  color: var(--cms-muted, #94a3b8);
+  border-color: var(--cms-border, #e2e8f0);
+}
+
+.sa-pagination-page-indicator {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cms-text, #1e293b);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+/* ── Dark Mode Adaptations ── */
+[data-theme="dark"] .sa-pagination-container {
+  background: var(--cms-surface);
+  border-top-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sa-pagination-info-left {
+  color: var(--cms-muted);
+}
+
+[data-theme="dark"] .sa-pagination-info-left strong {
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sa-pagination-rows-select {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+}
+
+[data-theme="dark"] .sa-pagination-btn {
+  background: var(--cms-surface);
+  border-color: var(--cms-border);
+  color: var(--cms-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="dark"] .sa-pagination-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--cms-primary);
+  color: var(--cms-primary);
+}
+
+[data-theme="dark"] .sa-pagination-btn:disabled {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="dark"] .sa-pagination-page-indicator {
+  color: var(--cms-text);
+}
+

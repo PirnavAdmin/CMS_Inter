@@ -192,6 +192,12 @@ namespace CollegeManagement.API.Models.Staff
         [StringLength(500)]
         public string? PhotoPath { get; set; }
 
+        [StringLength(500)]
+        public string? OfferLetterPath { get; set; }
+
+        [StringLength(100)]
+        public string? OfferLetterNumber { get; set; }
+
         // Profile Completion Lifecycle Workflow
         [Required]
         [StringLength(50)]

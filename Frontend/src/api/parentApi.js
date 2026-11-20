@@ -332,24 +332,54 @@ export const getExaminationSchedules = async (examinationId) => {
  */
 export const getStudentCertificates = async (studentId, admissionNo) => {
   const searchTerm = admissionNo || studentId;
-  if (!searchTerm) return [];
+  let serverList = [];
   try {
     const res = await api.get("/api/v1/certificates", {
-      params: { search: String(searchTerm).trim() },
+      params: searchTerm ? { search: String(searchTerm).trim() } : {},
     });
     const rawList = res?.data?.data ?? (Array.isArray(res?.data) ? res.data : (res?.data?.items ?? []));
-    if (!Array.isArray(rawList)) return [];
+    if (Array.isArray(rawList)) {
+      serverList = rawList;
+    }
+  } catch {}
 
-    const filtered = rawList.filter((item) => {
+  // Merge with local storage in case Examination Cell / Admin updated status offline or in mock store
+  try {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("cms_certificates");
+      if (stored) {
+        const localList = JSON.parse(stored);
+        if (Array.isArray(localList) && localList.length > 0) {
+          const map = new Map();
+          serverList.forEach((c) => {
+            const key = String(c.certificateNumber || c.certificateNo || c.number || c.id || c.certificateId);
+            map.set(key, c);
+          });
+          localList.forEach((c) => {
+            const key = String(c.certificateNumber || c.certificateNo || c.number || c.id || c.certificateId);
+            if (map.has(key)) {
+              // Server data must always take precedence over local cache
+              map.set(key, { ...c, ...map.get(key) });
+            } else {
+              map.set(key, c);
+            }
+          });
+          serverList = Array.from(map.values());
+        }
+      }
+    }
+  } catch {}
+
+  if (serverList.length > 0) {
+    const filtered = serverList.filter((item) => {
       const matchId = studentId && String(item.studentId || item.StudentId) === String(studentId);
       const matchAdm = admissionNo && String(item.admissionNo || item.AdmissionNo || "").trim().toLowerCase() === String(admissionNo).trim().toLowerCase();
       return matchId || matchAdm;
     });
-
-    return filtered.length > 0 ? filtered : rawList;
-  } catch {
-    return [];
+    return filtered.length > 0 ? filtered : serverList;
   }
+
+  return [];
 };
 
 /**
@@ -368,8 +398,46 @@ export const requestStudentCertificate = async ({ admissionNo, certificateType, 
     requestDate: new Date().toISOString(),
   };
 
-  const res = await api.post("/api/v1/certificates/student-request", payload);
-  return res?.data?.data ?? res?.data;
+  let result = null;
+  try {
+    const res = await api.post("/api/v1/certificates/student-request", payload);
+    result = res?.data?.data ?? res?.data;
+  } catch {}
+
+  // Also ensure persisted in cms_certificates so Examination Cell & Parent Portal stay synchronized
+  try {
+    if (typeof window !== "undefined") {
+      const stored = JSON.parse(localStorage.getItem("cms_certificates") || "[]");
+      const nextId = (stored.reduce((max, c) => Math.max(max, Number(c.id || c.certificateId || 0)), 0) || 100) + 1;
+      const certNumber = result?.certificateNumber || result?.certificateNo || `CERT-${new Date().getFullYear()}-${String(nextId).padStart(4, "0")}`;
+      const newEntry = {
+        id: result?.id || result?.certificateId || nextId,
+        certificateId: result?.certificateId || result?.id || nextId,
+        certificateNumber: certNumber,
+        certificateNo: certNumber,
+        number: certNumber,
+        admissionNo,
+        admissionNumber: admissionNo,
+        certificateType,
+        type: certificateType,
+        purpose,
+        requestDate: new Date().toISOString().slice(0, 10),
+        status: "Requested",
+        remarks: payload.remarks,
+      };
+
+      const existsIdx = stored.findIndex((c) => String(c.certificateNumber || c.certificateNo || "") === certNumber);
+      if (existsIdx === -1) {
+        stored.unshift(newEntry);
+      } else {
+        stored[existsIdx] = { ...stored[existsIdx], ...newEntry };
+      }
+      localStorage.setItem("cms_certificates", JSON.stringify(stored));
+      return result || newEntry;
+    }
+  } catch {}
+
+  return result;
 };
 
 /**

@@ -1,11 +1,19 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Roles;
 using CollegeManagement.API.Models;
+using CollegeManagement.API.Models.Faculty;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.Hubs;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -14,15 +22,30 @@ namespace CollegeManagement.API.Services.Implementations
         private readonly IRoleRepository _roleRepository;
         private readonly IPermissionRepository _permissionRepository;
         private readonly IUserRepository _userRepository;
+        private readonly AppDbContext _context;
+        private readonly IMemoryCache _memoryCache;
+        private readonly IHubContext<NotificationHub> _notificationHubContext;
+        private readonly IAuditLoggingService _auditLoggingService;
+        private readonly ILogger<RoleManagementService> _logger;
 
         public RoleManagementService(
             IRoleRepository roleRepository,
             IPermissionRepository permissionRepository,
-            IUserRepository userRepository)
+            IUserRepository userRepository,
+            AppDbContext context,
+            IMemoryCache memoryCache,
+            IHubContext<NotificationHub> notificationHubContext,
+            IAuditLoggingService auditLoggingService,
+            ILogger<RoleManagementService> logger)
         {
             _roleRepository = roleRepository;
             _permissionRepository = permissionRepository;
             _userRepository = userRepository;
+            _context = context;
+            _memoryCache = memoryCache;
+            _notificationHubContext = notificationHubContext;
+            _auditLoggingService = auditLoggingService;
+            _logger = logger;
         }
 
         public async Task<List<RoleResponse>> GetAllRolesAsync(string? staffType = null, bool includeInactive = false)
@@ -33,6 +56,10 @@ namespace CollegeManagement.API.Services.Implementations
                 RoleId = r.RoleId,
                 RoleName = r.RoleName,
                 Description = r.Description,
+                DepartmentId = r.DepartmentId,
+                DepartmentName = r.Department?.DepartmentName,
+                DesignationId = r.DesignationId,
+                DesignationName = r.Designation?.Name,
                 IsSystemRole = r.IsSystemRole,
                 IsActive = r.IsActive,
                 StaffType = r.StaffType,
@@ -51,6 +78,10 @@ namespace CollegeManagement.API.Services.Implementations
                 RoleId = role.RoleId,
                 RoleName = role.RoleName,
                 Description = role.Description,
+                DepartmentId = role.DepartmentId,
+                DepartmentName = role.Department?.DepartmentName,
+                DesignationId = role.DesignationId,
+                DesignationName = role.Designation?.Name,
                 IsSystemRole = role.IsSystemRole,
                 IsActive = role.IsActive,
                 StaffType = role.StaffType,
@@ -59,7 +90,6 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        
         public async Task<RoleResponse> CreateRoleAsync(CreateRoleRequest request)
         {
             if (await _roleRepository.RoleExistsAsync(request.RoleName))
@@ -67,27 +97,116 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException($"Role '{request.RoleName}' already exists.");
             }
 
+            int? departmentId = request.DepartmentId;
+            int? designationId = request.DesignationId;
+            string staffType = string.IsNullOrWhiteSpace(request.StaffType) ? "Both" : request.StaffType.Trim();
+
+            // 1. Handle inline department creation if provided
+            if (!string.IsNullOrWhiteSpace(request.NewDepartmentName))
+            {
+                var normDeptName = request.NewDepartmentName.Trim();
+                var existingDept = await _context.Departments
+                    .FirstOrDefaultAsync(d => d.DepartmentName.ToLower() == normDeptName.ToLower());
+                if (existingDept != null)
+                {
+                    departmentId = existingDept.DepartmentId;
+                    if (existingDept.StaffType != "Both" && (string.IsNullOrWhiteSpace(request.StaffType) || request.StaffType == "Both"))
+                    {
+                        staffType = existingDept.StaffType;
+                    }
+                }
+                else
+                {
+                    var codeBase = "DEP_" + Regex.Replace(normDeptName.ToUpper(), @"[^A-Z0-9]", "_").Trim('_');
+                    if (codeBase.Length > 20) codeBase = codeBase.Substring(0, 20);
+                    var newDept = new Department
+                    {
+                        DepartmentName = normDeptName,
+                        DepartmentCode = codeBase,
+                        StaffType = staffType,
+                        Description = $"Created via Role ({request.RoleName})",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Departments.Add(newDept);
+                    await _context.SaveChangesAsync();
+                    departmentId = newDept.DepartmentId;
+                }
+            }
+            else if (departmentId.HasValue && departmentId.Value > 0)
+            {
+                var existingDept = await _context.Departments.FindAsync(departmentId.Value);
+                if (existingDept != null && existingDept.StaffType != "Both" && (string.IsNullOrWhiteSpace(request.StaffType) || request.StaffType == "Both"))
+                {
+                    staffType = existingDept.StaffType;
+                }
+            }
+
+            // 2. Handle inline designation creation if provided
+            if (!string.IsNullOrWhiteSpace(request.NewDesignationName))
+            {
+                var normDesigName = request.NewDesignationName.Trim();
+                var existingDesig = await _context.Designations
+                    .FirstOrDefaultAsync(d => d.Name.ToLower() == normDesigName.ToLower() && (departmentId == null || d.DepartmentId == departmentId));
+                if (existingDesig != null)
+                {
+                    designationId = existingDesig.Id;
+                }
+                else
+                {
+                    var newDesig = new Designation
+                    {
+                        Name = normDesigName,
+                        DepartmentId = departmentId,
+                        StaffType = staffType,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Designations.Add(newDesig);
+                    await _context.SaveChangesAsync();
+                    designationId = newDesig.Id;
+                }
+            }
+            else if (designationId.HasValue && designationId.Value > 0)
+            {
+                var existingDesig = await _context.Designations.FindAsync(designationId.Value);
+                if (existingDesig != null && existingDesig.StaffType != "Both" && (string.IsNullOrWhiteSpace(request.StaffType) || request.StaffType == "Both"))
+                {
+                    staffType = existingDesig.StaffType;
+                }
+            }
+
             var role = new Role
             {
                 RoleName = request.RoleName.Trim(),
                 Description = request.Description?.Trim(),
-                StaffType = string.IsNullOrWhiteSpace(request.StaffType) ? "Both" : request.StaffType.Trim(),
+                DepartmentId = departmentId,
+                DesignationId = designationId,
+                StaffType = staffType,
                 IsActive = true,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
 
             await _roleRepository.AddAsync(role);
 
+            // Fetch newly saved role with department and designation navigation
+            var savedRole = await _roleRepository.GetByIdAsync(role.RoleId) ?? role;
+
             return new RoleResponse
             {
-                RoleId = role.RoleId,
-                RoleName = role.RoleName,
-                Description = role.Description,
-                IsSystemRole = role.IsSystemRole,
-                IsActive = role.IsActive,
-                StaffType = role.StaffType,
-                CreatedAt = role.CreatedAt,
-                UpdatedAt = role.UpdatedAt
+                RoleId = savedRole.RoleId,
+                RoleName = savedRole.RoleName,
+                Description = savedRole.Description,
+                DepartmentId = savedRole.DepartmentId,
+                DepartmentName = savedRole.Department?.DepartmentName,
+                DesignationId = savedRole.DesignationId,
+                DesignationName = savedRole.Designation?.Name,
+                IsSystemRole = savedRole.IsSystemRole,
+                IsActive = savedRole.IsActive,
+                StaffType = savedRole.StaffType,
+                CreatedAt = savedRole.CreatedAt,
+                UpdatedAt = savedRole.UpdatedAt
             };
         }
 
@@ -101,24 +220,91 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new InvalidOperationException($"Role '{request.RoleName}' already exists.");
             }
 
+            int? departmentId = request.DepartmentId ?? role.DepartmentId;
+            int? designationId = request.DesignationId ?? role.DesignationId;
+            string staffType = !string.IsNullOrWhiteSpace(request.StaffType) ? request.StaffType.Trim() : role.StaffType;
+
+            // 1. Handle inline department creation if provided
+            if (!string.IsNullOrWhiteSpace(request.NewDepartmentName))
+            {
+                var normDeptName = request.NewDepartmentName.Trim();
+                var existingDept = await _context.Departments
+                    .FirstOrDefaultAsync(d => d.DepartmentName.ToLower() == normDeptName.ToLower());
+                if (existingDept != null)
+                {
+                    departmentId = existingDept.DepartmentId;
+                }
+                else
+                {
+                    var codeBase = "DEP_" + Regex.Replace(normDeptName.ToUpper(), @"[^A-Z0-9]", "_").Trim('_');
+                    if (codeBase.Length > 20) codeBase = codeBase.Substring(0, 20);
+                    var newDept = new Department
+                    {
+                        DepartmentName = normDeptName,
+                        DepartmentCode = codeBase,
+                        StaffType = staffType,
+                        Description = $"Created via Role ({request.RoleName})",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Departments.Add(newDept);
+                    await _context.SaveChangesAsync();
+                    departmentId = newDept.DepartmentId;
+                }
+            }
+
+            // 2. Handle inline designation creation if provided
+            if (!string.IsNullOrWhiteSpace(request.NewDesignationName))
+            {
+                var normDesigName = request.NewDesignationName.Trim();
+                var existingDesig = await _context.Designations
+                    .FirstOrDefaultAsync(d => d.Name.ToLower() == normDesigName.ToLower() && (departmentId == null || d.DepartmentId == departmentId));
+                if (existingDesig != null)
+                {
+                    designationId = existingDesig.Id;
+                }
+                else
+                {
+                    var newDesig = new Designation
+                    {
+                        Name = normDesigName,
+                        DepartmentId = departmentId,
+                        StaffType = staffType,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Designations.Add(newDesig);
+                    await _context.SaveChangesAsync();
+                    designationId = newDesig.Id;
+                }
+            }
+
             role.RoleName = request.RoleName.Trim();
             if (request.Description != null) role.Description = request.Description.Trim();
-            if (!string.IsNullOrWhiteSpace(request.StaffType)) role.StaffType = request.StaffType.Trim();
+            role.DepartmentId = departmentId;
+            role.DesignationId = designationId;
+            role.StaffType = staffType;
             if (request.IsActive.HasValue) role.IsActive = request.IsActive.Value;
             role.UpdatedAt = DateTime.UtcNow;
 
             await _roleRepository.UpdateAsync(role);
 
+            var savedRole = await _roleRepository.GetByIdAsync(role.RoleId) ?? role;
+
             return new RoleResponse
             {
-                RoleId = role.RoleId,
-                RoleName = role.RoleName,
-                Description = role.Description,
-                IsSystemRole = role.IsSystemRole,
-                IsActive = role.IsActive,
-                StaffType = role.StaffType,
-                CreatedAt = role.CreatedAt,
-                UpdatedAt = role.UpdatedAt
+                RoleId = savedRole.RoleId,
+                RoleName = savedRole.RoleName,
+                Description = savedRole.Description,
+                DepartmentId = savedRole.DepartmentId,
+                DepartmentName = savedRole.Department?.DepartmentName,
+                DesignationId = savedRole.DesignationId,
+                DesignationName = savedRole.Designation?.Name,
+                IsSystemRole = savedRole.IsSystemRole,
+                IsActive = savedRole.IsActive,
+                StaffType = savedRole.StaffType,
+                CreatedAt = savedRole.CreatedAt,
+                UpdatedAt = savedRole.UpdatedAt
             };
         }
 
@@ -138,7 +324,26 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<List<RoleCardDto>> GetRoleCardsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _permissionRepository.GetRoleCardsAsync(campusId, boardId, academicYearId);
+            var cards = await _permissionRepository.GetRoleCardsAsync(campusId, boardId, academicYearId);
+            var roles = await _roleRepository.GetAllAsync(includeInactive: true);
+            var roleMap = roles.ToDictionary(r => r.RoleId);
+
+            foreach (var card in cards)
+            {
+                if (roleMap.TryGetValue(card.RoleId, out var r))
+                {
+                    if (string.IsNullOrWhiteSpace(card.StaffType) || card.StaffType == "Both")
+                    {
+                        card.StaffType = r.StaffType;
+                    }
+                    card.DepartmentId = r.DepartmentId;
+                    card.DepartmentName = r.Department?.DepartmentName;
+                    card.DesignationId = r.DesignationId;
+                    card.DesignationName = r.Designation?.Name;
+                }
+            }
+
+            return cards;
         }
 
         public async Task<RolePermissionsMatrixResponseDto> GetRolePermissionMatrixAsync(int roleId, int? userId = null)
@@ -533,6 +738,92 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             return await _permissionRepository.GetRoleModulesAsync(roleId);
+        }
+
+        public async Task<UpdateUserStatusResponse> UpdateUserStatusAsync(int userId, bool isActive, int? actingUserId, bool actingIsSuperAdmin, string? reason = null)
+        {
+            var target = await _permissionRepository.GetUserStatusInfoAsync(userId);
+            if (target == null)
+            {
+                throw new KeyNotFoundException($"User with ID {userId} was not found.");
+            }
+
+            if (!isActive)
+            {
+                if (actingUserId.HasValue && actingUserId.Value == userId)
+                {
+                    throw new InvalidOperationException("You cannot deactivate your own account.");
+                }
+
+                if (target.RoleId == 1 || string.Equals(target.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new UnauthorizedAccessException("Super Admin accounts cannot be deactivated.");
+                }
+
+                if (target.RoleId == 2 || string.Equals(target.RoleName, "Admin", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!actingIsSuperAdmin)
+                    {
+                        throw new UnauthorizedAccessException("Only a Super Admin can deactivate an Admin account.");
+                    }
+
+                    if (await _permissionRepository.CountOtherActiveAdminsAsync(userId) == 0)
+                    {
+                        throw new InvalidOperationException("Cannot deactivate the last remaining active Admin account.");
+                    }
+                }
+            }
+
+            await _permissionRepository.UpdateUserActiveStatusAsync(userId, isActive);
+
+            var updatedAt = DateTime.UtcNow;
+            _memoryCache.Set($"user_active_status:{userId}", isActive, TimeSpan.FromSeconds(60));
+
+            if (!isActive)
+            {
+                try
+                {
+                    await _notificationHubContext.Clients.Group($"User_{userId}").SendAsync("AccountDeactivated", new
+                    {
+                        userId,
+                        message = "Your account has been deactivated by an administrator.",
+                        reason,
+                        deactivatedAt = updatedAt
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to broadcast AccountDeactivated SignalR event for user {UserId}.", userId);
+                }
+            }
+
+            try
+            {
+                var action = isActive ? "ActivateUser" : "DeactivateUser";
+                var details = string.IsNullOrWhiteSpace(reason)
+                    ? $"User '{target.FullName}' ({target.Email}, ID={userId}, Role={target.RoleName}) was {(isActive ? "activated" : "deactivated")}."
+                    : $"User '{target.FullName}' ({target.Email}, ID={userId}, Role={target.RoleName}) was {(isActive ? "activated" : "deactivated")}. Reason: {reason}";
+
+                await _auditLoggingService.LogAsync(
+                    action: action,
+                    module: "Roles & Permissions",
+                    target: $"User:{userId}",
+                    severity: isActive ? "Info" : "Warning",
+                    status: "Success",
+                    details: details);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to log audit entry for user status change on user {UserId}.", userId);
+            }
+
+            return new UpdateUserStatusResponse
+            {
+                UserId = userId,
+                IsActive = isActive,
+                Status = isActive ? "Active" : "Inactive",
+                UpdatedAt = updatedAt
+            };
         }
 
         public async Task<bool> SetModulesForRoleAsync(int roleId, UpdateRoleModulesRequest request)

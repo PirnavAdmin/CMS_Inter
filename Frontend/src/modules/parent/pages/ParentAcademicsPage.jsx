@@ -2,14 +2,15 @@ import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useState, useEffect, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+
   BookOpen, Users, Award, FileText, CheckCircle2, TrendingUp, Calendar,
   ChevronRight, Eye, Download, Printer, Clock
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { useParentPortal, transformMemoSubjects } from "../context/ParentPortalContext.jsx";
-import {
-  academicSubjectsData, examResultsData
-} from "../parentData.js";
+
+
+
 import { Modal } from "@/shared/components/Ui.jsx";
 import "../ParentDashboard.css";
 
@@ -65,12 +66,12 @@ export default function ParentAcademicsPage() {
     if (curriculumSubjects && curriculumSubjects.length > 0) {
       return curriculumSubjects;
     }
-    return academicSubjectsData[activeChildId] || [];
+    return [];
   }, [curriculumSubjects, activeChildId]);
 
   const rawResults = (contextResults && contextResults.length > 0)
     ? contextResults
-    : (examResultsData[activeChildId] || []);
+    : [];
   const yearResults = rawResults.filter((r) => r.academicYear === currentAcademicYear || !r.academicYear);
   const currentExam = (selectedResult && (selectedResult.academicYear === currentAcademicYear || !selectedResult.academicYear))
     ? selectedResult

@@ -14,7 +14,8 @@ import AccountantMyAttendance from "./pages/AccountantMyAttendance.jsx";
 import AccountantLeave from "./pages/AccountantLeave.jsx";
 import AccountantHolidays from "./pages/AccountantHolidays.jsx";
 import AccountantSettingsPage from "./pages/AccountantSettingsPage.jsx";
-import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import PaymentGatewayConfigPage from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 function AccessDeniedNotice({ moduleName = "this screen" }) {
   return (
@@ -42,7 +43,10 @@ function AccessDeniedNotice({ moduleName = "this screen" }) {
 }
 
 function AccountantPermissionRoute({ moduleKey, screenKey = null, moduleName = "this screen", children }) {
-  const { canView } = usePermissions();
+  const { canView, loading, permissions } = useEffectivePermissions();
+  if (loading && (!Array.isArray(permissions) || permissions.length === 0)) {
+    return null;
+  }
   const hasAccess = canView(moduleKey, screenKey);
   return hasAccess ? children : <AccessDeniedNotice moduleName={moduleName} />;
 }
@@ -53,17 +57,18 @@ export default function AccountantPortalRoutes() {
       <Route element={<AccountantLayout />}>
         <Route index element={<AccountantDashboard />} />
         <Route path="fees" element={<AccountantPermissionRoute moduleKey="fee-management" screenKey="fee-structure" moduleName="Fee Management"><AccountantFees /></AccountantPermissionRoute>} />
-        <Route path="payments" element={<AccountantPermissionRoute moduleKey="fee-management" screenKey="fee-collection" moduleName="Payment History"><AccountantPayments /></AccountantPermissionRoute>} />
-        <Route path="payroll" element={<AccountantPermissionRoute moduleKey="payroll" moduleName="Payroll"><AccountantPayroll /></AccountantPermissionRoute>} />
+        <Route path="payments" element={<AccountantPermissionRoute moduleKey="fee-management" screenKey="fee-collection" moduleName="Reimbursement & Payout History"><AccountantPayments /></AccountantPermissionRoute>} />
+        <Route path="payroll" element={<AccountantPayroll />} />
         <Route path="payroll/attendance-impact" element={<AccountantPermissionRoute moduleKey="payroll" screenKey="attendance-impact" moduleName="Attendance Impact"><AccountantAttendanceImpact /></AccountantPermissionRoute>} />
         <Route path="reimbursement" element={<AccountantPermissionRoute moduleKey="reimbursement" moduleName="Staff Reimbursements"><ReimbursementPage isAccountantView={true} /></AccountantPermissionRoute>} />
         <Route path="reimbursements" element={<AccountantPermissionRoute moduleKey="reimbursement" moduleName="Staff Reimbursements"><ReimbursementPage isAccountantView={true} /></AccountantPermissionRoute>} />
         <Route path="reports" element={<AccountantPermissionRoute moduleKey="reports-analytics" moduleName="Financial Reports"><AccountantReports /></AccountantPermissionRoute>} />
-        <Route path="profile" element={<AccountantProfile />} />
+        <Route path="profile" element={<AccountantPermissionRoute moduleKey="profile" moduleName="My Profile"><AccountantProfile /></AccountantPermissionRoute>} />
         <Route path="my-attendance" element={<AccountantPermissionRoute moduleKey="staff-attendance" screenKey="my-attendance" moduleName="My Attendance"><AccountantMyAttendance /></AccountantPermissionRoute>} />
         <Route path="leave" element={<AccountantPermissionRoute moduleKey="staff-leave-management" screenKey="staff-leave" moduleName="Staff Leave"><AccountantLeave /></AccountantPermissionRoute>} />
         <Route path="holidays" element={<AccountantPermissionRoute moduleKey="holiday-management" moduleName="Holidays"><AccountantHolidays /></AccountantPermissionRoute>} />
-        <Route path="settings" element={<AccountantSettingsPage />} />
+        <Route path="settings" element={<AccountantPermissionRoute moduleKey="settings" moduleName="Settings"><AccountantSettingsPage /></AccountantPermissionRoute>} />
+        <Route path="settings/payment-gateway" element={<AccountantPermissionRoute moduleKey="settings" screenKey="payment-gateway" moduleName="Payment Gateway Settings"><PaymentGatewayConfigPage embedded /></AccountantPermissionRoute>} />
         <Route path="*" element={<Navigate to="/accountant-dashboard" replace />} />
       </Route>
     </Routes>

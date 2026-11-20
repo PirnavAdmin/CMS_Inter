@@ -103,6 +103,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// Configures/updates applicable modules for a specific role.
         /// </summary>
         [HttpPut("{roleId:int}/modules")]
+        [Authorize(Roles = "Super Admin,Admin")]
         public async Task<IActionResult> SetRoleModules(int roleId, [FromBody] UpdateRoleModulesRequest request)
         {
             try
@@ -147,7 +148,8 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                var msg = ex.GetBaseException().Message;
+                return BadRequest(new { success = false, message = msg });
             }
         }
 
@@ -167,7 +169,8 @@ namespace CollegeManagement.API.Controllers.V1
             }
             catch (Exception ex)
             {
-                return BadRequest(new { success = false, message = ex.Message });
+                var msg = ex.GetBaseException().Message;
+                return BadRequest(new { success = false, message = msg });
             }
         }
 
@@ -225,9 +228,10 @@ namespace CollegeManagement.API.Controllers.V1
         /// <summary>
         /// Updates the default permission matrix for a role.
         /// Accepts both { modules: [...] } and frontend-native { permissions: [...] }.
+        /// Only platform Super Admin can modify system-wide role permissions.
         /// </summary>
         [HttpPut("{roleId:int}/permissions")]
-        [Authorize(Roles = "Super Admin,Admin")]
+        [Authorize(Roles = "Super Admin")]
         public async Task<IActionResult> UpdateRolePermissions(int roleId, [FromBody] UpdateRolePermissionsRequest request)
         {
             try
@@ -417,6 +421,58 @@ namespace CollegeManagement.API.Controllers.V1
             catch (KeyNotFoundException ex)
             {
                 return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
+
+        /// <summary>
+        /// Activates or deactivates a user account with role guardrails and instant session revocation.
+        /// </summary>
+        [HttpPatch("users/{userId:int}/status")]
+        [HttpPut("users/{userId:int}/status")]
+        [Authorize(Roles = "Super Admin,Admin")]
+        public async Task<IActionResult> UpdateUserStatus(int userId, [FromBody] UpdateUserStatusRequest request)
+        {
+            if (request == null)
+            {
+                return BadRequest(new { success = false, message = "Request body is required." });
+            }
+
+            try
+            {
+                int? actingUserId = GetCurrentUserId();
+                bool actingIsSuperAdmin = User.IsInRole("Super Admin")
+                    || User.HasClaim(c => (c.Type == ClaimTypes.Role || c.Type == "role")
+                        && string.Equals(c.Value, "Super Admin", StringComparison.OrdinalIgnoreCase));
+
+                var result = await _roleManagementService.UpdateUserStatusAsync(
+                    userId,
+                    request.IsActive,
+                    actingUserId,
+                    actingIsSuperAdmin,
+                    request.Reason);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = request.IsActive ? "User activated successfully." : "User deactivated successfully.",
+                    data = result
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { success = false, message = ex.Message });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { success = false, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
             }
             catch (Exception ex)
             {

@@ -297,6 +297,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int pageSize = 10,
             [FromQuery] int? page = null)
         {
+            if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new PagedResult<StudentListItemDto>
+                {
+                    Items = new List<StudentListItemDto>(),
+                    TotalCount = 0,
+                    PageNumber = page.HasValue && page.Value > 0 ? page.Value : pageNumber,
+                    PageSize = pageSize
+                });
+            }
+
             var effectiveCampusId = campusId;
             if (User.IsInRole("Principal"))
             {
@@ -713,6 +724,8 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("section/{sectionId:int}")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,HOD,Dean,Faculty,Teaching Staff,Staff,Teacher,Examination Cell,Exam Cell")]
+        [BypassPermission]
         public async Task<IActionResult> GetBySection(int sectionId)
         {
             var students = await _service.GetBySectionAsync(sectionId);
@@ -726,9 +739,18 @@ namespace CollegeManagement.API.Controllers.V1
         // =========================================================
 
         [HttpGet("active")]
-        public async Task<IActionResult> GetActive()
+        public async Task<IActionResult> GetActive([FromQuery] int? campusId = null)
         {
+            if (campusId == CollegeManagement.API.Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<StudentListItemDto>());
+            }
+
             var students = await _service.GetActiveAsync();
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                students = students.Where(s => s.CampusId == campusId.Value).ToList();
+            }
 
             return Ok(students);
         }

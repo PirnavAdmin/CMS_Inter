@@ -295,6 +295,7 @@ namespace CollegeManagement.API.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<UserPreference> UserPreferences { get; set; }
         public DbSet<ParentStudentMapping> ParentStudentMappings { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<Permission> Permissions { get; set; }
@@ -402,6 +403,14 @@ namespace CollegeManagement.API.Data
         public DbSet<FeePayment> FeePayments { get; set; }
 
         public DbSet<FeeReceipt> FeeReceipts { get; set; }
+        public DbSet<PaymentGatewayTransaction> PaymentGatewayTransactions { get; set; }
+        public DbSet<PaymentProofAttachment> PaymentProofAttachments { get; set; }
+        public DbSet<FeePaymentAllocation> FeePaymentAllocations { get; set; }
+        public DbSet<PaymentGatewayConfig> PaymentGatewayConfigs { get; set; }
+        public DbSet<CampusBankAccount> CampusBankAccounts { get; set; } = null!;
+        public DbSet<PaymentLedgerEntryRecord> PaymentLedgerEntries { get; set; }
+        public DbSet<FeePaymentEmailOutbox> FeePaymentEmailOutboxes { get; set; }
+        public DbSet<PaymentCommunicationSetting> PaymentCommunicationSettings { get; set; }
         public DbSet<FacilityTransitionHistory> FacilityTransitionHistories { get; set; } = null!;
 
 
@@ -426,6 +435,7 @@ namespace CollegeManagement.API.Data
         public DbSet<InventoryItem> InventoryItems { get; set; }
         public DbSet<InventoryTransaction> InventoryTransactions { get; set; }
         public DbSet<InventoryActivity> InventoryActivities { get; set; }
+        public DbSet<InventoryPurchaseOrder> InventoryPurchaseOrders { get; set; }
 
         public DbSet<AcademicCalendarEvent> AcademicCalendarEvents { get; set; } = null!;
         public DbSet<Notification> Notifications { get; set; } = null!;
@@ -512,9 +522,20 @@ namespace CollegeManagement.API.Data
             #endregion
 
             #region Role
-            modelBuilder.Entity<Role>()
-                .HasIndex(r => r.RoleName)
-                .IsUnique();
+            modelBuilder.Entity<Role>(entity =>
+            {
+                entity.HasIndex(r => r.RoleName).IsUnique();
+                entity.Property(r => r.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.Property(r => r.UpdatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
+                entity.HasOne(r => r.Department)
+                    .WithMany()
+                    .HasForeignKey(r => r.DepartmentId)
+                    .OnDelete(DeleteBehavior.SetNull);
+                entity.HasOne(r => r.Designation)
+                    .WithMany()
+                    .HasForeignKey(r => r.DesignationId)
+                    .OnDelete(DeleteBehavior.SetNull);
+            });
             #endregion
             #region Subject
 
@@ -789,7 +810,7 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.Description).HasMaxLength(500);
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
-                entity.HasIndex(x => new { x.BoardId, x.AcademicYearId, x.GroupId, x.ProgramId }).IsUnique();
+                entity.HasIndex(x => new { x.BoardId, x.AcademicYearId, x.AcademicLevelId, x.GroupId, x.ProgramId, x.StructureName }).IsUnique();
                 entity.HasOne(x => x.Board).WithMany().HasForeignKey(x => x.BoardId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.AcademicYear).WithMany().HasForeignKey(x => x.AcademicYearId).OnDelete(DeleteBehavior.Restrict);
                 entity.HasOne(x => x.AcademicLevel).WithMany().HasForeignKey(x => x.AcademicLevelId).OnDelete(DeleteBehavior.Restrict);
@@ -934,6 +955,135 @@ namespace CollegeManagement.API.Data
                 entity.HasOne(x => x.FeePayment).WithOne(x => x.Receipt).HasForeignKey<FeeReceipt>(x => x.FeePaymentId).OnDelete(DeleteBehavior.Cascade);
             });
 
+            modelBuilder.Entity<PaymentGatewayTransaction>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(x => x.OrderId).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.PaymentMethod).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.OrderId).IsUnique();
+                entity.HasIndex(x => x.IdempotencyKey);
+                entity.HasIndex(x => x.ClientIdempotencyKey);
+                entity.HasIndex(x => x.RequestPayloadHash);
+                entity.HasIndex(x => x.UtrNumber);
+                entity.HasIndex(x => x.Status);
+                entity.HasIndex(x => x.StudentFeeId);
+                entity.HasIndex(x => x.GatewayQrCodeId);
+                entity.HasIndex(x => x.CampusId);
+
+                entity.HasOne(x => x.Student).WithMany().HasForeignKey(x => x.StudentId).OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.StudentFee).WithMany().HasForeignKey(x => x.StudentFeeId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PaymentProofAttachment>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.OrderId).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.OriginalFileName).IsRequired().HasMaxLength(255);
+                entity.Property(x => x.StoredFileName).IsRequired().HasMaxLength(255);
+                entity.Property(x => x.StorageRelativePath).IsRequired().HasMaxLength(500);
+                entity.Property(x => x.ContentType).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.Sha256Hash).IsRequired().HasMaxLength(64);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.StoredFileName).IsUnique();
+                entity.HasIndex(x => x.ActiveTransactionKey).IsUnique();
+                entity.HasIndex(x => new { x.PaymentGatewayTransactionId, x.IsActive });
+                entity.HasIndex(x => x.OrderId);
+                entity.HasIndex(x => x.StudentFeeId);
+                entity.HasIndex(x => x.CampusId);
+
+                entity.HasOne(x => x.PaymentGatewayTransaction)
+                    .WithMany(t => t.ProofAttachments)
+                    .HasForeignKey(x => x.PaymentGatewayTransactionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.Student)
+                    .WithMany()
+                    .HasForeignKey(x => x.StudentId)
+                    .OnDelete(DeleteBehavior.Restrict);
+                entity.HasOne(x => x.StudentFee)
+                    .WithMany()
+                    .HasForeignKey(x => x.StudentFeeId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+
+            modelBuilder.Entity<FeePaymentAllocation>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.AllocatedAmount).HasColumnType("decimal(18,2)");
+                entity.Property(x => x.AllocationDate).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.FeePaymentId);
+                entity.HasIndex(x => x.FeeInstallmentId);
+
+                entity.HasOne(x => x.FeePayment).WithMany().HasForeignKey(x => x.FeePaymentId).OnDelete(DeleteBehavior.Cascade);
+                entity.HasOne(x => x.FeeInstallment).WithMany().HasForeignKey(x => x.FeeInstallmentId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<PaymentGatewayConfig>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.CampusId);
+                entity.Property(x => x.PayeeVpa).IsRequired().HasMaxLength(100);
+                entity.Property(x => x.PayeeName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.Currency).IsRequired().HasMaxLength(10);
+                entity.Property(x => x.Provider).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+            });
+
+            modelBuilder.Entity<CampusBankAccount>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.CampusId);
+                entity.HasIndex(x => new { x.CampusId, x.IsActive });
+                entity.Property(x => x.BankName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.AccountHolderName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.AccountNumber).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.IfscCode).IsRequired().HasMaxLength(20);
+                entity.Property(x => x.AccountType).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+            });
+
+            modelBuilder.Entity<PaymentLedgerEntryRecord>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+                entity.Property(x => x.EntryType).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.StudentName).IsRequired().HasMaxLength(200);
+                entity.Property(x => x.PaymentMethod).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.PaymentGatewayTransactionId);
+                entity.HasIndex(x => new { x.CampusId, x.CreatedAt });
+                entity.HasIndex(x => x.AcademicYearId);
+                entity.HasIndex(x => x.StudentId);
+            });
+
+            modelBuilder.Entity<FeePaymentEmailOutbox>(entity =>
+            {
+                entity.HasIndex(x => new { x.NotificationType, x.EventEntityId, x.RecipientEmail })
+                    .IsUnique()
+                    .HasDatabaseName("UX_FeePaymentEmailOutbox_Dedup");
+                entity.HasIndex(x => new { x.Status, x.NextAttemptAtUtc, x.LockedUntilUtc })
+                    .HasDatabaseName("IX_FeePaymentEmailOutbox_Dispatch");
+                entity.HasIndex(x => x.FeePaymentId)
+                    .HasDatabaseName("IX_FeePaymentEmailOutbox_FeePaymentId");
+                entity.HasIndex(x => new { x.StudentId, x.CampusId })
+                    .HasDatabaseName("IX_FeePaymentEmailOutbox_StudentCampus");
+            });
+
+            modelBuilder.Entity<PaymentCommunicationSetting>(entity =>
+            {
+                entity.HasIndex(x => x.CampusId)
+                    .IsUnique()
+                    .HasDatabaseName("UX_PaymentCommSettings_Campus");
+            });
 
             #region Section relational keys
             modelBuilder.Entity<Section>(entity =>
@@ -1569,6 +1719,30 @@ namespace CollegeManagement.API.Data
             #region Inventory
             modelBuilder.Entity<InventorySupplierCategory>()
                 .HasKey(sc => new { sc.SupplierId, sc.CategoryId });
+
+            modelBuilder.Entity<InventoryPurchaseOrder>(entity =>
+            {
+                entity.HasKey(x => x.OrderId);
+                entity.Property(x => x.Quantity).HasColumnType("decimal(12,2)");
+                entity.Property(x => x.UnitPrice).HasColumnType("decimal(12,2)");
+                entity.Property(x => x.TotalAmount).HasColumnType("decimal(14,2)");
+                entity.Property(x => x.OrderNumber).IsRequired().HasMaxLength(50);
+                entity.Property(x => x.Status).IsRequired().HasMaxLength(30);
+                entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
+
+                entity.HasIndex(x => x.OrderNumber).IsUnique();
+                entity.HasIndex(x => x.Status);
+
+                entity.HasOne(x => x.Item)
+                    .WithMany()
+                    .HasForeignKey(x => x.ItemId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(x => x.Supplier)
+                    .WithMany()
+                    .HasForeignKey(x => x.SupplierId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
             #endregion
         }
 

@@ -1,44 +1,18 @@
-import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { adminIconAssets } from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import StudentCard from "@/modules/student/components/StudentCard.jsx";
-import StudentDataTable from "@/modules/student/components/StudentDataTable.jsx";
 import StudentPageHeader from "@/modules/student/components/StudentPageHeader.jsx";
 import StudentSummaryCard from "@/modules/student/components/StudentSummaryCard.jsx";
-import { fetchClaims, fetchAccountEntries, disburseClaimPayment } from "../services/accountantService.js";
+import { fetchClaims, fetchAccountEntries, disburseClaimPayment, formatMoney } from "../services/accountantService.js";
 import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import "@/modules/admin/AdminProfile/AdminProfilePage.css";
 
-import { formatMoney, formatDate, normalizePayment, loadPaymentHistory, useFinancePage, useFinanceParams } from "../services/accountantService.js";
-import { useAccountantViewParams, PageState, FeePagination } from "../components/AccountantUI.jsx";
-import { pageOf } from "../utils/feeViewData.js";
-import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
-import { feeCollectionAccess } from "../services/accountantService.js";
-import { feeReceiptAccess } from "../services/accountantService.js";
-import { readFee } from "../utils/feeViewData.js";
-import { FeeReceiptActions, SavedPaymentReceipt } from "./AccountantFeeManagement.jsx";
+import { useAccountantViewParams } from "../components/AccountantUI.jsx";
 
 export function AccountantPayments() {
-  const campusParams = useFinanceParams();
-  const permissions = useEffectivePermissions();
-  const canReadHistory = feeCollectionAccess(permissions);
-  const canReadReceipt = feeReceiptAccess(permissions);
-  const { params: viewParams, setParam, updateParams } = useAccountantViewParams();
-  const [printSelection, setPrintSelection] = useState(null);
-  const receiptId = viewParams.get("receiptId");
-  const setReceiptSelection = (selection) => {
-    setPrintSelection(selection?.autoPrint ? { ...selection, viewKey: viewParams.toString() } : null);
-    if (!selection?.autoPrint) setParam("receiptId", selection ? readFee(selection.payment, "feePaymentId") : null);
-  };
-  const receiptScope = JSON.stringify(campusParams);
-  const activeTab = viewParams.get("tab") === "fees" ? "fees" : "reimbursements";
-  const setActiveTab = (tab) => updateParams((next) => {
-    next.set("tab", tab); next.delete("receiptId"); next.delete("disburse");
-  }); // "reimbursements" | "fees"
-  useEffect(() => { setPrintSelection(null); }, [receiptScope, activeTab]);
-  const [feePageNumber, setFeePageNumber] = useState(1);
+  const { params: viewParams, setParam } = useAccountantViewParams();
   const [search, setSearch] = useState("");
   const [reimbFilter, setReimbFilter] = useState("all");
   const disburseId = viewParams.get("disburse");
@@ -49,7 +23,7 @@ export function AccountantPayments() {
 
   const [accountEntries, setAccountEntries] = useState([]);
   const [entriesLoading, setEntriesLoading] = useState(true);
-  const disburseModal = activeTab !== "reimbursements" || disburseId == null ? null : accountEntries.find((entry) => String(entry.voucherId) === disburseId && entry.paymentStatus.includes("Awaiting"));
+  const disburseModal = disburseId == null ? null : accountEntries.find((entry) => String(entry.voucherId) === disburseId && entry.paymentStatus.includes("Awaiting"));
 
   const refreshAccountEntries = useCallback(async () => {
     setEntriesLoading(true);
@@ -92,31 +66,6 @@ export function AccountantPayments() {
       window.removeEventListener("cms-reimbursements-updated", refreshAccountEntries);
     };
   }, [refreshAccountEntries]);
-
-  const load = useCallback(async (signal) => {
-    if (activeTab !== "fees") return null;
-    if (permissions.loading) return null;
-    return loadPaymentHistory(campusParams, signal, () => canReadHistory);
-  }, [campusParams, activeTab, permissions.loading, canReadHistory]);
-  const state = useFinancePage(load);
-  const receiptPayment = receiptId == null ? null : (state.data?.payments || []).find((payment) => String(readFee(payment, "feePaymentId")) === receiptId);
-  const receiptSelection = (printSelection?.viewKey === viewParams.toString() ? printSelection : null) || (receiptPayment ? { payment: receiptPayment, autoPrint: false, scope: receiptScope } : null);
-  const reloadFees = state.reload;
-  const feeRows = (state.data?.payments || []).map(payment => ({
-    ...normalizePayment(payment),
-    id: readFee(payment, "feePaymentId"),
-    receiptNumber: readFee(payment, "receiptNumber") || "-",
-    reference: readFee(payment, "transactionReference") || "-",
-    payment,
-  })).sort((a, b) => String(b.date).localeCompare(String(a.date))).filter((row) => !search || `${row.studentName} ${row.admissionNo} ${row.reference} ${row.receiptNumber}`.toLowerCase().includes(search.toLowerCase()));
-  const feePage = pageOf(feeRows, feePageNumber, "", "", 5);
-  const currentFeePage = feePage.current;
-  useEffect(() => { if (feePageNumber !== currentFeePage) setFeePageNumber(currentFeePage); }, [feePageNumber, currentFeePage]);
-  useEffect(() => {
-    const refresh = () => { if (activeTab === "fees") reloadFees(); };
-    window.addEventListener("accountant-fees-updated", refresh);
-    return () => window.removeEventListener("accountant-fees-updated", refresh);
-  }, [activeTab, reloadFees]);
 
   const filteredReimbEntries = useMemo(() => {
     return accountEntries.filter((item) => {
@@ -173,8 +122,8 @@ export function AccountantPayments() {
   return (
     <>
       <StudentPageHeader
-        title="Payment & Payable History"
-        subtitle="Manage student fee transactions, faculty reimbursement payables, and bank disbursements."
+        title="Reimbursement & Payout History"
+        subtitle="Track faculty reimbursement payables, pending payouts, and completed disbursements."
         action={
           <div className="sp-actions" style={{ display: "flex", gap: "8px" }}>
 
@@ -193,13 +142,7 @@ export function AccountantPayments() {
         </div>
       ) : null}
 
-      <section className="sp-summary-grid four" style={{ marginBottom: "16px" }}>
-        <StudentSummaryCard
-          icon={adminIconAssets.feeManagement}
-          label="Fee Transactions"
-          value={activeTab !== "fees" || state.loading || state.error ? "-" : feeRows.length}
-          note={activeTab === "fees" ? "Verified payment transactions" : "Open Student Fee Transactions to load"}
-        />
+      <section className="sp-summary-grid" style={{ marginBottom: "16px", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))" }}>
         <StudentSummaryCard
           icon={adminIconAssets.payroll}
           label="Approved Payables"
@@ -223,30 +166,8 @@ export function AccountantPayments() {
         />
       </section>
 
-      {/* Tab Switcher */}
-      <div style={{ display: "flex", gap: "10px", marginBottom: "14px", borderBottom: "1px solid var(--sp-border)", paddingBottom: "8px" }}>
-        <button
-          type="button"
-          className={`sp-btn ${activeTab === "reimbursements" ? "primary" : ""}`}
-          onClick={() => setActiveTab("reimbursements")}
-          style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
-        >
-          <img src={reimbursementIcon} alt="" style={{ width: 16, height: 16, objectFit: "contain" }} />
-          <span>Faculty Reimbursement Payables ({accountEntries.length})</span>
-        </button>
-        <button
-          type="button"
-          className={`sp-btn ${activeTab === "fees" ? "primary" : ""}`}
-          onClick={() => setActiveTab("fees")}
-          style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
-        >
-          <span>Student Fee Transactions{activeTab === "fees" && !state.loading && !state.error ? ` (${feeRows.length})` : ""}</span>
-        </button>
-      </div>
-
-      {activeTab === "reimbursements" ? (
         <StudentCard
-          title="Faculty Reimbursement Accounts Payable"
+          title="Faculty Reimbursement Payables"
           subtitle="Integrated with Reimbursement approval workflow. Approved claims automatically become payable records here."
         >
           <div className="sp-toolbar" style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center", marginBottom: "12px" }}>
@@ -352,54 +273,7 @@ export function AccountantPayments() {
             </table>
           </div>
         </StudentCard>
-      ) : (
-        <>
-          <PageState {...state} onRetry={permissions.refresh} />
-          {permissions.loading ? <SkeletonPage variant="form" rows={3} /> : null}
-          {state.data?.errors?.length ? <div className="sp-api-state is-error" role="alert">History is incomplete: {state.data.errors.join(" ")} Access must be granted by your administrator if permission is denied. <button type="button" className="sp-btn" onClick={permissions.refresh}>Retry</button></div> : null}
-          {!state.loading && !state.error && !permissions.loading ? (
-            <StudentCard title="Fee Transactions" subtitle={`${feeRows.length} transactions`}>
-              <div className="sp-toolbar">
-                <div className="sp-search">
-                  <Search size={15} />
-                  <input
-                    value={search}
-                    onChange={(event) => { setSearch(event.target.value); setFeePageNumber(1); }}
-                    placeholder="Search student, admission number, or reference"
-                  />
-                </div>
-              </div>
-              <StudentDataTable
-                columns={["Student", "Admission No", "Type", "Amount", "Date", "Method", "Reference", "Status", "Receipt Number", "Actions"]}
-                statusColumns={[7]}
-                rows={feePage.rows.map((row) => ({
-                  id: row.id,
-                  Student: row.studentName,
-                  "Admission No": row.admissionNo,
-                  Type: row.type,
-                  Amount: formatMoney(row.amount),
-                  Date: formatDate(row.date),
-                  Method: row.method,
-                  Reference: row.reference,
-                  Status: row.status,
-                  "Receipt Number": row.receiptNumber,
-                  Actions: <FeeReceiptActions payment={row.payment} allowed={canReadReceipt} onSelect={selection => setReceiptSelection({ ...selection, scope: receiptScope })} />,
-                }))}
-                empty={state.data?.errors?.length ? "No verified transactions are available. Resolve the history errors above." : "No payment transactions available."}
-              />
-              <FeePagination page={feePage} onPage={setFeePageNumber} numbered />
-            </StudentCard>
-          ) : null}
-        </>
-      )}
-
-      {activeTab === "fees" && receiptSelection?.scope === receiptScope && canReadReceipt ? <SavedPaymentReceipt
-        key={`${readFee(receiptSelection.payment, "feePaymentId")}-${receiptSelection.autoPrint}-${receiptScope}`}
-        payment={receiptSelection.payment} autoPrint={receiptSelection.autoPrint} onClose={() => setReceiptSelection(null)}
-      /> : null}
-
-      {activeTab === "fees" && receiptId != null && !receiptSelection ? <div className="cms-overlay"><div className="cms-modal" role="dialog" aria-label="Payment Receipt"><p role="status">{state.loading || permissions.loading ? "Loading saved receipt..." : state.error || "This payment is unavailable in the current scope."}</p><button type="button" className="cms-btn cms-btn-ghost" onClick={() => setReceiptSelection(null)}>Close</button></div></div> : null}
-      {activeTab === "reimbursements" && disburseId != null && !disburseModal ? <div className="cms-overlay"><div className="cms-modal" role="dialog" aria-label="Disburse Payment"><p role="status">{entriesLoading ? "Loading payable..." : "This payable is unavailable or has already been disbursed."}</p><button type="button" className="cms-btn cms-btn-ghost" onClick={() => setDisburseModal(null)}>Close</button></div></div> : null}
+      {disburseId != null && !disburseModal ? <div className="cms-overlay"><div className="cms-modal" role="dialog" aria-label="Disburse Payment"><p role="status">{entriesLoading ? "Loading payable..." : "This payable is unavailable or has already been disbursed."}</p><button type="button" className="cms-btn cms-btn-ghost" onClick={() => setDisburseModal(null)}>Close</button></div></div> : null}
       {/* Disburse Payment Modal Dialog */}
       {disburseModal ? (
         <div

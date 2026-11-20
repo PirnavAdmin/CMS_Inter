@@ -29,6 +29,7 @@ function record(kind, value) {
     categories: "categoryId",
     suppliers: "supplierId",
     movements: "transactionId",
+    orders: "orderId",
   }[kind];
   const next = { ...r, id: String(r[idKey] ?? r.id) };
   for (const key of ["categoryId", "supplierId", "itemId", "correctionOfId", "returnOfId"])
@@ -36,6 +37,17 @@ function record(kind, value) {
   if (r.categoryIds) next.categoryIds = r.categoryIds.map(String);
   if (kind === "items") next.openingQty = r.openingQuantity ?? r.openingQty ?? 0;
   if (kind === "suppliers") next.contact = r.contactPerson ?? r.contact;
+  if (kind === "orders")
+    Object.assign(next, {
+      number: r.orderNumber,
+      item: r.itemName,
+      supplier: r.supplierName,
+      quantity: r.quantity,
+      status: r.status,
+      unitPrice: r.unitPrice,
+      totalAmount: r.totalAmount,
+      orderDate: r.orderDate,
+    });
   if (kind === "movements")
     Object.assign(next, {
       number: r.transactionNumber,
@@ -56,7 +68,7 @@ function record(kind, value) {
 }
 
 export async function loadInventoryApi() {
-  const kinds = ["items", "categories", "suppliers", "movements"];
+  const kinds = ["items", "categories", "suppliers", "movements", "orders"];
   const responses = await Promise.all(
     kinds.map((kind) =>
       api.get(`${BASE}/${kind}`, {
@@ -80,7 +92,7 @@ export async function loadInventoryApi() {
       text: r.activityText,
     };
   });
-  return { ...state, orders: [], activities, dashboardKpis: camel(dashboard.kpis), serverBacked: true };
+  return { ...state, activities, dashboardKpis: camel(dashboard.kpis), serverBacked: true };
 }
 
 export async function saveInventoryApi(kind, values) {

@@ -16,6 +16,7 @@ import {
   Megaphone,
   Briefcase,
   Sparkles,
+  PhoneCall,
 } from "lucide-react";
 import { nonTeachingService } from "../services/nonTeachingService.js";
 import { attendanceService } from "@/api/attendanceService.js";
@@ -43,8 +44,14 @@ export default function NonTeachingDashboardHome() {
   const [leaveBalances, setLeaveBalances] = useState(() => nonTeachingService.getLeaveBalances());
   const [leaveHistory, setLeaveHistory] = useState(() => nonTeachingService.getLeaveHistory());
   const [announcements, setAnnouncements] = useState(() => nonTeachingService.getAnnouncements());
-  const [attendanceSummary, setAttendanceSummary] = useState(() => nonTeachingService.getAttendanceSummary());
-  const [punchState, setPunchState] = useState({ status: "not_punched", inTime: null, outTime: null });
+  const [attendanceSummary, setAttendanceSummary] = useState(null);
+  const [punchState, setPunchState] = useState({
+    status: "not_punched",
+    inTime: null,
+    outTime: null,
+    isMissedCheckout: false,
+    isCheckOutAllowed: false,
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
@@ -57,15 +64,20 @@ export default function NonTeachingDashboardHome() {
     let active = true;
     attendanceService.getMyTodayStatus()
       .then((res) => {
-        if (active && res?.Data) {
+        const d = res?.data || res?.Data || (res?.status ? res : null);
+        if (active && d) {
           setPunchState({
-            status: res.Data.Status || res.Data.status || "not_punched",
-            inTime: res.Data.InTime || res.Data.inTime || null,
-            outTime: res.Data.OutTime || res.Data.outTime || null,
+            status: d.status || d.Status || "not_punched",
+            inTime: d.inTime || d.InTime || null,
+            outTime: d.outTime || d.OutTime || null,
+            isMissedCheckout: Boolean(d.isMissedCheckout ?? d.IsMissedCheckout),
+            isCheckOutAllowed: Boolean(d.isCheckOutAllowed ?? d.IsCheckOutAllowed),
           });
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (active) showToast(err?.response?.data?.message || err?.message || "Failed to load today's attendance status.");
+      });
     return () => {
       active = false;
     };
@@ -117,10 +129,24 @@ export default function NonTeachingDashboardHome() {
         if (ldRes.value.balances) setLeaveBalances(ldRes.value.balances);
         if (ldRes.value.history) setLeaveHistory(ldRes.value.history);
       }
-      if (attRes.status === "fulfilled" && attRes.value) setAttendanceSummary(attRes.value);
-    } catch {}
-    setRefreshing(false);
-    showToast("Dashboard synchronized with server.");
+      if (attRes.status === "fulfilled") setAttendanceSummary(attRes.value);
+      const todayRes = await attendanceService.getMyTodayStatus();
+      const td = todayRes?.data || todayRes?.Data || (todayRes?.status ? todayRes : null);
+      if (td) {
+        setPunchState({
+          status: td.status || td.Status || "not_punched",
+          inTime: td.inTime || td.InTime || null,
+          outTime: td.outTime || td.OutTime || null,
+          isMissedCheckout: Boolean(td.isMissedCheckout ?? td.IsMissedCheckout),
+          isCheckOutAllowed: Boolean(td.isCheckOutAllowed ?? td.IsCheckOutAllowed),
+        });
+      }
+      showToast("Dashboard synchronized with server.");
+    } catch (err) {
+      showToast(err?.response?.data?.message || err?.message || "Failed to synchronize attendance metrics.");
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const showToast = (text) => {
@@ -132,27 +158,33 @@ export default function NonTeachingDashboardHome() {
     try {
       if (action === "in") {
         const res = await attendanceService.punchIn({ deviceId: "Web Portal", remarks: "Non-Teaching Web Punch In" });
-        if (res?.Data) {
-          setPunchState({ status: "punched_in", inTime: res.Data.InTime, outTime: null });
-          showToast(`Punched In successfully at ${res.Data.InTime}`);
-          return;
+        const data = res?.data || res?.Data;
+        if (data) {
+          setPunchState({
+            status: data.status || data.Status || "punched_in",
+            inTime: data.inTime || data.InTime,
+            outTime: null,
+            isMissedCheckout: Boolean(data.isMissedCheckout ?? data.IsMissedCheckout),
+            isCheckOutAllowed: Boolean(data.isCheckOutAllowed ?? data.IsCheckOutAllowed),
+          });
+          showToast(`Punched In successfully at ${data.inTime || data.InTime}`);
         }
       } else {
         const res = await attendanceService.punchOut({ deviceId: "Web Portal", remarks: "Non-Teaching Web Punch Out" });
-        if (res?.Data) {
-          setPunchState((prev) => ({ ...prev, status: "punched_out", outTime: res.Data.OutTime }));
-          showToast(`Punched Out successfully at ${res.Data.OutTime}`);
-          return;
+        const data = res?.data || res?.Data;
+        if (data) {
+          setPunchState((prev) => ({
+            ...prev,
+            status: "punched_out",
+            outTime: data.outTime || data.OutTime,
+            isMissedCheckout: false,
+            isCheckOutAllowed: false,
+          }));
+          showToast(`Punched Out successfully at ${data.outTime || data.OutTime}`);
         }
       }
-    } catch {}
-    const res = nonTeachingService.recordPunch(action);
-    if (action === "in") {
-      setPunchState({ status: "punched_in", inTime: res.timeStr, outTime: null });
-      showToast(`Punched In successfully at ${res.timeStr}`);
-    } else {
-      setPunchState((prev) => ({ ...prev, status: "punched_out", outTime: res.timeStr }));
-      showToast(`Punched Out successfully at ${res.timeStr}`);
+    } catch (err) {
+      showToast(err?.response?.data?.message || err?.response?.data?.Message || err?.message || "Attendance action failed.");
     }
   };
 
@@ -261,10 +293,10 @@ export default function NonTeachingDashboardHome() {
             </div>
             <div className="nts-kpi-meta">
               <span className="nts-kpi-label">My Attendance</span>
-              <span className="nts-kpi-val">{attendanceSummary.attendanceRate}%</span>
+              <span className="nts-kpi-val">{attendanceSummary ? `${attendanceSummary.attendanceRate}%` : "--"}</span>
             </div>
           </div>
-          <span className="nts-kpi-sub">{attendanceSummary.presentDays} Days Present ({currentMonthName})</span>
+          <span className="nts-kpi-sub">{attendanceSummary ? `${attendanceSummary.presentDays} Days Present (${currentMonthName})` : `Loading (${currentMonthName})...`}</span>
         </div>
 
         {/* 2. Leave Balance */}
@@ -374,21 +406,39 @@ export default function NonTeachingDashboardHome() {
                       type="button"
                       className="nts-punch-btn in"
                       onClick={() => handlePunch("in")}
-                      disabled={punchState.status === "punched_out"}
+                      disabled={punchState.status === "punched_out" || punchState.isMissedCheckout}
                     >
-                      <UserCheck size={15} /> Punch In
+                      <UserCheck size={15} /> {punchState.isMissedCheckout ? "Missed Checkout" : "Punch In"}
                     </button>
                   ) : (
                     <button
                       type="button"
                       className="nts-punch-btn out"
                       onClick={() => handlePunch("out")}
+                      disabled={punchState.isMissedCheckout || punchState.isCheckOutAllowed === false}
                     >
                       <Clock size={15} /> Punch Out
                     </button>
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Front Desk & Enquiries Portal Card */}
+          <div className="nts-card" style={{ borderLeft: "4px solid #557d48" }}>
+            <div className="nts-card-head">
+              <h3>
+                <PhoneCall size={16} style={{ color: "#557d48" }} /> Front Desk &amp; Enquiry Management
+              </h3>
+              <Link to="/non-teaching-dashboard/enquiries" className="nts-card-action">
+                Open Portal <ArrowRight size={13} />
+              </Link>
+            </div>
+            <div className="nts-card-body">
+              <p style={{ margin: 0, fontSize: "13px", color: "var(--nts-muted, #555)", lineHeight: 1.5 }}>
+                Manage prospective student enquiries, track reception calls, and log follow-up contact notes.
+              </p>
             </div>
           </div>
 

@@ -31,14 +31,23 @@ namespace CollegeManagement.API.Controllers.V1
             return int.TryParse(claim, out var id) ? id : null;
         }
 
+        private int? GetCurrentCollegeId()
+        {
+            var claim = User.FindFirst("CollegeId")?.Value
+                        ?? User.FindFirst("collegeId")?.Value;
+
+            return int.TryParse(claim, out var id) && id > 0 ? id : null;
+        }
+
         /// <summary>
-        /// Get notifications for the authenticated user (supports pagination & unread filter).
+        /// Get notifications for the authenticated user (supports pagination, unread filter, or latest-10 history mode).
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> GetNotifications(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
-            [FromQuery] bool? unreadOnly = null)
+            [FromQuery] bool? unreadOnly = null,
+            [FromQuery] string? section = null)
         {
             int? userId = GetCurrentUserId();
             if (!userId.HasValue)
@@ -48,6 +57,22 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                if (string.Equals(section, "history", StringComparison.OrdinalIgnoreCase))
+                {
+                    int limit = Math.Clamp(pageSize <= 0 ? 10 : pageSize, 1, 10);
+                    var (historyItems, historyUnreadCount) = await _notificationService.GetUserNotificationHistoryAsync(userId.Value, limit);
+                    return Ok(new
+                    {
+                        success = true,
+                        message = "Latest notification history retrieved successfully.",
+                        data = historyItems,
+                        total = historyItems.Count,
+                        unreadCount = historyUnreadCount,
+                        page = 1,
+                        pageSize = limit
+                    });
+                }
+
                 var (items, totalCount, unreadCount) = await _notificationService.GetUserNotificationsAsync(userId.Value, page, pageSize, unreadOnly);
                 return Ok(new
                 {
@@ -66,6 +91,43 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     success = false,
                     message = "An error occurred while retrieving notifications.",
+                    details = ex.Message
+                });
+            }
+        }
+
+        /// <summary>
+        /// Get only the latest 10 notifications sorted newest-first for the History section.
+        /// </summary>
+        [HttpGet("history")]
+        public async Task<IActionResult> GetNotificationHistory([FromQuery] int limit = 10)
+        {
+            int? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { success = false, message = "User identity not found in token." });
+            }
+
+            try
+            {
+                int effectiveLimit = Math.Clamp(limit, 1, 10);
+                var (items, unreadCount) = await _notificationService.GetUserNotificationHistoryAsync(userId.Value, effectiveLimit);
+                return Ok(new
+                {
+                    success = true,
+                    message = "Latest notification history retrieved successfully.",
+                    data = items,
+                    total = items.Count,
+                    unreadCount = unreadCount,
+                    limit = effectiveLimit
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An error occurred while retrieving notification history.",
                     details = ex.Message
                 });
             }
@@ -135,6 +197,48 @@ namespace CollegeManagement.API.Controllers.V1
             }
         }
 
+        public class MarkGroupReadRequestDto
+        {
+            public string GroupKey { get; set; } = string.Empty;
+        }
+
+        /// <summary>
+        /// Mark all active unread notifications belonging to a screen+action group as read.
+        /// </summary>
+        [HttpPut("group/read")]
+        public async Task<IActionResult> MarkGroupAsRead([FromBody] MarkGroupReadRequestDto dto)
+        {
+            int? userId = GetCurrentUserId();
+            if (!userId.HasValue)
+            {
+                return Unauthorized(new { success = false, message = "User identity not found in token." });
+            }
+
+            if (string.IsNullOrWhiteSpace(dto?.GroupKey))
+            {
+                return BadRequest(new { success = false, message = "GroupKey is required." });
+            }
+
+            try
+            {
+                bool success = await _notificationService.MarkGroupAsReadAsync(dto.GroupKey.Trim(), userId.Value);
+                return Ok(new
+                {
+                    success = success,
+                    message = success ? "Notification group marked as read." : "No unread notifications found in group."
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An error occurred while updating notification group.",
+                    details = ex.Message
+                });
+            }
+        }
+
         /// <summary>
         /// Mark all notifications as read for current user.
         /// </summary>
@@ -192,6 +296,7 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var callerCollegeId = GetCurrentCollegeId();
                 if (dto.UserId.HasValue && dto.UserId.Value > 0)
                 {
                     var notif = await _notificationService.SendToUserAsync(
@@ -201,7 +306,7 @@ namespace CollegeManagement.API.Controllers.V1
                 else if (!string.IsNullOrWhiteSpace(dto.Role))
                 {
                     var count = await _notificationService.SendToRoleAsync(
-                        dto.Role, dto.CampusId, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                        dto.Role, dto.CampusId, dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl, callerCollegeId);
                     return Ok(new { success = true, count });
                 }
                 else if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
@@ -213,7 +318,7 @@ namespace CollegeManagement.API.Controllers.V1
                 else
                 {
                     var count = await _notificationService.SendGlobalAsync(
-                        dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl);
+                        dto.Title, dto.Message, dto.Type, dto.ReferenceId, dto.ActionUrl, callerCollegeId);
                     return Ok(new { success = true, count });
                 }
             }
@@ -235,9 +340,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var callerCollegeId = GetCurrentCollegeId();
                 var title = dto.Title.StartsWith("Announcement", StringComparison.OrdinalIgnoreCase) ? dto.Title : $"Announcement: {dto.Title}";
                 var roles = new[] { "Student", "Parent", "Teacher", "Faculty", "Staff" };
-                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Announcement", dto.ReferenceId, dto.ActionUrl ?? "/announcements");
+                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Announcement", dto.ReferenceId, dto.ActionUrl ?? "/announcements", callerCollegeId);
                 return Ok(new { success = true, recipientCount = count, message = "Announcement broadcasted successfully." });
             }
             catch (Exception ex)
@@ -258,9 +364,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var callerCollegeId = GetCurrentCollegeId();
                 var title = dto.Title.StartsWith("Circular", StringComparison.OrdinalIgnoreCase) ? dto.Title : $"Circular: {dto.Title}";
                 var roles = new[] { "Student", "Parent", "Teacher", "Faculty", "Staff" };
-                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Circular", dto.ReferenceId, dto.ActionUrl ?? "/circulars");
+                var count = await _notificationService.SendToRolesAsync(roles, dto.CampusId, title, dto.Message, "Circular", dto.ReferenceId, dto.ActionUrl ?? "/circulars", callerCollegeId);
                 return Ok(new { success = true, recipientCount = count, message = "Circular published and broadcasted successfully." });
             }
             catch (Exception ex)

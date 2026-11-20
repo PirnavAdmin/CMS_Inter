@@ -5,7 +5,6 @@ import { SkeletonTable, Modal, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import holidayApi from "@/api/holidayApi.js";
-import { holidayRecords } from "@/data/mockData.js";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import totalHolidaysIcon from "@/assets/sidebar-3d/holiday-total.svg";
 import nationalHolidaysIcon from "@/assets/sidebar-3d/holiday-national.svg";
@@ -84,7 +83,7 @@ export default function TransportManagerHolidays() {
   const { selectedCampusId } = useCampusContext?.() || {};
   const selectedBoardId = tmContext?.selectedBoardId;
 
-  const [holidays, setHolidays] = useState(holidayRecords);
+  const [holidays, setHolidays] = useState([]);
   const [apiSummary, setApiSummary] = useState(null);
   const [restorableHolidays, setRestorableHolidays] = useState({ scope: "", rows: [] });
   const scope = [selectedAcademicYearId, selectedBoardId, selectedCampusId].join(":");
@@ -150,15 +149,15 @@ export default function TransportManagerHolidays() {
           const campusId = holiday?.campusId ?? holiday?.CampusId;
           return campusId == null || String(campusId) === String(selectedCampusId);
         });
-        const nonSunday = (filteredList.length > 0 ? filteredList : holidayRecords).filter(h => !isSundayHoliday(h));
+        const nonSunday = filteredList.filter(h => !isSundayHoliday(h));
         setHolidays(nonSunday);
         setRestorableHolidays({ scope, rows: filteredList });
       } else {
-        setHolidays(holidayRecords);
+        setHolidays([]);
       }
     } catch (err) {
       console.warn("Using local holiday data fallback:", err);
-      setHolidays(holidayRecords);
+      setHolidays([]);
     } finally {
       setCompletedScope(scope);
       setLoading(false);

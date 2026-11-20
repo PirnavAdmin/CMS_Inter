@@ -23,11 +23,12 @@ import { env } from "@/config/env.js";
 import notificationHubService from "@/services/notificationHubService.js";
 import { isWardenRole, isNonTeachingRole } from "@/routes/ProtectedRoute.jsx";
 import { isExamCellRole } from "@/modules/exam-cell/navigation.js";
+import { getHostelWardenNavigationItem, getParentNavigationItem } from "@/navigation/roleSidebarRegistry.js";
 import { SHOW_HALL_TICKETS } from "@/modules/exam-cell/hallTicketsConfig.js";
 import { can, hasRole } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
 import { ACTIONS } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.constants.js";
 import { reimbursementApi } from "@/api/staffApi";
-import { getCurrentUserPermissions } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 import pirnavCollegesLogo from "@/assets/pirnav-colleges-logo.png";
 import dashboardIcon from "@/assets/sidebar-3d/dashboard.png";
 import holidayManagementIcon from "@/assets/sidebar-3d/holiday-management.svg";
@@ -117,6 +118,7 @@ const PAGE_ICON_ROUTE_ALIASES = [
   { path: "/warden-dashboard/attendance", icon: attendanceIcon },
   { path: "/warden-dashboard/reports", icon: reportsAnalyticsIcon },
   { path: "/warden-dashboard/profile", icon: staffIcon },
+  { path: "/warden-dashboard/settings", icon: settingsBoardAcademicYearIcon },
   { path: "/warden-dashboard", icon: dashboardIcon },
   { path: "/exam-cell-dashboard/exams", icon: examinationIcon },
   { path: "/exam-cell-dashboard/exam-timetable", icon: timetableIcon },
@@ -195,7 +197,7 @@ export const menu = [
       { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
       { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
       { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
-      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
+      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon, moduleKey: "timetable" },
       { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
       { to: "/dashboard/inventory-management", label: "Inventory Management", icon: Boxes, moduleKey: "inventory-management" },
     ],
@@ -250,6 +252,17 @@ export const menu = [
     ],
   },
   {
+    section: "Enquiry Management",
+    items: [
+      {
+        to: "/dashboard/enquiry-management",
+        label: "Enquiry Management",
+        icon: settingsTemplatesIcon,
+        moduleKey: "enquiry-management",
+      },
+    ],
+  },
+  {
     section: "Administration",
     items: [
       {
@@ -266,27 +279,28 @@ export const parentMenu = [
   {
     section: "Main",
     items: [
-      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon },
+      { to: "/parent-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getParentNavigationItem("/parent-dashboard")?.permissionKey || getParentNavigationItem("/parent-dashboard")?.id },
     ],
   },
   {
     section: "Student & Academics",
     items: [
-      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon },
-      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon },
-      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon },
-      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon },
-      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon },
-      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon },
-      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon },
-      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon },
-      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon },
+      { to: "/parent-dashboard/children", label: "My Children", icon: studentsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/children")?.permissionKey || getParentNavigationItem("/parent-dashboard/children")?.id },
+      { to: "/parent-dashboard/attendance", label: "Attendance", icon: attendanceIcon, moduleKey: getParentNavigationItem("/parent-dashboard/attendance")?.permissionKey || getParentNavigationItem("/parent-dashboard/attendance")?.id },
+      { to: "/parent-dashboard/academics", label: "Academics & Results", icon: subjectsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/academics")?.permissionKey || getParentNavigationItem("/parent-dashboard/academics")?.id },
+      { to: "/parent-dashboard/examinations", label: "Examinations", icon: examinationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/examinations")?.permissionKey || getParentNavigationItem("/parent-dashboard/examinations")?.id },
+      { to: "/parent-dashboard/fees", label: "Fees & Payments", icon: feeManagementIcon, moduleKey: getParentNavigationItem("/parent-dashboard/fees")?.permissionKey || getParentNavigationItem("/parent-dashboard/fees")?.id },
+      { to: "/parent-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: getParentNavigationItem("/parent-dashboard/timetable")?.permissionKey || getParentNavigationItem("/parent-dashboard/timetable")?.id },
+      { to: "/parent-dashboard/communication", label: "Communication", icon: marksEvaluationIcon, moduleKey: getParentNavigationItem("/parent-dashboard/communication")?.permissionKey || getParentNavigationItem("/parent-dashboard/communication")?.id },
+      { to: "/parent-dashboard/announcements", label: "Announcements & Events", icon: reportsAnalyticsIcon, moduleKey: getParentNavigationItem("/parent-dashboard/announcements")?.permissionKey || getParentNavigationItem("/parent-dashboard/announcements")?.id },
+      { to: "/parent-dashboard/documents", label: "Documents", icon: certificatesIcon, moduleKey: getParentNavigationItem("/parent-dashboard/documents")?.permissionKey || getParentNavigationItem("/parent-dashboard/documents")?.id },
     ],
   },
   {
     section: "Settings",
     items: [
-      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon },
+      { to: "/parent-dashboard/profile", label: "My Profile", icon: staffIcon, moduleKey: getParentNavigationItem("/parent-dashboard/profile")?.permissionKey || getParentNavigationItem("/parent-dashboard/profile")?.id || "profile" },
+      { to: "/parent-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getParentNavigationItem("/parent-dashboard/settings")?.permissionKey || getParentNavigationItem("/parent-dashboard/settings")?.id },
     ],
   },
 ];
@@ -295,23 +309,34 @@ export const wardenMenu = [
   {
     section: "Overview",
     items: [
-      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon },
+      { to: "/warden-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard")?.id },
     ],
   },
   {
     section: "Hostel Operations",
     items: [
-      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon },
-      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon },
-      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon },
-      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave },
+      { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/rooms")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/rooms")?.id },
+      { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/allocations")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/allocations")?.id },
+      { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/attendance")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/attendance")?.id },
+      { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/leave-requests")?.id },
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/students")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/students")?.id },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/reports")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/reports")?.id },
     ],
   },
   {
-    section: "Residents & Analytics",
+    section: "My Workspace",
     items: [
-      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
-      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
+      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-attendance")?.id },
+      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/my-leaves")?.id },
+      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/holidays")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/holidays")?.id },
+      { to: "/warden-dashboard/expenses", label: "Reimbursements", icon: reimbursementIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/expenses")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/expenses")?.id },
+    ],
+  },
+  {
+    section: "Account",
+    items: [
+      { to: "/warden-dashboard/profile", label: "Profile", icon: staffIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/profile")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/profile")?.id || "profile" },
+      { to: "/warden-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: getHostelWardenNavigationItem("/warden-dashboard/settings")?.permissionKey || getHostelWardenNavigationItem("/warden-dashboard/settings")?.id || "settings" },
     ],
   },
 ];
@@ -331,7 +356,6 @@ export const examCellMenu = [
     section: "Examinations",
     items: [
       { to: "/exam-cell-dashboard/exams", label: "Examination", icon: examinationIcon, moduleKey: "examinations" },
-      { to: "/exam-cell-dashboard/hall-allocation", label: "Hall Allocation", icon: sectionsIcon, moduleKey: "examinations", screenKey: "hall-allocation" },
       ...(SHOW_HALL_TICKETS
         ? [{ to: "/exam-cell-dashboard/hall-tickets", label: "Hall Tickets", icon: certificatesIcon, moduleKey: "examinations", screenKey: "hall-tickets" }]
         : []),
@@ -357,7 +381,6 @@ export const examCellMenu = [
   {
     section: "Reports & Account",
     items: [
-      { to: "/exam-cell-dashboard/reports", label: "Exam Reports", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
       { to: "/exam-cell-dashboard/profile", label: "My Profile", icon: staffIcon, moduleKey: "profile" },
       { to: "/exam-cell-dashboard/settings", label: "Settings", icon: settingsBoardAcademicYearIcon, moduleKey: "settings" },
     ],
@@ -425,8 +448,6 @@ const parentSearchIndex = [
   ),
   { to: "/parent-dashboard/academics", label: "Results & Marks Memo", section: "Student & Academics" },
   { to: "/parent-dashboard/notifications", label: "Notifications", section: "Student & Academics" },
-  { to: "/parent-dashboard/profile", label: "Profile", section: "Account" },
-  { to: "/parent-dashboard/settings", label: "Settings", section: "Account" },
 ];
 
 const wardenSearchIndex = [
@@ -437,7 +458,6 @@ const wardenSearchIndex = [
   ),
   { to: "/warden-dashboard/overview", label: "Overview", section: "Overview" },
   { to: "/warden-dashboard/beds", label: "Bed Allocation", section: "Hostel Operations" },
-  { to: "/warden-dashboard/profile", label: "My Profile", section: "Account" },
 ];
 
 const examCellSearchIndex = createSearchIndex(examCellMenu);
@@ -618,12 +638,6 @@ try {
   }
 } catch { }
 
-// Module-level notifications cache to prevent duplicate backend requests on route navigation
-let cachedLiveNotifications = [];
-let lastNotifFetchTimestamp = 0;
-let lastNotifCampus = null;
-const NOTIF_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
-
 export default function DashboardLayout({
   title,
   subtitle,
@@ -641,6 +655,8 @@ export default function DashboardLayout({
   showCampusSelector = true,
   showBoardSelector = true,
   showAcademicYearSelector = true,
+  hidePageHeader = false,
+  contentClassName = "",
 }) {
   const { ready, navOpen, setNavOpen, facultyOpen, setFacultyOpen } = useSidebar();
   const {
@@ -670,8 +686,6 @@ export default function DashboardLayout({
   const [yearOpen, setYearOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [liveNotifications, setLiveNotifications] = useState([]);
-  const [hasViewedNotifications, setHasViewedNotifications] = useState(false);
   const actionsRef = useRef(null);
   const searchRef = useRef(null);
   const campusRef = useRef(null);
@@ -684,38 +698,7 @@ export default function DashboardLayout({
   const pathname = location.pathname;
   const [currentUser, setCurrentUser] = useState(() => readUser());
   const user = currentUser;
-
-  useEffect(() => {
-    if (!currentUser || hasRole("SUPER_ADMIN", currentUser)) return;
-
-    let isMounted = true;
-    const fetchPerms = () => {
-      getCurrentUserPermissions()
-        .then((res) => {
-          if (isMounted && res?.data && Array.isArray(res.data) && res.data.length > 0) {
-            const updated = { ...currentUser, permissions: res.data };
-            try {
-              for (const storage of [window.localStorage, window.sessionStorage]) {
-                if (storage.getItem("user")) storage.setItem("user", JSON.stringify(updated));
-              }
-            } catch { }
-            setCurrentUser(updated);
-          }
-        })
-        .catch((err) => {
-          console.warn("Could not load current user permissions:", err?.message);
-        });
-    };
-
-    fetchPerms();
-
-    const handleUpdate = () => fetchPerms();
-    window.addEventListener("roles-updated", handleUpdate);
-    return () => {
-      isMounted = false;
-      window.removeEventListener("roles-updated", handleUpdate);
-    };
-  }, []);
+  const { permissions: effectivePermissions, hasFetched: permsHasFetched } = useEffectivePermissions();
 
   // Live profile photo and storage synchronization across sessions and tabs
   useEffect(() => {
@@ -726,7 +709,7 @@ export default function DashboardLayout({
       if (!u) return;
       const isAdminUser = u.isAdmin || String(u.role || "").toLowerCase().includes("admin") || u.roleType === "admin";
       if (isAdminUser) {
-        apiClient.get("/api/Admin/1").then(res => {
+        apiClient.get("/api/Admin/profile").then(res => {
           if (!active) return;
           const dataObj = res.data?.data || res.data?.Data || res.data;
           const photo = dataObj?.photoPath || dataObj?.PhotoPath || dataObj?.photoUrl || dataObj?.PhotoUrl;
@@ -794,22 +777,33 @@ export default function DashboardLayout({
       else if (isExamCell) base = examCellMenu;
       else base = menu;
     }
-    if (user && !hasRole("SUPER_ADMIN", user) && !isExamCell && (user.permissions || user.rolePermissions)) {
-      return base
-        .map((group) => ({
-          ...group,
-          items: (group.items || []).filter((item) => {
-            if (!item.moduleKey || item.moduleKey === "dashboard") return true;
-            return can(item.moduleKey, ACTIONS.VIEW, user?.permissions, user, item.screenKey);
-          }),
-        }))
-        .filter((group) => group.items.length > 0);
+    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user)) {
+      const resolvedPerms = permsHasFetched
+        ? effectivePermissions
+        : (effectivePermissions?.length ? effectivePermissions : (user.permissions ?? user.rolePermissions));
+      if (Array.isArray(resolvedPerms)) {
+        return base
+          .map((group) => ({
+            ...group,
+            items: (group.items || []).filter((item) => {
+              if (!item.moduleKey) return true;
+              return can(item.moduleKey, ACTIONS.VIEW, resolvedPerms, user, item.screenKey);
+            }),
+          }))
+          .filter((group) => group.items.length > 0);
+      }
     }
     return base;
-  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
-  const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex);
+  }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user, effectivePermissions, permsHasFetched]);
+  const currentSearchIndex = useMemo(() => {
+    if (searchIndexOverride) return searchIndexOverride;
+    if (user && !hasRole("SUPER_ADMIN", user) && !hasRole("ADMIN", user)) {
+      return createSearchIndex(activeMenu);
+    }
+    return menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex;
+  }, [searchIndexOverride, user, menuOverride, activeMenu, isWarden, isParent, isPrincipal, isExamCell]);
   const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
-  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
+  const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard/settings" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !isWarden && !isExamCell && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
   const pageIcon = PAGE_TITLE_ICON_OVERRIDES[breadcrumbKey(title)] ?? pageIconForPathAlias(pathname) ?? menuIconForTitle(title, activeMenu) ?? pageMenuItem?.icon;
@@ -826,134 +820,6 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const reimbursementCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
-  const userRoleStr = String(user?.role || "").trim().toLowerCase();
-  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
-  const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
-    const fetchLiveNotifsRef = useRef(null);
-
-  // Fetch live notifications count for badges
-  useEffect(() => {
-    let disposed = false;
-    if (canReviewReimbursements || canReviewCertificates) {
-      const fetchLiveNotifications = async (force = false) => {
-        const now = Date.now();
-        if (
-          !force &&
-          lastNotifCampus === reimbursementCampusId &&
-          now - lastNotifFetchTimestamp < NOTIF_CACHE_TTL_MS
-        ) {
-          if (!disposed && cachedLiveNotifications.length > 0) {
-            setLiveNotifications(cachedLiveNotifications);
-          }
-          return;
-        }
-
-        const notifs = [];
-        try {
-          if (canReviewReimbursements) {
-            const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
-            if (fetchFn) {
-              const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
-              if (!disposed) {
-                const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
-                const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
-                if (claims.length > 0) {
-                  notifs.push({
-                    id: "admin-notif-reimbursement",
-                    title: "New Staff Reimbursement Request",
-                    count: claims.length,
-                    to: "/dashboard/reimbursement",
-                    label: "reimbursements"
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Gracefully handle offline or pending notification counter without console noise
-        }
-
-        try {
-          if (canReviewCertificates) {
-            const certRes = await apiClient.get("/api/v1/certificates/workflow-stats", { skipGlobalLoader: true });
-            if (!disposed) {
-              const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
-              const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
-              const isCurrentlyOnCertPage = window.location.pathname.startsWith("/dashboard/certificates");
-              if (reqCount > 0 && !isCurrentlyOnCertPage) {
-                notifs.push({
-                  id: "admin-notif-certificate",
-                  title: "Student Certificate Requests",
-                  count: reqCount,
-                  to: "/dashboard/certificates?tab=actions&status=Requested",
-                  label: "certificates"
-                });
-              }
-            }
-          }
-        } catch {
-          // Gracefully handle offline or pending notification counter without console noise
-        }
-
-        if (!disposed) {
-          cachedLiveNotifications = notifs;
-          lastNotifFetchTimestamp = Date.now();
-          lastNotifCampus = reimbursementCampusId;
-          setLiveNotifications(notifs);
-        }
-      };
-
-      fetchLiveNotifsRef.current = fetchLiveNotifications;
-      fetchLiveNotifications();
-
-      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
-      let channel = null;
-      try {
-        channel = new BroadcastChannel("cms_notifications");
-        channel.onmessage = (event) => {
-          if (
-            event.data?.type === "NEW_REIMBURSEMENT" ||
-            event.data?.type === "NEW_CERTIFICATE_REQUEST" ||
-            event.data?.type === "CERTIFICATE_STATUS_UPDATED" ||
-            event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
-          ) {
-            setHasViewedNotifications(false);
-            fetchLiveNotifications(true);
-          }
-        };
-      } catch {
-        // Fallback
-      }
-
-      // Listen for same-tab local events so badges update immediately upon action
-      const handleLocalAction = () => {
-        setHasViewedNotifications(false);
-        fetchLiveNotifications(true);
-      };
-      window.addEventListener("cms-reimbursements-updated", handleLocalAction);
-      window.addEventListener("cms-certificates-updated", handleLocalAction);
-
-      return () => {
-        disposed = true;
-        if (channel) channel.close();
-        window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
-        window.removeEventListener("cms-certificates-updated", handleLocalAction);
-      };
-    }
-    setLiveNotifications([]);
-  }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
-
-  // SignalR Push Connection: Subscribed via singleton notificationHubService
-  useEffect(() => {
-    if (!canReviewReimbursements && !canReviewCertificates) return;
-
-    const unsubscribe = notificationHubService.subscribe(() => {
-      setHasViewedNotifications(false);
-      fetchLiveNotifsRef.current?.(true);
-    });
-
-    return unsubscribe;
-  }, [canReviewReimbursements, canReviewCertificates]);
 
   // Synchronize Campus Join dynamically without tearing down SignalR socket
   useEffect(() => {
@@ -962,28 +828,26 @@ export default function DashboardLayout({
     }
   }, [reimbursementCampusId]);
 
-  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
-
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isExamCell ? "Exam Cell" : "CMS Admin"));
   const profileRole = isWarden ? (user?.designation || "Hostel Warden") : isExamCell ? (user?.designation || "Exam Cell") : (user?.designation || user?.role || "admin");
 
-  const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
-  const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
-
   const [adminPhotoError, setAdminPhotoError] = useState(false);
   const activeAdminPhoto = useMemo(() => {
+    const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
     let savedAdminProfile = null;
-    try {
-      savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
-    } catch { }
+    if (!isTenantCollege) {
+      try {
+        savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+      } catch { }
+    }
     const rawPhoto = (
       user?.photoUrl ||
       user?.photoPath ||
       user?.photo ||
-      savedAdminProfile?.photo ||
-      (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
+      (!isTenantCollege ? savedAdminProfile?.photo : null) ||
+      (!isTenantCollege && typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
       null
     );
     if (!rawPhoto || typeof rawPhoto !== "string" || isInvalidOrBrokenPhoto(rawPhoto)) return null;
@@ -1050,14 +914,6 @@ export default function DashboardLayout({
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
-  }, [pathname]);
-  useEffect(() => {
-    if (pathname.startsWith("/dashboard/certificates")) {
-      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
-    }
-    if (/^\/dashboard\/(?:finance\/)?reimbursements?(?:\/|$)/.test(pathname)) {
-      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
-    }
   }, [pathname]);
 
   useEffect(() => {
@@ -1346,8 +1202,8 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Campus</span>
-                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code}>
-                      {selectedCampus?.name || selectedCampus?.code || "Main Campus"}
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No Campus"}>
+                      {selectedCampus?.name || selectedCampus?.code || "No Campus"}
                     </span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1416,9 +1272,9 @@ export default function DashboardLayout({
                       <span className="cms-academic-btn-label">Board</span>
                       <span
                         className="cms-academic-btn-value"
-                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       >
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       </span>
                     </div>
                   </div>
@@ -1442,7 +1298,7 @@ export default function DashboardLayout({
                     <div className="cms-academic-btn-text">
                       <span className="cms-academic-btn-label">Board</span>
                       <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No Board")}
                       </span>
                     </div>
                     <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1508,7 +1364,7 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Academic Year</span>
-                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No active academic years")}</span>
+                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No Active Academic Year")}</span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
                 </button>
@@ -1519,7 +1375,10 @@ export default function DashboardLayout({
                     <div className="cms-academic-panel-list">
                       {academicYearsLoading ? <div className="cms-academic-panel-empty">Loading academic years...</div> : !academicYears.length ? <div className="cms-academic-panel-empty">{academicYearsError || "No active academic years available"}</div> : academicYears.map((y) => {
                         const normalize = (s) => String(s || "").trim().replace(/[–—]/g, "-").replace(/\s+/g, "");
+                        const selectedYearId = selectedAcademicYear?.academicYearId ?? selectedAcademicYear?.AcademicYearId ?? selectedAcademicYear?.id;
+                        const optionYearId = y.academicYearId ?? y.AcademicYearId ?? y.id;
                         const isSelected =
+                          selectedYearId != null && optionYearId != null ? String(selectedYearId) === String(optionYearId) :
                           normalize(selectedAcademicYear?.code) === normalize(y.code) ||
                           normalize(selectedAcademicYear?.name) === normalize(y.name) ||
                           normalize(selectedAcademicYear?.label) === normalize(y.label);
@@ -1644,15 +1503,15 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main className="cms-content">
-          <div className="cms-page-head">
+        <main className={`cms-content ${contentClassName}`.trim()}>
+          {!hidePageHeader && (title || actions || backLink) ? <div className="cms-page-head">
             {backLink ? (
               <div className="cms-page-heading-with-back">
                 {backLinkPosition === "below" ? <>{pageTitleNode}{backLink}</> : <>{backLink}{pageTitleNode}</>}
               </div>
             ) : pageTitleNode}
             {actions ? <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{actions}</div> : null}
-          </div>
+          </div> : null}
 
           {children}
         </main>

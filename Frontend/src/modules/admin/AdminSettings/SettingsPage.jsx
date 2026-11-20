@@ -14,8 +14,12 @@ import leaveTypesImage from "@/assets/settings-3d/leave-types.png";
 import attendanceTimingImage from "@/assets/settings-3d/attendance-timing.png";
 import auditLogsImage from "@/assets/settings-3d/audit-logs.png";
 import "./SettingsPage.css";
+import { usePaymentSettingsAccess } from "./PaymentGatewayConfigPage.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 export default function SettingsPage() {
+  const paymentSettingsAccess = usePaymentSettingsAccess();
+  const { canView, isSuperOrAdmin } = useEffectivePermissions();
   const navigate = useNavigate();
   const { palette, customColor, themePolicy, updateThemePolicy } = useTheme();
   const [themeModalOpen, setThemeModalOpen] = useState(false);
@@ -44,6 +48,8 @@ export default function SettingsPage() {
   const settingsCards = [
     {
       id: "landing-configuration",
+      moduleKey: "settings",
+      screenKey: "landing-configuration",
       title: "Landing Page Configuration",
       description: "Set the college name, headline, descriptions, logos, home-page image and footer contact details.",
       icon: Building2,
@@ -54,6 +60,8 @@ export default function SettingsPage() {
     },
     {
       id: "login-configuration",
+      moduleKey: "settings",
+      screenKey: "login-configuration",
       title: "Login Page Configuration",
       description: "Set the college name, tagline, login form text, logo and background image.",
       icon: Building2,
@@ -64,6 +72,8 @@ export default function SettingsPage() {
     },
     {
       id: "campus-configuration",
+      moduleKey: "settings",
+      screenKey: "campus-configuration",
       title: "Campus Configuration",
       description: "Configure multi-campus branches, branch codes, address, affiliated education boards and active header branch selector.",
       icon: Building2,
@@ -74,6 +84,7 @@ export default function SettingsPage() {
     },
     {
       id: "board-academic-year",
+      moduleKey: "board-academic-year",
       title: "Board & Academic Year Management",
       description: "Create, edit and manage education boards, board codes, academic years, date ranges and status.",
       icon: Landmark,
@@ -84,6 +95,8 @@ export default function SettingsPage() {
     },
     {
       id: "number-series",
+      moduleKey: "settings",
+      screenKey: "number-series",
       title: "ID & Number Series",
       description: "Configure Employee IDs, Admission Numbers and Roll Number formats.",
       icon: ListOrdered,
@@ -94,6 +107,8 @@ export default function SettingsPage() {
     },
     {
       id: "templates",
+      moduleKey: "settings",
+      screenKey: "templates",
       title: "Templates",
       description: "Manage certificate templates, document templates and downloadable bulk-upload templates.",
       icon: FileText,
@@ -104,6 +119,8 @@ export default function SettingsPage() {
     },
     {
       id: "offer-letter-configuration",
+      moduleKey: "settings",
+      screenKey: "offer-letter-configuration",
       title: "College Offer Letters",
       description: "Design staff appointment letters, customize dynamic placeholders, configure compensation tables, and set up automated email dispatch.",
       icon: FileSignature,
@@ -114,6 +131,8 @@ export default function SettingsPage() {
     },
     {
       id: "roles-permissions",
+      moduleKey: "roles-permissions",
+      screenKey: "role-management",
       title: "Roles & Permissions",
       description: "Manage system roles and module-level permissions for dashboard access control.",
       icon: ShieldCheck,
@@ -124,6 +143,8 @@ export default function SettingsPage() {
     },
     {
       id: "leave-types-policy",
+      moduleKey: "settings",
+      screenKey: "leave-types",
       title: "Leave Types & Policy Configuration",
       description: "Define annual leave quotas, staff eligibility, carry-forward policies, and proof requirements.",
       icon: CalendarDays,
@@ -134,6 +155,8 @@ export default function SettingsPage() {
     },
     {
       id: "attendance-timing",
+      moduleKey: "settings",
+      screenKey: "attendance-timing",
       title: "Attendance Timing Configuration",
       description: "Configure work shifts, check-in & check-out timings, late arrival thresholds, and early checkout rules for staff.",
       icon: Clock,
@@ -144,6 +167,8 @@ export default function SettingsPage() {
     },
     {
       id: "lop-configuration",
+      moduleKey: "settings",
+      screenKey: "lop-configuration",
       title: "LOP Configuration",
       description: "Assign staff unpaid leave days and preview salary deductions for additional leave.",
       icon: CalendarDays,
@@ -154,6 +179,7 @@ export default function SettingsPage() {
     },
     {
       id: "theme-configuration",
+      moduleKey: "settings",
       title: "Theme & Appearance",
       description: "Select the primary color theme to style your sidebar, navbar and dashboard.",
       icon: Palette,
@@ -164,6 +190,8 @@ export default function SettingsPage() {
     },
     {
       id: "audit",
+      moduleKey: "settings",
+      screenKey: "audit-logs",
       title: "Audit Logs",
       description: "View system audit trail, security events and administrator activity logs.",
       icon: ShieldCheck,
@@ -174,6 +202,11 @@ export default function SettingsPage() {
     },
   ];
 
+  const visibleSettingsCards = settingsCards.filter((card) => {
+    if (isSuperOrAdmin) return true;
+    return canView(card.moduleKey || "settings", card.screenKey || null);
+  });
+
   return (
     <DashboardLayout
       title="Settings"
@@ -182,7 +215,11 @@ export default function SettingsPage() {
     >
       <main className="settings-dashboard-container">
         <section className="settings-grid">
-          {settingsCards.map((card) => {
+          {paymentSettingsAccess && canView("settings", "payment-gateway") && <article className="settings-card is-featured">
+            <div className="settings-card-body"><div className="settings-card-header"><div className="settings-card-icon"><Landmark size={20} /></div><h3>Payment Gateway & Bank Accounts</h3></div><p>Configure campus receiving bank accounts, dynamic UPI QR, Razorpay credentials, and payment processing settings.</p></div>
+            <div className="settings-card-footer"><button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate("/dashboard/settings/payment-gateway")}>Configure Accounts <ArrowRight size={14} /></button></div>
+          </article>}
+          {visibleSettingsCards.map((card) => {
             const Icon = card.icon;
             return (
               <article key={card.id} className={`settings-card ${card.primary ? "is-featured" : ""}`}>
@@ -194,7 +231,7 @@ export default function SettingsPage() {
                     <h3>{card.title}</h3>
                   </div>
                   <p>{card.description}</p>
-                  {card.isThemeCard && (
+                  {card.isThemeCard && isSuperOrAdmin && (
                     <div className="settings-theme-policy-bar" onClick={(e) => e.stopPropagation()}>
                       <span className="settings-theme-policy-caption">Policy:</span>
                       <div className="settings-theme-segmented-pill" role="radiogroup" aria-label="Theme Control Policy">
@@ -257,7 +294,7 @@ export default function SettingsPage() {
         open={themeModalOpen}
         onOpenChange={setThemeModalOpen}
         hideTrigger={true}
-        isAdmin={true}
+        isAdmin={isSuperOrAdmin}
       />
     </DashboardLayout>
   );

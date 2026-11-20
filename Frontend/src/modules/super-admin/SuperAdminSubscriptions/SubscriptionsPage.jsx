@@ -1,12 +1,28 @@
-﻿import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import { useState } from "react";
 import { Modal, ConfirmDialog } from "@/shared/components/Ui.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import { activeAccountCount, MODULES, subscriptionState, renewalDaysRemaining } from "../superAdminDataUtils.js";
 import SuperAdminTable, { SuperAdminBadge } from "../components/SuperAdminTable.jsx";
+import CollegeSubscriptionsPage from "./CollegeSubscriptionsPage.jsx";
+import RenewalsPage from "./RenewalsPage.jsx";
+import SubscriptionPlansPage from "./SubscriptionPlansPage.jsx";
 import "./SubscriptionsPage.css";
 
 export default function SubscriptionsPage({ section = "plans" }) {
+  if (section === "subscriptions") {
+    return <CollegeSubscriptionsPage />;
+  }
+  if (section === "renewals") {
+    return <RenewalsPage />;
+  }
+  if (section === "plans") {
+    return <SubscriptionPlansPage />;
+  }
+  return <AccountUsageView section={section} />;
+}
+
+function AccountUsageView({ section }) {
   const { data, update, session } = useSuperAdmin();
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
@@ -17,7 +33,7 @@ export default function SubscriptionsPage({ section = "plans" }) {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const title = { plans: "Subscription Plans", subscriptions: "College Subscriptions", "account-usage": "Account Usage", renewals: "Renewals" }[section];
-  const reportRows = section === "subscriptions" ? data.subscriptions : section === "account-usage" ? data.accountUsage : section === "renewals" ? data.renewals : [];
+  const reportRows = section === "account-usage" ? data.accountUsage : section === "renewals" ? data.renewals : [];
   const sourceRows = reportRows.length ? reportRows.map((row) => {
     const college = data.colleges.find((item) => String(item.id) === String(row.collegeId ?? row.id));
     return { ...college, ...row, id: String(row.collegeId ?? row.id ?? college?.id ?? ""), name: row.collegeName ?? row.name ?? college?.name ?? "", plan: row.planName ?? row.plan ?? college?.plan ?? "Free", renewal: row.renewalDate ?? row.renewal ?? college?.renewal ?? "", activeAccounts: row.activeAccounts ?? row.accountCount, accountLimit: row.accountLimit ?? row.limit };
@@ -49,7 +65,7 @@ export default function SubscriptionsPage({ section = "plans" }) {
   const savePlan = (event) => {
     event.preventDefault(); setError("");
     const name = editing.name.trim(); const price = Number(editing.price); const limit = Number(editing.limit); const durationDays = Number(editing.durationDays);
-    if (!name || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(durationDays) || durationDays < 1) { setError("Enter a plan name, non-negative price, and positive whole-number duration and account limit."); return; }
+    if (name.length < 2 || name.length > 60 || !/^(?:\d+)(?:\.\d{1,2})?$/.test(String(editing.price)) || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(limit) || limit < 1 || !Number.isSafeInteger(durationDays) || durationDays < 1) { setError("Enter a plan name (2–60 characters), a non-negative price with up to 2 decimal places, and positive whole-number duration and account limit values."); return; }
     if (data.plans.some((plan) => plan.name !== editing.originalName && plan.name.toLowerCase() === name.toLowerCase())) { setError("Plan name already exists."); return; }
     const plan = { ...editing, name, price, limit, durationDays, description: editing.description.trim() };
     delete plan.isNew; delete plan.originalName;

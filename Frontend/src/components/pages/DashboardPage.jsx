@@ -42,7 +42,6 @@ import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getStudentOverviewMetrics as loadStudentOverviewMetrics } from "@/api/studentApi.js";
 import { getAuthToken } from "@/features/authStorage.js";
-import { holidayRecords } from "@/data/mockData.js";
 import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/components/common/Ui.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
@@ -856,12 +855,12 @@ export default function DashboardPage() {
         if (items && items.length > 0) {
           setHolidayState({ loading: false, error: null, data: items });
         } else {
-          setHolidayState({ loading: false, error: null, data: holidayRecords });
+          setHolidayState({ loading: false, error: null, data: [] });
         }
       }
     } catch (err) {
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: null, data: holidayRecords });
+        setHolidayState({ loading: false, error: null, data: [] });
       }
     }
   }, [campusId, boardId, academicYearId]);
@@ -1382,7 +1381,7 @@ export default function DashboardPage() {
   // Upcoming Holidays Normalized List
   const holidaysList = useMemo(() => {
     const rawSource = holidayState.data?.items || holidayState.data?.holidays || holidayState.data?.data || (Array.isArray(holidayState.data) ? holidayState.data : []);
-    const raw = Array.isArray(rawSource) && rawSource.length > 0 ? rawSource : holidayRecords;
+    const raw = Array.isArray(rawSource) ? rawSource : [];
     if (!Array.isArray(raw) || raw.length === 0) return [];
 
     const todayStr = new Date().toISOString().split("T")[0];

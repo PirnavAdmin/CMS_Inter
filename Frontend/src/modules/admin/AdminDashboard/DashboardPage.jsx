@@ -5,12 +5,16 @@ import {
   Award,
   BookOpen,
   CalendarDays,
+  CalendarCheck,
+  CalendarX,
   ChevronRight,
   ClipboardCheck,
   Clock,
+  FileEdit,
   FileText,
   GraduationCap,
   Info,
+  Plus,
   RefreshCw,
   RotateCcw,
   Users,
@@ -60,23 +64,8 @@ import "./DashboardPage.css";
 
 const GROUP_COLORS = ["#2563eb", "#7c3aed", "#f59e0b", "#16a34a", "#e11d48", "#0891b2", "#64748b"];
 
-// Keep dashboard requests on the network, including during a demo login.
-// Request transforms run after the shared client's mock adapter selection.
-const serverConfig = (config = {}) => ({
-  ...config,
-  _isMockFallback: true,
-  transformRequest: [
-    ...sharedApiClient.defaults.transformRequest,
-    function requireServer(data) {
-      this.adapter = axios.getAdapter(["xhr", "http", "fetch"]);
-      return data;
-    },
-  ],
-});
-const apiClient = {
-  get: (url, config) => sharedApiClient.get(url, serverConfig(config)),
-  post: (url, data, config) => sharedApiClient.post(url, data, serverConfig(config)),
-};
+// Direct authenticated API client without mock adapters
+const apiClient = sharedApiClient;
 
 const DASHBOARD_API = {
   summary: "/api/v1/dashboard/summary",
@@ -90,13 +79,14 @@ const DASHBOARD_API = {
   staffStats: "/api/v1/staff/dashboard-stats",
 };
 
-const QUICK_ACTIONS = [
+const QUICK_SETUP = [
+  { label: "+ Add Campus", to: "/dashboard/settings/campus-configuration", isPlus: true, tone: "setup-green" },
+  { label: "+ Add Board", to: "/dashboard/board-academic-year?tab=boards", isPlus: true, tone: "setup-green" },
+  { label: "+ Create Academic Year", to: "/dashboard/board-academic-year?tab=academic-years", isPlus: true, tone: "setup-green" },
   { label: "Add Student", to: "/dashboard/admission?view=new", icon: addStudentIcon, tone: "green" },
   { label: "Add Staff", to: "/dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
   { label: "Create Group", to: "/dashboard/courses/add", icon: createGroupIcon, tone: "violet" },
   { label: "Create Section", to: "/dashboard/sections?tab=sections&view=add", icon: createSectionIcon, tone: "cyan" },
-  { label: "Create Exam", to: "/dashboard/examinations/add", icon: createExamIcon, tone: "orange" },
-  { label: "Mark Attendance", to: "/dashboard/attendance/student", icon: markAttendanceIcon, tone: "green" },
 ];
 
 function unwrap(payload) {
@@ -138,9 +128,9 @@ function metric(payload, keys) {
 }
 
 function formatNumber(value) {
-  if (value === undefined || value === null || value === "") return "Unavailable";
+  if (value === undefined || value === null || value === "") return "0";
   const num = Number(value);
-  if (!Number.isFinite(num)) return "Unavailable";
+  if (!Number.isFinite(num)) return "0";
   return new Intl.NumberFormat("en-IN").format(num);
 }
 
@@ -256,6 +246,29 @@ function EmptyState({ message = "No data available." }) {
   );
 }
 
+function ZeroStateCard({ icon: Icon, title = "No data available", subtitle, actionLabel, actionTo, onAction }) {
+  return (
+    <div className="dashboard-card-zero-state">
+      <div className="dashboard-zero-icon-wrap">
+        <Icon size={44} strokeWidth={1.5} className="dashboard-zero-icon" />
+      </div>
+      <h3 className="dashboard-zero-title">{title}</h3>
+      {subtitle && <p className="dashboard-zero-subtitle">{subtitle}</p>}
+      {actionLabel && (
+        actionTo ? (
+          <Link to={actionTo} className="dashboard-zero-btn">
+            {actionLabel}
+          </Link>
+        ) : (
+          <button type="button" className="dashboard-zero-btn" onClick={onAction}>
+            {actionLabel}
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
 function CustomDonutTooltip({ active, payload }) {
   if (active && payload && payload.length) {
     const data = payload[0];
@@ -275,11 +288,21 @@ function CustomBarTooltip({ active, payload }) {
   if (active && payload && payload.length) {
     const data = payload[0];
     const dotColor = data.payload?.fill || data.color || "#2563eb";
+    const boys = data.payload?.boys;
+    const girls = data.payload?.girls;
+    const hasGender = boys !== undefined && girls !== undefined;
     return (
-      <div className="dashboard-custom-donut-tooltip">
-        <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
-        <span className="tooltip-name">{data.payload?.name || data.name}:</span>
-        <span className="tooltip-val">{formatNumber(data.value)} Students</span>
+      <div className="dashboard-custom-donut-tooltip" style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span className="tooltip-dot" style={{ backgroundColor: dotColor }} />
+          <span className="tooltip-name">{data.payload?.name || data.name}:</span>
+          <span className="tooltip-val">{formatNumber(data.value)} Students</span>
+        </div>
+        {hasGender && (
+          <div style={{ fontSize: "10px", color: "var(--cms-muted, #64748b)", paddingLeft: 14 }}>
+            Boys: <strong style={{ color: "var(--cms-text, #1e293b)" }}>{boys}</strong> • Girls: <strong style={{ color: "var(--cms-text, #1e293b)" }}>{girls}</strong>
+          </div>
+        )}
       </div>
     );
   }
@@ -294,13 +317,10 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
   let rawGrowth = cardObj?.growthPercentage ?? cardObj?.GrowthPercentage ?? cardObj?.percentageChange ?? cardObj?.PercentageChange ?? metric(summaryData, rawPctKeys);
   let status = String(cardObj?.growthStatus ?? cardObj?.GrowthStatus ?? cardObj?.status ?? cardObj?.Status ?? "").toUpperCase();
 
-  // If there is no prior academic year baseline recorded (initial academic year), all cards must show NEW
-  const noPriorAcademicYear = 
-    Number(summaryData?.lastYearTotalStudents ?? 0) === 0 &&
-    Number(summaryData?.lastYearTotalGroups ?? 0) === 0 &&
-    Number(summaryData?.lastYearTotalSections ?? 0) === 0;
+  // If there is no prior academic year student enrollment baseline recorded (initial academic year), all cards must show NEW
+  const noPriorAcademicYear = Number(summaryData?.lastYearTotalStudents ?? 0) === 0;
 
-  if (noPriorAcademicYear) {
+  if (noPriorAcademicYear || Number(previous) === 0) {
     previous = 0;
     rawGrowth = null;
     status = "NEW";
@@ -310,18 +330,10 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
   const numCurrent = Number(current ?? 0);
   const numPrevious = Number(previous ?? 0);
 
-  if (!status) {
-    if (numPrevious === 0) {
-      status = numCurrent > 0 ? "NEW" : "NO DATA";
-    } else {
-      status = numCurrent > numPrevious ? "GROWTH" : (numCurrent < numPrevious ? "DECLINE" : "NEUTRAL");
-    }
-  }
-
   let badge = "—";
   let label = "vs last year";
 
-  if (status === "NEW" || numPrevious === 0) {
+  if (status === "NEW" || numPrevious === 0 || noPriorAcademicYear) {
     if (numCurrent === 0) {
       badge = "No Data";
       label = "No records";
@@ -330,7 +342,7 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
       label = "First recorded year";
     }
   } else {
-    // When prior academic year exists, calculate percentage difference between this year and last year
+    // When prior academic year exists and had operational enrollment (> 0), calculate percentage difference
     let numPct = rawGrowth !== undefined && rawGrowth !== null 
       ? Number(rawGrowth) 
       : (((numCurrent - numPrevious) * 100) / numPrevious);
@@ -360,7 +372,9 @@ function resolveKpiMetric(summaryData, cardKey, rawCurrentKeys, rawPrevKeys, raw
 
 function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last year", changePct = "NEW", previousValue, to }) {
   const isAvailable = value !== undefined && value !== null && value !== "";
+  const numVal = Number(value ?? 0);
   const formattedPrev = isAvailable && previousValue !== undefined && previousValue !== null ? formatNumber(previousValue) : "0";
+  const isZeroState = !isAvailable || (numVal === 0 && Number(previousValue ?? 0) === 0);
   const content = (
     <article className={`dashboard-kpi dashboard-kpi-${tone} ${to ? "dashboard-kpi-clickable" : ""}`} style={to ? { cursor: "pointer" } : {}}>
       <div className="dashboard-kpi-pop" role="tooltip">
@@ -373,10 +387,10 @@ function KpiCard({ label, value, icon, tone, loading, changeLabel = "vs last yea
         <div className="dashboard-kpi-title-wrap">
           <span className="dashboard-kpi-label">{label}</span>
           <div className="dashboard-kpi-value-row">
-            <strong className="dashboard-kpi-value">{loading ? "—" : formatNumber(value)}</strong>
-            <span className="dashboard-kpi-trend">{isAvailable ? changePct : "—"}</span>
+            <strong className="dashboard-kpi-value">{loading ? "—" : formatNumber(value ?? 0)}</strong>
+            {!isZeroState && isAvailable && <span className="dashboard-kpi-trend">{changePct}</span>}
           </div>
-          <span className="dashboard-kpi-subtext">{isAvailable ? changeLabel : "No data available"}</span>
+          {!isZeroState && isAvailable && <span className="dashboard-kpi-subtext">{changeLabel}</span>}
         </div>
       </div>
     </article>
@@ -397,9 +411,12 @@ export default function DashboardPage() {
   const { selectedCampus, selectedCampusId } = useCampusContext();
   const { selectedBoard, selectedAcademicYear } = useAcademicContext();
 
-  const campusId = selectedCampusId || selectedCampus?.id || selectedCampus?.campusId;
-  const boardId = selectedBoard?.id || selectedBoard?.code || selectedBoard?.boardId;
-  const academicYearId = selectedAcademicYear?.id || selectedAcademicYear?.code || selectedAcademicYear?.academicYearId;
+  const rawCampusId = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id;
+  const rawBoardId = selectedBoard?.boardId || selectedBoard?.id;
+  const rawAcademicYearId = selectedAcademicYear?.academicYearId || selectedAcademicYear?.id;
+  const campusId = Number.isFinite(Number(rawCampusId)) && Number(rawCampusId) > 0 ? Number(rawCampusId) : undefined;
+  const boardId = Number.isFinite(Number(rawBoardId)) && Number(rawBoardId) > 0 ? Number(rawBoardId) : undefined;
+  const academicYearId = Number.isFinite(Number(rawAcademicYearId)) && Number(rawAcademicYearId) > 0 ? Number(rawAcademicYearId) : undefined;
   const todayDate = useMemo(() => {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -439,7 +456,7 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // 1. GET /api/v1/dashboard/summary
+  // 1. GET Summary & Live Student, Group, and Section Counts
   const fetchSummary = useCallback(async () => {
     const seq = ++summarySeq.current;
     setSummaryState((prev) => ({ ...prev, loading: true, error: null }));
@@ -451,12 +468,65 @@ export default function DashboardPage() {
         date: todayDate,
       };
 
-      const res = await apiClient.get(DASHBOARD_API.summary, { params });
+      const studentListParams = {
+        ...(campusId ? { campusId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(academicYearId ? { academicYearId } : {}),
+        pageNumber: 1,
+        pageSize: 1,
+      };
+
+      const groupListParams = {
+        ...(boardId ? { boardId: Number(boardId) } : {}),
+      };
+
+      const sectionListParams = {
+        ...(campusId ? { campusId: Number(campusId) } : {}),
+        ...(boardId ? { boardId: Number(boardId) } : {}),
+        ...(academicYearId ? { academicYearId: Number(academicYearId) } : {}),
+      };
+
+      const [summaryRes, studentCountRes, groupsRes, sectionsRes] = await Promise.allSettled([
+        apiClient.get(DASHBOARD_API.summary, { params }),
+        apiClient.get(apiEndpoints.students.list, { params: studentListParams }),
+        apiClient.get(apiEndpoints.masterGroups.list, { params: groupListParams }),
+        apiClient.get(apiEndpoints.sections.getAll, { params: sectionListParams }),
+      ]);
 
       if (summarySeq.current === seq) {
-        const summaryData = unwrap(res.data) || {};
+        const summaryData = summaryRes.status === "fulfilled" ? (unwrap(summaryRes.value?.data) || {}) : {};
+        let liveStudentCount = undefined;
+        if (studentCountRes.status === "fulfilled") {
+          const raw = unwrap(studentCountRes.value?.data);
+          const c = Number(raw?.totalCount ?? raw?.TotalCount ?? (Array.isArray(raw) ? raw.length : undefined));
+          if (Number.isFinite(c)) liveStudentCount = c;
+        }
+
+        let liveGroupCount = undefined;
+        if (groupsRes.status === "fulfilled") {
+          const rawGroups = unwrap(groupsRes.value?.data);
+          const gList = Array.isArray(rawGroups) ? rawGroups : (rawGroups?.items || rawGroups?.$values || rawGroups?.data || []);
+          if (Array.isArray(gList) && gList.length > 0) {
+            const activeGroups = gList.filter((g) => g.isActive !== false && g.status !== "Inactive");
+            liveGroupCount = activeGroups.length;
+          }
+        }
+
+        let liveSectionCount = undefined;
+        if (sectionsRes.status === "fulfilled") {
+          const rawSections = unwrap(sectionsRes.value?.data);
+          const sList = Array.isArray(rawSections) ? rawSections : (rawSections?.items || rawSections?.$values || rawSections?.data || []);
+          if (Array.isArray(sList) && sList.length > 0) {
+            const activeSections = sList.filter((s) => s.isActive !== false && s.status !== "Inactive");
+            liveSectionCount = activeSections.length;
+          }
+        }
+
         const teachingCount = summaryData.teachingStaff ?? summaryData.teachingStaffCount ?? 0;
         const nonTeachingCount = summaryData.nonTeachingStaff ?? summaryData.nonTeachingStaffCount ?? 0;
+        const totalStudents = liveStudentCount !== undefined ? liveStudentCount : (summaryData.totalStudents ?? summaryData.studentCount ?? 0);
+        const totalGroups = liveGroupCount !== undefined ? liveGroupCount : (summaryData.totalGroups ?? summaryData.groupCount ?? 0);
+        const totalSections = liveSectionCount !== undefined ? liveSectionCount : (summaryData.totalSections ?? summaryData.sectionCount ?? 0);
 
         const mergedData = {
           ...summaryData,
@@ -464,10 +534,14 @@ export default function DashboardPage() {
           teachingStaffCount: teachingCount,
           nonTeachingStaff: nonTeachingCount,
           nonTeachingStaffCount: nonTeachingCount,
-          totalStudents: summaryData.totalStudents ?? summaryData.studentCount ?? 0,
-          totalStudentCount: summaryData.totalStudents ?? summaryData.studentCount ?? 0,
-          studentCount: summaryData.totalStudents ?? summaryData.studentCount ?? 0,
-          admissions: summaryData.admissions ?? summaryData.totalStudents ?? 0,
+          totalStudents,
+          totalStudentCount: totalStudents,
+          studentCount: totalStudents,
+          totalGroups,
+          groupCount: totalGroups,
+          totalSections,
+          sectionCount: totalSections,
+          admissions: summaryData.admissions ?? totalStudents,
         };
 
         setSummaryState({ loading: false, error: null, data: mergedData });
@@ -479,39 +553,96 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 2. Admission Overview (Direct from /api/v1/dashboard/students-overview)
+  // 2. Admission Overview (Direct from Student Admissions Module Dependency API /api/v1/student-admissions)
   const fetchStudentsOverview = useCallback(async () => {
     const seq = ++overviewSeq.current;
     setOverviewState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const params = {
+      const admissionParams = {
         ...(campusId ? { campusId } : {}),
-        ...(boardId ? { boardId } : {}),
-        ...(academicYearId ? { academicYearId } : {}),
       };
 
-      const res = await apiClient.get(DASHBOARD_API.studentsOverview, { params });
+      const [admissionsRes, backendOverviewRes] = await Promise.allSettled([
+        apiClient.get(apiEndpoints.admissions.getAll, { params: admissionParams }),
+        apiClient.get(DASHBOARD_API.studentsOverview, {
+          params: {
+            ...(campusId ? { campusId } : {}),
+            ...(boardId ? { boardId } : {}),
+            ...(academicYearId ? { academicYearId } : {}),
+          },
+        }),
+      ]);
 
       if (overviewSeq.current === seq) {
-        const overviewData = unwrap(res.data) || {};
-        const rawTrend = overviewData.monthlyTrend || overviewData.trend || [];
-        const calculatedTrend = rawTrend.map((item) => ({
-          ...item,
-          period: item.period || item.month,
-          month: item.month || item.period,
-          studentsJoined: item.studentsJoined ?? item.count ?? item.value ?? 0,
-          count: item.studentsJoined ?? item.count ?? item.value ?? 0,
-          value: item.studentsJoined ?? item.count ?? item.value ?? 0,
-          boys: item.boys ?? 0,
-          girls: item.girls ?? 0,
-        }));
+        let allAdmissions = [];
+        if (admissionsRes.status === "fulfilled") {
+          const rawAdm = unwrap(admissionsRes.value?.data);
+          allAdmissions = (Array.isArray(rawAdm) ? rawAdm : (rawAdm?.items || rawAdm?.$values || [])).filter((adm) => {
+            if (campusId && Number(adm.campusId ?? adm.CampusId) !== campusId) return false;
+            if (boardId && Number(adm.boardId ?? adm.BoardId) !== boardId) return false;
+            if (academicYearId && Number(adm.academicYearId ?? adm.AcademicYearId) !== academicYearId) return false;
+            return true;
+          });
+        }
 
-        const totalAdmissions = overviewData.totalStudents ?? overviewData.totalCount ?? 0;
-        const boysCount = overviewData.maleStudents ?? overviewData.boys ?? overviewData.boysCount ?? 0;
-        const girlsCount = overviewData.femaleStudents ?? overviewData.girls ?? overviewData.girlsCount ?? 0;
+        const backendData = backendOverviewRes.status === "fulfilled" ? (unwrap(backendOverviewRes.value?.data) || {}) : {};
+
+        const totalAdmissions = allAdmissions.length > 0
+          ? allAdmissions.length
+          : Number(backendData.totalStudents ?? backendData.totalCount ?? 0);
+
+        let boysCount = 0;
+        let girlsCount = 0;
+
+        if (allAdmissions.length > 0) {
+          allAdmissions.forEach((adm) => {
+            const g = String(adm.gender ?? adm.Gender ?? "").toLowerCase().trim();
+            if (g === "male" || g === "m" || g === "boy" || g === "boys") boysCount++;
+            else if (g === "female" || g === "f" || g === "girl" || g === "girls") girlsCount++;
+          });
+        } else {
+          boysCount = Number(backendData.maleStudents ?? backendData.boys ?? backendData.boysCount ?? 0);
+          girlsCount = Number(backendData.femaleStudents ?? backendData.girls ?? backendData.girlsCount ?? 0);
+        }
+
+        // Generate actual monthly trend from admission dates
+        const monthlyCounts = new Map();
+        allAdmissions.forEach((adm) => {
+          const dateVal = adm.admissionDate ?? adm.AdmissionDate ?? adm.createdAt ?? adm.CreatedAt;
+          const parsed = parseMonthYearKey(dateVal);
+          if (parsed) {
+            monthlyCounts.set(parsed.key, (monthlyCounts.get(parsed.key) || 0) + 1);
+          }
+        });
+
+        let calculatedTrend = [];
+        if (monthlyCounts.size > 0) {
+          monthlyCounts.forEach((count, key) => {
+            const [y, m] = key.split("-").map(Number);
+            calculatedTrend.push({
+              period: `${MONTH_NAMES[m - 1]} ${y}`,
+              month: `${MONTH_NAMES[m - 1]} ${y}`,
+              sortDate: `${key}-01`,
+              studentsJoined: count,
+              count,
+              value: count,
+            });
+          });
+          calculatedTrend.sort((a, b) => a.sortDate.localeCompare(b.sortDate));
+        } else {
+          const rawTrend = backendData.monthlyTrend || backendData.trend || [];
+          calculatedTrend = rawTrend.map((item) => ({
+            ...item,
+            period: item.period || item.month,
+            month: item.month || item.period,
+            studentsJoined: item.studentsJoined ?? item.count ?? item.value ?? 0,
+            count: item.studentsJoined ?? item.count ?? item.value ?? 0,
+            value: item.studentsJoined ?? item.count ?? item.value ?? 0,
+          }));
+        }
 
         const mergedData = {
-          ...overviewData,
+          ...backendData,
           totalAdmissions,
           totalStudents: totalAdmissions,
           totalCount: totalAdmissions,
@@ -532,7 +663,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId]);
 
-  // 3. GET /api/v1/dashboard/group-distribution
+  // 3. GET /api/v1/dashboard/group-distribution & Live Group & Student Management Integration
   const fetchGroupDistribution = useCallback(async () => {
     const seq = ++groupSeq.current;
     setGroupState((prev) => ({ ...prev, loading: true, error: null }));
@@ -543,30 +674,149 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
       };
 
-      const res = await apiClient.get(DASHBOARD_API.groupDistribution, { params });
+      const groupParams = {
+        ...(boardId ? { boardId: Number(boardId) } : {}),
+      };
+
+      const studentListParams = {
+        ...(campusId ? { campusId } : {}),
+        ...(boardId ? { boardId } : {}),
+        ...(academicYearId ? { academicYearId } : {}),
+        pageNumber: 1,
+        pageSize: 200,
+      };
+
+      const [groupDistRes, masterGroupsRes, studentsRes] = await Promise.allSettled([
+        apiClient.get(DASHBOARD_API.groupDistribution, { params }),
+        apiClient.get(apiEndpoints.masterGroups.list, { params: groupParams }),
+        apiClient.get(apiEndpoints.students.list, { params: studentListParams }),
+      ]);
 
       if (groupSeq.current === seq) {
-        const groupData = unwrap(res.data) || {};
-        const rawItems = groupData?.items || groupData?.groups || (Array.isArray(groupData) ? groupData : []);
+        const backendData = groupDistRes.status === "fulfilled" ? (unwrap(groupDistRes.value?.data) || {}) : {};
+        const rawBackendItems = backendData?.items || backendData?.groups || (Array.isArray(backendData) ? backendData : []);
 
-        const normalizedItems = rawItems.map((item) => {
-          const gName = String(item.groupName || item.name || item.groupCode || item.code || "Group").trim();
-          const count = Number(item.totalStudents ?? item.studentCount ?? item.value ?? item.count ?? 0);
-          return {
+        // 1. Extract Master Groups from Group Management dependency API
+        let masterGroups = [];
+        if (masterGroupsRes.status === "fulfilled") {
+          const rawMG = unwrap(masterGroupsRes.value?.data);
+          const mgList = Array.isArray(rawMG) ? rawMG : (rawMG?.items || rawMG?.$values || rawMG?.data || []);
+          if (Array.isArray(mgList)) {
+            masterGroups = mgList.filter((g) => g.isActive !== false && g.status !== "Inactive");
+          }
+        }
+
+        // 2. Extract Students from Student Management dependency API
+        let studentsList = [];
+        if (studentsRes.status === "fulfilled") {
+          const rawStudents = unwrap(studentsRes.value?.data);
+          studentsList = Array.isArray(rawStudents) ? rawStudents : (rawStudents?.items || rawStudents?.$values || rawStudents?.data || []);
+        }
+
+        // 3. Aggregate live student counts, boys, and girls by Group
+        const studentCountsByGroup = new Map();
+        let totalLiveStudents = 0;
+        let totalLiveBoys = 0;
+        let totalLiveGirls = 0;
+
+        if (Array.isArray(studentsList) && studentsList.length > 0) {
+          studentsList.forEach((st) => {
+            const gId = st.groupId ?? st.GroupId;
+            const gName = String(st.groupName ?? st.GroupName ?? st.groupCode ?? st.GroupCode ?? "").trim();
+            const gender = String(st.gender ?? st.Gender ?? "").toLowerCase().trim();
+            const isBoy = gender === "male" || gender === "m" || gender === "boy" || gender === "boys";
+            const isGirl = gender === "female" || gender === "f" || gender === "girl" || gender === "girls";
+
+            totalLiveStudents++;
+            if (isBoy) totalLiveBoys++;
+            if (isGirl) totalLiveGirls++;
+
+            const keys = [];
+            if (gId != null && gId !== "") keys.push(String(gId));
+            if (gName) keys.push(gName.toUpperCase());
+
+            keys.forEach((key) => {
+              if (!studentCountsByGroup.has(key)) {
+                studentCountsByGroup.set(key, { count: 0, boys: 0, girls: 0 });
+              }
+              const entry = studentCountsByGroup.get(key);
+              entry.count++;
+              if (isBoy) entry.boys++;
+              if (isGirl) entry.girls++;
+            });
+          });
+        }
+
+        // 4. Construct unified group items representing ALL active groups from Database & Group Management
+        const groupMap = new Map();
+
+        // Authoritative seed: Backend Items (from Groups & Students join for this Board and Campus)
+        rawBackendItems.forEach((item) => {
+          const id = item.groupId || item.id;
+          const name = String(item.groupName || item.name || item.groupCode || item.code || "Group").trim();
+          const code = String(item.groupCode || item.code || name).trim();
+          const key = name.toUpperCase();
+
+          const liveStats = studentCountsByGroup.get(String(id)) || studentCountsByGroup.get(key) || studentCountsByGroup.get(code.toUpperCase());
+          const count = liveStats ? liveStats.count : Number(item.totalStudents ?? item.studentCount ?? item.value ?? item.count ?? 0);
+          const boys = liveStats ? liveStats.boys : Number(item.boys ?? item.boysCount ?? 0);
+          const girls = liveStats ? liveStats.girls : Number(item.girls ?? item.girlsCount ?? 0);
+
+          groupMap.set(key, {
             ...item,
-            id: item.groupId || item.id,
-            name: gName,
-            groupName: gName,
+            id,
+            groupId: id,
+            name,
+            groupName: name,
+            code,
+            groupCode: code,
             value: count,
             studentCount: count,
-            count: count,
-          };
+            count,
+            totalStudents: count,
+            boys,
+            girls,
+          });
         });
 
+        // Add any additional active master groups from Group Management that were not in backend items
+        masterGroups.forEach((mg) => {
+          const id = mg.groupId ?? mg.masterGroupId ?? mg.id;
+          const name = String(mg.groupName ?? mg.name ?? mg.groupCode ?? mg.code ?? "Group").trim();
+          const code = String(mg.groupCode ?? mg.code ?? name).trim();
+          const key = name.toUpperCase();
+
+          if (!groupMap.has(key)) {
+            const liveStats = studentCountsByGroup.get(String(id)) || studentCountsByGroup.get(key) || studentCountsByGroup.get(code.toUpperCase()) || { count: 0, boys: 0, girls: 0 };
+            groupMap.set(key, {
+              id,
+              groupId: id,
+              name,
+              groupName: name,
+              code,
+              groupCode: code,
+              value: liveStats.count,
+              studentCount: liveStats.count,
+              count: liveStats.count,
+              totalStudents: liveStats.count,
+              boys: liveStats.boys,
+              girls: liveStats.girls,
+            });
+          }
+        });
+
+        const normalizedItems = Array.from(groupMap.values());
         normalizedItems.sort((a, b) => (b.value - a.value) || a.name.localeCompare(b.name));
-        const totalEnrolled = groupData?.totalStudents ?? normalizedItems.reduce((acc, curr) => acc + (curr.value || 0), 0);
-        const enrolledBoys = groupData?.boys ?? groupData?.boysCount ?? normalizedItems.reduce((acc, curr) => acc + (Number(curr.boys) || 0), 0);
-        const enrolledGirls = groupData?.girls ?? groupData?.girlsCount ?? normalizedItems.reduce((acc, curr) => acc + (Number(curr.girls) || 0), 0);
+
+        const totalEnrolled = totalLiveStudents > 0
+          ? totalLiveStudents
+          : (backendData?.totalStudents ?? normalizedItems.reduce((acc, curr) => acc + (curr.value || 0), 0));
+        const enrolledBoys = totalLiveBoys > 0
+          ? totalLiveBoys
+          : (backendData?.boys ?? backendData?.boysCount ?? normalizedItems.reduce((acc, curr) => acc + (Number(curr.boys) || 0), 0));
+        const enrolledGirls = totalLiveGirls > 0
+          ? totalLiveGirls
+          : (backendData?.girls ?? backendData?.girlsCount ?? normalizedItems.reduce((acc, curr) => acc + (Number(curr.girls) || 0), 0));
 
         const groupPayload = {
           items: normalizedItems,
@@ -633,13 +883,8 @@ export default function DashboardPage() {
           ? (nonTeachingRes.value?.data?.totalCount ?? nonTeachingRes.value?.data?.TotalCount)
           : undefined;
 
-        const resolvedTeaching = (typeof teachingListCount === "number" && !isNaN(teachingListCount))
-          ? teachingListCount
-          : Number(statsData.teachingStaff ?? statsData.teachingCount ?? 0);
-
-        const resolvedNonTeaching = (typeof nonTeachingListCount === "number" && !isNaN(nonTeachingListCount))
-          ? nonTeachingListCount
-          : Number(statsData.nonTeachingStaff ?? statsData.nonTeachingCount ?? 0);
+        const resolvedTeaching = Number(statsData.teachingStaff ?? statsData.teachingCount ?? teachingListCount ?? 0);
+        const resolvedNonTeaching = Number(statsData.nonTeachingStaff ?? statsData.nonTeachingCount ?? nonTeachingListCount ?? 0);
 
         const resolvedTotal = (typeof resolvedTeaching === "number" && typeof resolvedNonTeaching === "number")
           ? resolvedTeaching + resolvedNonTeaching
@@ -696,28 +941,60 @@ export default function DashboardPage() {
           let markedCount = 0;
 
           rows.forEach((row) => {
-            const morning = normalizeStudentStatus(row.morningStatus ?? row.status);
-            const afternoon = normalizeStudentStatus(row.afternoonStatus ?? row.status);
-            const isMarked = Boolean(row.isAttendanceMarked) || (morning !== null && morning !== undefined) || (afternoon !== null && afternoon !== undefined);
+            const mRaw = row.morningStatus ?? row.MorningStatus;
+            const aRaw = row.afternoonStatus ?? row.AfternoonStatus;
+            const fallbackRaw = row.status ?? row.Status;
+
+            const morning = normalizeStudentStatus(mRaw ?? (aRaw == null ? fallbackRaw : null));
+            const afternoon = normalizeStudentStatus(aRaw ?? (mRaw == null ? fallbackRaw : null));
+
+            const rawNorm = (v) => String(v ?? "").toLowerCase().replace(/[\s_-]/g, "");
+            const mNum = Number(mRaw);
+            const aNum = Number(aRaw);
+            const statusNum = Number(fallbackRaw);
+            const mStr = rawNorm(mRaw);
+            const aStr = rawNorm(aRaw);
+            const statusStr = rawNorm(fallbackRaw);
+
+            const isLateOrHalfDay =
+              morning === "Half Day" || afternoon === "Half Day" ||
+              (morning === "Present" && afternoon === "Absent") ||
+              (afternoon === "Present" && morning === "Absent") ||
+              mNum === 3 || mNum === 4 || aNum === 3 || aNum === 4 ||
+              mStr === "late" || mStr === "halfday" ||
+              aStr === "late" || aStr === "halfday" ||
+              (mRaw == null && aRaw == null && (statusNum === 3 || statusNum === 4 || statusStr === "late" || statusStr === "halfday"));
+
+            const isPresent =
+              morning === "Present" || afternoon === "Present" ||
+              (mRaw == null && aRaw == null && (statusNum === 1 || statusStr === "present"));
+
+            const isAbsent =
+              morning === "Absent" || afternoon === "Absent" ||
+              mNum === 6 || aNum === 6 || mStr === "leave" || aStr === "leave" ||
+              (mRaw == null && aRaw == null && (statusNum === 2 || statusNum === 6 || statusStr === "absent" || statusStr === "leave"));
+
+            const isMarked =
+              Boolean(row.isAttendanceMarked || row.IsAttendanceMarked) ||
+              (morning !== null && morning !== undefined) ||
+              (afternoon !== null && afternoon !== undefined) ||
+              isLateOrHalfDay || isPresent || isAbsent;
 
             if (isMarked) {
-              markedCount++;
-              if (
-                morning === "Half Day" || afternoon === "Half Day" ||
-                (morning === "Present" && afternoon === "Absent") ||
-                (afternoon === "Present" && morning === "Absent") ||
-                Number(row.status) === 4
-              ) {
+              if (isLateOrHalfDay) {
                 halfDay++;
-              } else if (morning === "Present" || afternoon === "Present" || Number(row.status) === 1) {
+                markedCount++;
+              } else if (isPresent) {
                 present++;
-              } else if (morning === "Absent" || afternoon === "Absent" || Number(row.status) === 2) {
+                markedCount++;
+              } else if (isAbsent) {
                 absent++;
+                markedCount++;
               }
             }
           });
 
-          const percentage = markedCount > 0 && totalEnrolled > 0
+          const percentage = (markedCount > 0 && totalEnrolled > 0)
             ? Number((((present + 0.5 * halfDay) / totalEnrolled) * 100).toFixed(1))
             : 0;
 
@@ -742,19 +1019,29 @@ export default function DashboardPage() {
           params: { ...params, viewBy: "Overall" },
         });
         const att = unwrap(res.data) || {};
-        const total = att.totalStudents ?? att.total ?? 0;
-        const marked = att.markedStudents ?? att.markedCount ?? ((att.present ?? 0) + (att.absent ?? 0) + (att.halfDay ?? 0));
+        const total = att.totalStudents ?? att.total ?? att.totalCount ?? 0;
+        const present = att.present ?? att.presentCount ?? 0;
+        const absent = att.absent ?? att.absentCount ?? 0;
+        const halfDay = att.halfDay ?? att.halfDayCount ?? att.late ?? 0;
+        const marked = (att.markedStudents != null && att.markedStudents > 0)
+          ? att.markedStudents
+          : (att.markedCount != null && att.markedCount > 0)
+            ? att.markedCount
+            : (present + absent + halfDay);
+        const hasMarked = marked > 0 || (present + halfDay > 0);
+        const percentage = att.attendancePercentage ?? att.percentage ?? (hasMarked && total > 0 ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1)) : 0);
+
         attendance = {
           total,
           marked,
           markedStudents: marked,
-          present: att.present ?? att.presentCount ?? 0,
-          absent: att.absent ?? att.absentCount ?? 0,
-          halfDay: att.halfDay ?? att.late ?? 0,
-          percentage: att.attendancePercentage ?? att.percentage ?? 0,
-          hasMarked: marked > 0,
+          present,
+          absent,
+          halfDay,
+          percentage: Number(Number(percentage).toFixed(1)),
+          hasMarked,
         };
-        lastUpdated = att.lastUpdated || "Today";
+        lastUpdated = att.lastUpdated || att.lastUpdatedTime || "Today";
       }
 
       if (studentAttSeq.current === seq) {
@@ -774,6 +1061,7 @@ export default function DashboardPage() {
     try {
       const payload = {
         date: todayDate,
+        attendanceDate: todayDate,
         ...(campusId ? { campusId: Number(campusId) } : {}),
         ...(boardId ? { boardId: Number(boardId) } : {}),
         ...(academicYearId ? { academicYearId: Number(academicYearId) } : {}),
@@ -799,30 +1087,43 @@ export default function DashboardPage() {
           let nonTeachingCount = 0;
 
           rows.forEach((row) => {
-            const isTeaching = row.staffType === 1 || row.staffType === "Teaching" ||
-              (String(row.staffType || "").toLowerCase().includes("teaching") && !String(row.staffType || "").toLowerCase().includes("non"));
+            const sType = row.staffType ?? row.StaffType;
+            const isTeaching = sType === 1 || sType === "Teaching" ||
+              (String(sType || "").toLowerCase().includes("teaching") && !String(sType || "").toLowerCase().includes("non"));
             if (isTeaching) teachingCount++;
             else nonTeachingCount++;
 
-            const isMarked = Boolean(row.isAttendanceMarked);
+            const statusVal = row.status ?? row.Status;
+            const inTimeVal = row.inTime ?? row.InTime;
+            const isMarked = Boolean(row.isAttendanceMarked || row.IsAttendanceMarked) || statusVal != null || Boolean(inTimeVal);
             if (isMarked) {
-              markedCount++;
-              const st = Number(row.status);
-              if (st === 1 || row.status === "Present") {
-                present++;
-              } else if (st === 2 || row.status === "Absent") {
-                absent++;
-              } else if (st === 3 || row.status === "Late" || row.isLate) {
+              const stNum = Number(statusVal);
+              const stStr = String(statusVal ?? "").toLowerCase().replace(/[\s_-]/g, "");
+              const isLateFlag = Boolean(row.isLate || row.IsLate);
+              if (stNum === 3 || stStr === "late") {
                 late++;
-              } else if (st === 4 || row.status === "Leave" || row.status === "HalfDay") {
+                markedCount++;
+              } else if (stNum === 1 || stStr === "present") {
+                if (isLateFlag) late++;
+                else present++;
+                markedCount++;
+              } else if (stNum === 2 || stStr === "absent") {
+                absent++;
+                markedCount++;
+              } else if (stNum === 4 || stNum === 6 || stStr === "leave" || stStr === "halfday") {
                 onLeave++;
+                markedCount++;
+              } else if (inTimeVal && stNum !== 5 && stStr !== "holiday") {
+                if (isLateFlag) late++;
+                else present++;
+                markedCount++;
               }
             }
           });
 
           // In Staff Attendance (biometric/HR):
           // Attendance % = ((Present + Late) / TotalStaff) * 100
-          const percentage = markedCount > 0 && totalStaff > 0
+          const percentage = (markedCount > 0 && totalStaff > 0)
             ? Number((((present + late) / totalStaff) * 100).toFixed(1))
             : 0;
 
@@ -855,22 +1156,33 @@ export default function DashboardPage() {
         };
         const res = await apiClient.get(DASHBOARD_API.staffAttendanceToday, { params });
         const stf = unwrap(res.data) || {};
-        const total = stf.totalStaff ?? stf.total ?? 0;
-        const marked = stf.markedStaff ?? stf.markedCount ?? ((stf.present ?? 0) + (stf.absent ?? 0) + (stf.late ?? 0) + (stf.onLeave ?? 0));
+        const total = stf.totalStaff ?? stf.total ?? stf.totalCount ?? 0;
+        const present = stf.present ?? stf.presentCount ?? 0;
+        const absent = stf.absent ?? stf.absentCount ?? 0;
+        const late = stf.late ?? stf.lateCount ?? 0;
+        const onLeave = stf.onLeave ?? stf.onLeaveCount ?? stf.leaveCount ?? 0;
+        const marked = (stf.markedStaff != null && stf.markedStaff > 0)
+          ? stf.markedStaff
+          : (stf.markedCount != null && stf.markedCount > 0)
+            ? stf.markedCount
+            : (present + absent + late + onLeave);
+        const hasMarked = (present + late + onLeave > 0) || marked > 0;
+        const percentage = stf.attendancePercentage ?? stf.percentage ?? (hasMarked && total > 0 ? Number((((present + late) / total) * 100).toFixed(1)) : 0);
+
         staffData = {
           total,
           marked,
           markedStaff: marked,
-          present: stf.present ?? stf.presentCount ?? 0,
-          absent: stf.absent ?? stf.absentCount ?? 0,
-          late: stf.late ?? stf.lateCount ?? 0,
-          onLeave: stf.onLeave ?? stf.onLeaveCount ?? 0,
-          percentage: stf.attendancePercentage ?? stf.percentage ?? 0,
+          present,
+          absent,
+          late,
+          onLeave,
+          percentage: Number(Number(percentage).toFixed(1)),
           teachingCount: stf.teachingCount,
           nonTeachingCount: stf.nonTeachingCount,
-          hasMarked: marked > 0,
+          hasMarked,
         };
-        lastUpdated = stf.lastUpdated || "Today";
+        lastUpdated = stf.lastUpdated || stf.lastUpdatedTime || "Today";
       }
 
       if (staffAttSeq.current === seq) {
@@ -888,7 +1200,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId, todayDate]);
 
-  // 6. GET /api/v1/dashboard/upcoming-holidays (with fallback to /api/v1/holidays)
+  // 6. GET /api/v1/dashboard/upcoming-holidays (with direct sync to Holiday Management /api/v1/holidays)
   const fetchUpcomingHolidays = useCallback(async () => {
     const seq = ++holidaySeq.current;
     setHolidayState((prev) => ({ ...prev, loading: true, error: null }));
@@ -899,14 +1211,27 @@ export default function DashboardPage() {
         ...(campusId ? { campusId } : {}),
         limit: 20,
       };
-      let res;
+      let holidays = [];
       try {
-        res = await apiClient.get(DASHBOARD_API.upcomingHolidays, { params });
+        const res = await apiClient.get(DASHBOARD_API.upcomingHolidays, { params });
+        const raw = unwrap(res.data);
+        holidays = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.holidays || []);
       } catch {
-        res = await apiClient.get(DASHBOARD_API.holidaysList, { params: { ...params, pageSize: 20, status: "Active" } });
+        // Fallback directly to Holiday Management dependency API
       }
+
+      if (!holidays || holidays.length === 0) {
+        try {
+          const res = await apiClient.get(apiEndpoints.holidays.list, { params: { ...params, pageSize: 20, status: "Active" } });
+          const raw = unwrap(res.data);
+          holidays = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.holidays || []);
+        } catch {
+          // ignore
+        }
+      }
+
       if (holidaySeq.current === seq) {
-        setHolidayState({ loading: false, error: null, data: unwrap(res.data) });
+        setHolidayState({ loading: false, error: null, data: holidays });
       }
     } catch (err) {
       if (holidaySeq.current === seq) {
@@ -915,7 +1240,7 @@ export default function DashboardPage() {
     }
   }, [campusId, boardId, academicYearId]);
 
-  // 7. GET /api/v1/dashboard/upcoming-examinations
+  // 7. GET /api/v1/dashboard/upcoming-examinations (with direct sync to Examination module /api/v1/examinations)
   const fetchUpcomingExaminations = useCallback(async () => {
     const seq = ++examSeq.current;
     setExamState((prev) => ({ ...prev, loading: true, error: null }));
@@ -925,9 +1250,27 @@ export default function DashboardPage() {
         ...(boardId ? { boardId } : {}),
         ...(campusId ? { campusId } : {}),
       };
-      const res = await apiClient.get(DASHBOARD_API.upcomingExaminations, { params });
+      let exams = [];
+      try {
+        const res = await apiClient.get(DASHBOARD_API.upcomingExaminations, { params });
+        const raw = unwrap(res.data);
+        exams = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.examinations || []);
+      } catch {
+        // Fallback directly to Examination module dependency API
+      }
+
+      if (!exams || exams.length === 0) {
+        try {
+          const res = await apiClient.get(apiEndpoints.examinations.list, { params });
+          const raw = unwrap(res.data);
+          exams = Array.isArray(raw) ? raw : (raw?.items || raw?.$values || raw?.examinations || []);
+        } catch {
+          // ignore
+        }
+      }
+
       if (examSeq.current === seq) {
-        setExamState({ loading: false, error: null, data: unwrap(res.data) });
+        setExamState({ loading: false, error: null, data: exams });
       }
     } catch (err) {
       if (examSeq.current === seq) {
@@ -973,26 +1316,33 @@ export default function DashboardPage() {
   }, [fetchSummary, fetchStudentsOverview, fetchGroupDistribution, fetchStudentAttendance, fetchStaffAttendance, fetchUpcomingHolidays, fetchUpcomingExaminations]);
 
   // Extracted KPI Values & Metrics dynamically resolved from Backend API
-  // Reconcile Total Students with Student Management enrolled records (Students table / Groups count)
+  // Reconcile Total Students strictly from live Student Management (apiEndpoints.students.list / summary)
   const studentManagementCount = useMemo(() => {
+    const fromSummary = summaryState.data?.totalStudents ?? summaryState.data?.totalStudentCount ?? summaryState.data?.studentCount;
+    if (fromSummary !== undefined && fromSummary !== null && !isNaN(Number(fromSummary))) {
+      return Number(fromSummary);
+    }
     const fromGroupState = Number(groupState.data?.totalStudents ?? 0);
     if (fromGroupState > 0) return fromGroupState;
-    const fromGroupItems = (groupState.data?.items || groupState.data?.groups || []).reduce(
-      (sum, g) => sum + (Number(g.totalStudents ?? g.value ?? g.studentCount) || 0),
-      0
-    );
-    if (fromGroupItems > 0) return fromGroupItems;
     return null;
-  }, [groupState.data]);
+  }, [summaryState.data, groupState.data]);
 
   const reconciledSummaryData = useMemo(() => {
-    if (!summaryState.data && !staffStatsState.data) return summaryState.data;
+    if (!summaryState.data && !staffStatsState.data && !groupState.data) return summaryState.data;
     const base = summaryState.data ? { ...summaryState.data } : {};
 
     if (studentManagementCount && studentManagementCount > 0) {
       base.totalStudents = studentManagementCount;
       base.totalStudentCount = studentManagementCount;
       base.studentCount = studentManagementCount;
+    }
+
+    const groupCountFromGroupState = Array.isArray(groupState.data?.items) ? groupState.data.items.length : 0;
+    if (base.totalGroups === undefined || base.totalGroups === null) {
+      base.totalGroups = groupCountFromGroupState;
+      base.groupCount = groupCountFromGroupState;
+    } else {
+      base.groupCount = base.totalGroups;
     }
 
     if (staffStatsState.data) {
@@ -1009,7 +1359,7 @@ export default function DashboardPage() {
     }
 
     return base;
-  }, [summaryState.data, studentManagementCount, staffStatsState.data]);
+  }, [summaryState.data, studentManagementCount, staffStatsState.data, groupState.data]);
 
   const studentsKpi = resolveKpiMetric(reconciledSummaryData || summaryState.data, "totalStudents", ["totalStudents", "totalStudentCount", "studentCount"], ["lastYearTotalStudents", "lastYearStudentCount"], ["studentsVsLastYearPercentage"]);
   const teachingKpi = resolveKpiMetric(reconciledSummaryData || summaryState.data, "teachingStaff", ["teachingStaff", "teachingStaffCount"], ["lastYearTeachingStaff", "lastYearTeachingStaffCount"], ["teachingStaffVsLastYearPercentage"]);
@@ -1020,8 +1370,8 @@ export default function DashboardPage() {
   const kpis = [
     {
       label: "Total Students",
-      value: studentManagementCount ?? studentsKpi.value,
-      previousValue: studentsKpi.previousValue,
+      value: (studentManagementCount ?? studentsKpi.value) ?? 0,
+      previousValue: studentsKpi.previousValue ?? 0,
       icon: totalStudentsIcon,
       tone: "green",
       changeLabel: studentsKpi.label,
@@ -1030,8 +1380,8 @@ export default function DashboardPage() {
     },
     {
       label: "Teaching Staff",
-      value: (staffStatsState.data?.teachingStaff !== undefined ? staffStatsState.data.teachingStaff : teachingKpi.value),
-      previousValue: teachingKpi.previousValue,
+      value: (staffStatsState.data?.teachingStaff !== undefined ? staffStatsState.data.teachingStaff : teachingKpi.value) ?? 0,
+      previousValue: teachingKpi.previousValue ?? 0,
       icon: teachingStaffIcon,
       tone: "blue",
       changeLabel: teachingKpi.label,
@@ -1040,8 +1390,8 @@ export default function DashboardPage() {
     },
     {
       label: "Non-Teaching Staff",
-      value: (staffStatsState.data?.nonTeachingStaff !== undefined ? staffStatsState.data.nonTeachingStaff : nonTeachingKpi.value),
-      previousValue: nonTeachingKpi.previousValue,
+      value: (staffStatsState.data?.nonTeachingStaff !== undefined ? staffStatsState.data.nonTeachingStaff : nonTeachingKpi.value) ?? 0,
+      previousValue: nonTeachingKpi.previousValue ?? 0,
       icon: nonTeachingStaffIcon,
       tone: "orange",
       changeLabel: nonTeachingKpi.label,
@@ -1050,8 +1400,8 @@ export default function DashboardPage() {
     },
     {
       label: "Total Groups",
-      value: groupsKpi.value,
-      previousValue: groupsKpi.previousValue,
+      value: groupsKpi.value ?? 0,
+      previousValue: groupsKpi.previousValue ?? 0,
       icon: totalGroupsIcon,
       tone: "violet",
       changeLabel: groupsKpi.label,
@@ -1060,8 +1410,8 @@ export default function DashboardPage() {
     },
     {
       label: "Total Sections",
-      value: sectionsKpi.value,
-      previousValue: sectionsKpi.previousValue,
+      value: sectionsKpi.value ?? 0,
+      previousValue: sectionsKpi.previousValue ?? 0,
       icon: totalSectionsIcon,
       tone: "cyan",
       changeLabel: sectionsKpi.label,
@@ -1320,6 +1670,8 @@ export default function DashboardPage() {
       name: item.name || item.groupName || item.code || "Group",
       value: Number(item.value ?? item.studentCount ?? item.count ?? 0),
       students: Number(item.value ?? item.studentCount ?? item.count ?? 0),
+      boys: Number(item.boys ?? item.boysCount ?? 0),
+      girls: Number(item.girls ?? item.girlsCount ?? 0),
       fill: GROUP_COLORS[index % GROUP_COLORS.length],
     }));
   }, [groupState.data]);
@@ -1366,44 +1718,15 @@ export default function DashboardPage() {
   // Group Summary Stats for Bottom Chips (Total Students, Boys, Girls)
   const groupStats = useMemo(() => {
     const totalGroupStudents = groupChartData.reduce((sum, g) => sum + (Number(g.value) || 0), 0) || Number(summaryState.data?.totalStudents ?? 0);
-    let boys = Number(groupState.data?.boysCount ?? groupState.data?.boys ?? 0);
-    let girls = Number(groupState.data?.girlsCount ?? groupState.data?.girls ?? 0);
-
-    if (boys > 0 || girls > 0) {
-      return {
-        totalStudents: totalGroupStudents,
-        boys,
-        girls,
-      };
-    }
-
-    if (boys === 0 && girls === 0) {
-      if (overviewState.data?.totalAdmissions > 0) {
-        const admTotal = overviewState.data.totalAdmissions;
-        const admBoys = overviewState.data.boysCount || 0;
-        const ratio = admBoys / admTotal;
-        boys = Math.round(totalGroupStudents * ratio);
-        girls = Math.max(0, totalGroupStudents - boys);
-      }
-    } else if (boys + girls !== totalGroupStudents && totalGroupStudents > 0) {
-      const known = boys + girls;
-      if (known > 0) {
-        const boyRatio = boys / known;
-        boys = Math.round(totalGroupStudents * boyRatio);
-        girls = Math.max(0, totalGroupStudents - boys);
-      } else {
-        const half = Math.floor(totalGroupStudents / 2);
-        boys = half;
-        girls = totalGroupStudents - half;
-      }
-    }
+    const boys = Number(groupState.data?.boysCount ?? groupState.data?.boys ?? 0);
+    const girls = Number(groupState.data?.girlsCount ?? groupState.data?.girls ?? 0);
 
     return {
       totalStudents: totalGroupStudents,
       boys,
       girls,
     };
-  }, [groupChartData, groupState.data, summaryState.data, overviewState.data]);
+  }, [groupChartData, groupState.data, summaryState.data]);
 
   // Student Attendance Normalized Values
   const studentAttData = useMemo(() => {
@@ -1422,23 +1745,23 @@ export default function DashboardPage() {
       total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
     }
 
-    const hasMarkedRecords = marked > 0 || (present + absent + halfDay > 0);
+    const hasMarkedRecords = Boolean(data.hasMarked) || marked > 0 || (present + absent + halfDay > 0);
 
-    if (percentage === undefined || percentage === null) {
-      percentage = hasMarkedRecords && total > 0
-        ? Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1))
-        : 0;
+    if (hasMarkedRecords && total > 0) {
+      percentage = Number((((present + 0.5 * halfDay) / total) * 100).toFixed(1));
+    } else if (percentage === undefined || percentage === null || !hasMarkedRecords) {
+      percentage = 0;
     } else {
       percentage = Number(Number(percentage).toFixed(1));
     }
 
     const chartData = hasMarkedRecords
       ? [
-          { name: "Present", value: present, color: "#22a447" },
+          { name: "Present", value: present, color: "#16a34a" },
           { name: "Absent", value: absent, color: "#ef4444" },
           { name: "Half-day", value: halfDay, color: "#f59e0b" },
         ]
-      : [{ name: "Not marked today", value: total || 1, color: "#cbd5e1" }];
+      : [{ name: "Not marked today", value: total || 1, color: "#e2e8f0" }];
 
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
@@ -1471,27 +1794,44 @@ export default function DashboardPage() {
       ? staffStatsState.data.nonTeachingStaff
       : (metric(data, ["nonTeachingCount", "nonTeachingStaffCount"]) ?? nonTeachingFromStats);
 
-    const hasMarkedRecords = marked > 0 || (present + absent + late + onLeave > 0);
+    const hasMarkedRecords = Boolean(data.hasMarked) || marked > 0 || (present + absent + late + onLeave > 0);
 
-    if (percentage === undefined || percentage === null) {
-      percentage = hasMarkedRecords && total > 0
-        ? Number((((present + late) / total) * 100).toFixed(1))
-        : 0;
+    if (hasMarkedRecords && total > 0) {
+      percentage = Number((((present + late) / total) * 100).toFixed(1));
+    } else if (percentage === undefined || percentage === null || !hasMarkedRecords) {
+      percentage = 0;
     } else {
       percentage = Number(Number(percentage).toFixed(1));
     }
 
     const chartData = hasMarkedRecords
       ? [
-          { name: "Present", value: present, color: "#22a447" },
+          { name: "Present", value: present, color: "#16a34a" },
           { name: "Absent", value: absent, color: "#ef4444" },
           { name: "Late", value: late, color: "#f59e0b" },
           { name: "On Leave", value: onLeave, color: "#7c3aed" },
         ]
-      : [{ name: "Not marked today", value: total || 1, color: "#cbd5e1" }];
+      : [{ name: "Not marked today", value: total || 1, color: "#e2e8f0" }];
 
     return { total, marked, present, absent, late, onLeave, percentage, teachingCount, nonTeachingCount, hasMarkedRecords, chartData };
   }, [staffAttState.data, staffStatsState.data]);
+
+  // Clean formatted percentage displays for center of Donut Charts
+  const studentAttPercentageDisplay = useMemo(() => {
+    const p = studentAttData.percentage;
+    if (p === undefined || p === null) return "0%";
+    const num = Number(p);
+    if (isNaN(num)) return "0%";
+    return num % 1 === 0 ? `${num}%` : `${num.toFixed(1)}%`;
+  }, [studentAttData.percentage]);
+
+  const staffAttPercentageDisplay = useMemo(() => {
+    const p = staffAttData.percentage;
+    if (p === undefined || p === null) return "0%";
+    const num = Number(p);
+    if (isNaN(num)) return "0%";
+    return num % 1 === 0 ? `${num}%` : `${num.toFixed(1)}%`;
+  }, [staffAttData.percentage]);
 
   // Upcoming Holidays Normalized List
   const holidaysList = useMemo(() => {
@@ -1566,8 +1906,47 @@ export default function DashboardPage() {
 
   const greeting = greetingForHour(currentHour);
 
+  const isAccessDenied = (error) => {
+    if (!error) return false;
+    const str = String(error).toLowerCase();
+    return str.includes("access denied") || str.includes("authorization") || str.includes("403") || str.includes("campus");
+  };
+
+  const hasActiveData = Boolean(
+    campusId &&
+    ((summaryState.data?.totalStudents > 0) ||
+     (summaryState.data?.teachingStaff > 0) ||
+     (studentManagementCount > 0) ||
+     (overviewState.data?.totalAdmissions > 0))
+  );
+
+  const hasAdmissionData = Boolean(
+    campusId &&
+    overviewChartData.length > 0 &&
+    (overviewChartData.some((d) => Number(d.studentsJoined || 0) > 0) || Number(overviewState.data?.totalAdmissions || 0) > 0)
+  );
+
+  const hasGroupData = Boolean(
+    campusId &&
+    groupChartData.length > 0 &&
+    groupChartData.some((g) => Number(g.value || 0) > 0)
+  );
+
+  const hasStudentAttData = Boolean(
+    campusId &&
+    (studentAttData.total > 0 || Number(summaryState.data?.totalStudents || 0) > 0)
+  );
+
+  const hasStaffAttData = Boolean(
+    campusId &&
+    (staffAttData.total > 0 || Number(summaryState.data?.teachingStaff || 0) > 0 || Number(summaryState.data?.nonTeachingStaff || 0) > 0)
+  );
+
+  const hasHolidayData = Boolean(campusId && holidaysList.length > 0);
+  const hasExamData = Boolean(campusId && examsList.length > 0);
+
   return (
-    <DashboardLayout title={null} subtitle={null} actions={null} breadcrumb={["Overview"]}>
+    <DashboardLayout hidePageHeader contentClassName="cms-content-dashboard" title={null} subtitle={null} actions={null} breadcrumb={["Overview"]}>
       {initialLoading ? <DashboardSkeleton /> : <main className="dashboard-page">
         {/* Top Header Bar & Control Panel */}
         <div className="dashboard-header-bar">
@@ -1578,10 +1957,17 @@ export default function DashboardPage() {
             <p className="dashboard-greeting-sub">Here's what's happening in your college today.</p>
           </div>
           <div className="dashboard-header-controls">
-            <div className="dashboard-last-updated-badge">
-              <Clock size={14} />
-              <span>Last updated <strong>{lastUpdated}</strong></span>
-            </div>
+            {!hasActiveData ? (
+              <div className="dashboard-last-updated-badge dashboard-setup-badge">
+                <Info size={14} />
+                <span>Get started by setting up your college</span>
+              </div>
+            ) : (
+              <div className="dashboard-last-updated-badge">
+                <Clock size={14} />
+                <span>Last updated <strong>{lastUpdated}</strong></span>
+              </div>
+            )}
             <button
               type="button"
               className="cms-btn cms-btn-primary dashboard-refresh-btn"
@@ -1595,8 +1981,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-
-
         {/* 5 KPI Cards with 3D Icons */}
         <section className="dashboard-kpi-grid" aria-label="College metrics">
           {kpis.map((item) => (
@@ -1604,38 +1988,48 @@ export default function DashboardPage() {
           ))}
         </section>
 
-        {/* Quick Actions Bar with 3D Icons */}
-        <nav className="dashboard-quick-actions" aria-label="Quick Actions">
-          <h2>Quick Actions</h2>
+        {/* Quick Setup Bar */}
+        <nav className="dashboard-quick-actions" aria-label="Quick Setup">
+          <h2>Quick Setup</h2>
           <div className="dashboard-quick-actions-list">
-            {QUICK_ACTIONS.map(({ label, to, icon, tone }) => (
+            {QUICK_SETUP.map(({ label, to, icon, tone, isPlus }) => (
               <Link key={label} to={to} className={`dashboard-quick-action tone-${tone}`}>
-                <span className="dashboard-quick-action-icon">
-                  <img src={icon} alt="" aria-hidden="true" />
-                </span>
-                <span>{label}</span>
+                {isPlus ? (
+                  <Plus size={13} strokeWidth={2.5} className="dashboard-plus-icon" />
+                ) : (
+                  <span className="dashboard-quick-action-icon">
+                    <img src={icon} alt="" aria-hidden="true" />
+                  </span>
+                )}
+                <span>{label.replace(/^\+\s*/, "")}</span>
               </Link>
             ))}
           </div>
         </nav>
 
-        {/* Second Row Grid: Students Overview | Students by Group | Student Attendance Today */}
-        <section className="dashboard-grid-row dashboard-row-three" aria-label="Main Analytics">
+        {/* Unified 2x3 Grid for all 6 Analytics Cards: Strictly Equal Size across all cards */}
+        <div className="dashboard-cards-grid" aria-label="Dashboard Analytics">
           {/* Card 1: Admission Overview */}
           <article className="dashboard-card dashboard-students-overview-card">
             <CardHeader title="Admission Overview" />
             {overviewState.loading ? (
               <LoadingState label="Loading overview..." />
+            ) : (!hasAdmissionData || isAccessDenied(overviewState.error)) ? (
+              <ZeroStateCard
+                icon={FileText}
+                title="No data available"
+                subtitle="Add a campus and academic year to start admissions."
+                actionLabel="+ Add Campus"
+                actionTo="/dashboard/settings/campus-configuration"
+              />
             ) : overviewState.error ? (
               <ErrorState message={overviewState.error} onRetry={fetchStudentsOverview} />
-            ) : overviewChartData.length === 0 ? (
-              <EmptyState message="No admission overview data available." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-area-chart-container">
                   {/* Fixed Y-Axis column (pinned on the left) */}
-                  <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0 }}>
-                    <ResponsiveContainer width="100%" height={118}>
+                  <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0, height: "100%" }}>
+                    <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={overviewChartData} margin={{ top: 6, right: 4, left: 0, bottom: 2 }}>
                         <YAxis
                           width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
@@ -1739,15 +2133,21 @@ export default function DashboardPage() {
             <CardHeader title="Students by Group" />
             {groupState.loading ? (
               <LoadingState label="Loading groups..." />
+            ) : (!hasGroupData || isAccessDenied(groupState.error)) ? (
+              <ZeroStateCard
+                icon={Users}
+                title="No data available"
+                subtitle="Create a group to view student distribution."
+                actionLabel="+ Create Group"
+                actionTo="/dashboard/courses/add"
+              />
             ) : groupState.error ? (
               <ErrorState message={groupState.error} onRetry={fetchGroupDistribution} />
-            ) : groupChartData.length === 0 ? (
-              <EmptyState message="No group distribution data available." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-chart dashboard-bar-chart-wrap" style={{ overflowX: groupChartData.length > 5 ? "auto" : "visible", width: "100%" }}>
-                  <div style={{ width: groupChartData.length > 5 ? `${Math.max(100, Math.round((groupChartData.length / 5) * 100))}%` : "100%", minWidth: "100%", height: 126 }}>
-                    <ResponsiveContainer width="100%" height={126}>
+                  <div style={{ width: groupChartData.length > 5 ? `${Math.max(100, Math.round((groupChartData.length / 5) * 100))}%` : "100%", minWidth: "100%", height: "100%" }}>
+                    <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={groupChartData} margin={{ top: 10, right: 10, left: -6, bottom: 2 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
                         <XAxis
@@ -1823,6 +2223,14 @@ export default function DashboardPage() {
 
             {studentAttState.loading ? (
               <LoadingState label="Updating attendance..." />
+            ) : (!hasStudentAttData || isAccessDenied(studentAttState.error)) ? (
+              <ZeroStateCard
+                icon={CalendarCheck}
+                title="No data available"
+                subtitle="Add students and mark attendance to see today's overview."
+                actionLabel="+ Add Student"
+                actionTo="/dashboard/admission?view=new"
+              />
             ) : studentAttState.error ? (
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
             ) : (
@@ -1840,19 +2248,21 @@ export default function DashboardPage() {
                                 data={
                                   studentAttData.chartData.some((d) => d.value > 0)
                                     ? studentAttData.chartData.filter((d) => d.value > 0)
-                                    : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                                    : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                                 }
                                 dataKey="value"
                                 nameKey="name"
-                                innerRadius="65%"
-                                outerRadius="90%"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={38}
+                                outerRadius={51}
                                 paddingAngle={studentAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                                 stroke="var(--cms-surface)"
                                 strokeWidth={2}
                               >
                                 {(studentAttData.chartData.some((d) => d.value > 0)
                                   ? studentAttData.chartData.filter((d) => d.value > 0)
-                                  : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                                  : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                                 ).map((entry) => (
                                   <Cell key={entry.name} fill={entry.color} />
                                 ))}
@@ -1865,7 +2275,7 @@ export default function DashboardPage() {
                             </PieChart>
                           </ResponsiveContainer>
                           <div className="dashboard-donut-center">
-                            <strong>{studentAttData.percentage ?? 0}%</strong>
+                            <strong>{studentAttPercentageDisplay}</strong>
                             <span>{studentAttData.hasMarkedRecords ? "Attendance" : "Not Marked"}</span>
                           </div>
                         </div>
@@ -1917,7 +2327,6 @@ export default function DashboardPage() {
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
-
                   <Link to="/dashboard/attendance/student" className="dashboard-footer-btn">
                     View Attendance Details <ChevronRight size={14} />
                   </Link>
@@ -1925,20 +2334,23 @@ export default function DashboardPage() {
               </div>
             )}
           </article>
-        </section>
 
-        {/* Third Row Grid: Staff Attendance Today | Certificate Requests | Upcoming Examinations */}
-        <section className="dashboard-grid-row dashboard-row-three" aria-label="Secondary Analytics">
-          {/* Card 1: Staff Attendance Overview (Today) */}
+          {/* Card 4: Staff Attendance Overview (Today) */}
           <article className="dashboard-card dashboard-staff-attendance-card">
             <CardHeader title="Staff Attendance Overview (Today)" />
 
             {staffAttState.loading ? (
               <LoadingState label="Updating staff attendance..." />
+            ) : (!hasStaffAttData || isAccessDenied(staffAttState.error)) ? (
+              <ZeroStateCard
+                icon={UserCheck}
+                title="No data available"
+                subtitle="Add staff and mark attendance to see today's overview."
+                actionLabel="+ Add Staff"
+                actionTo="/dashboard/staff/add"
+              />
             ) : staffAttState.error ? (
               <ErrorState message={staffAttState.error} onRetry={fetchStaffAttendance} />
-            ) : staffAttData.total === 0 ? (
-              <EmptyState message="No staff attendance data available for today." />
             ) : (
               <div className="dashboard-card-body dashboard-attendance-body">
                 {/* Donut Chart & Side Status Legend (Centered Together) */}
@@ -1950,19 +2362,21 @@ export default function DashboardPage() {
                           data={
                             staffAttData.chartData.some((d) => d.value > 0)
                               ? staffAttData.chartData.filter((d) => d.value > 0)
-                              : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                              : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                           }
                           dataKey="value"
                           nameKey="name"
-                          innerRadius="65%"
-                          outerRadius="90%"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={38}
+                          outerRadius={51}
                           paddingAngle={staffAttData.chartData.filter((d) => d.value > 0).length > 1 ? 3 : 0}
                           stroke="var(--cms-surface)"
                           strokeWidth={2}
                         >
                           {(staffAttData.chartData.some((d) => d.value > 0)
                             ? staffAttData.chartData.filter((d) => d.value > 0)
-                            : [{ name: "Not marked today", value: 1, color: "#cbd5e1" }]
+                            : [{ name: "Not marked today", value: 1, color: "#e2e8f0" }]
                           ).map((entry) => (
                             <Cell key={entry.name} fill={entry.color} />
                           ))}
@@ -1975,7 +2389,7 @@ export default function DashboardPage() {
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="dashboard-donut-center">
-                      <strong>{staffAttData.percentage ?? 0}%</strong>
+                      <strong>{staffAttPercentageDisplay}</strong>
                       <span>{staffAttData.hasMarkedRecords ? "Attendance" : "Not Marked"}</span>
                     </div>
                   </div>
@@ -2004,43 +2418,37 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Staff Summary Metrics & Split Note */}
-                <div className="dashboard-staff-kpi-wrap">
-                  <div className="dashboard-staff-kpis">
-                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip">
-                      <small>Total Staff</small>
-                      <strong>{formatNumber(staffAttData.total)}</strong>
-                    </Link>
-                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-present">
-                      <small>Present</small>
-                      <strong>{formatNumber(staffAttData.present)}</strong>
-                    </Link>
-                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-absent">
-                      <small>Absent</small>
-                      <strong>{formatNumber(staffAttData.absent)}</strong>
-                    </Link>
-                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-late">
-                      <small>Late</small>
-                      <strong>{formatNumber(staffAttData.late)}</strong>
-                    </Link>
-                    <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="staff-chip text-leave">
-                      <small>On Leave</small>
-                      <strong>{formatNumber(staffAttData.onLeave)}</strong>
-                    </Link>
-                  </div>
-
-                  {(staffAttData.teachingCount !== undefined || staffAttData.nonTeachingCount !== undefined) ? (
-                    <div className="dashboard-staff-split-note">
-                      <span>Teaching: <strong>{formatNumber(staffAttData.teachingCount)}</strong></span>
-                      <span className="split-divider">|</span>
-                      <span>Non-Teaching: <strong>{formatNumber(staffAttData.nonTeachingCount)}</strong></span>
-                    </div>
-                  ) : null}
+                {/* Staff Summary Metrics */}
+                <div className="dashboard-attendance-kpi-row dashboard-staff-kpis">
+                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip">
+                    <small>Total Staff</small>
+                    <strong>{formatNumber(staffAttData.total)}</strong>
+                  </Link>
+                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-present">
+                    <small>Present</small>
+                    <strong>{formatNumber(staffAttData.present)}</strong>
+                  </Link>
+                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-absent">
+                    <small>Absent</small>
+                    <strong>{formatNumber(staffAttData.absent)}</strong>
+                  </Link>
+                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-late">
+                    <small>Late</small>
+                    <strong>{formatNumber(staffAttData.late)}</strong>
+                  </Link>
+                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-leave">
+                    <small>On Leave</small>
+                    <strong>{formatNumber(staffAttData.onLeave)}</strong>
+                  </Link>
                 </div>
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
-
+                  {(staffAttData.teachingCount !== undefined || staffAttData.nonTeachingCount !== undefined) ? (
+                    <span className="dashboard-footer-time" style={{ marginRight: "auto" }}>
+                      Teaching: <strong>{formatNumber(staffAttData.teachingCount)}</strong> &bull; Non-Teaching: <strong>{formatNumber(staffAttData.nonTeachingCount)}</strong>
+                    </span>
+                  ) : null}
                   <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="dashboard-footer-btn">
                     View Staff Attendance <ChevronRight size={14} />
                   </Link>
@@ -2052,14 +2460,20 @@ export default function DashboardPage() {
           {/* Card 2: Upcoming Holidays & College Breaks */}
           <article className="dashboard-card dashboard-holiday-card">
             <CardHeader
-              title={`Upcoming Holidays (${holidaysList.length})`}
+              title={holidaysList.length > 0 ? `Upcoming Holidays (${holidaysList.length})` : "Upcoming Holidays"}
             />
             {holidayState.loading ? (
               <LoadingState label="Loading holidays..." />
+            ) : (!hasHolidayData || isAccessDenied(holidayState.error)) ? (
+              <ZeroStateCard
+                icon={CalendarX}
+                title="No holidays added"
+                subtitle="Add holidays to manage academic breaks."
+                actionLabel="+ Add Holiday"
+                actionTo="/dashboard/holidays"
+              />
             ) : holidayState.error ? (
               <ErrorState message={holidayState.error} onRetry={fetchUpcomingHolidays} />
-            ) : holidaysList.length === 0 ? (
-              <EmptyState message="No upcoming holidays scheduled." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
@@ -2095,14 +2509,20 @@ export default function DashboardPage() {
           {/* Card 3: Upcoming Examinations */}
           <article className="dashboard-card dashboard-exams-card">
             <CardHeader
-              title={`Upcoming Examinations (${examsList.length})`}
+              title={examsList.length > 0 ? `Upcoming Examinations (${examsList.length})` : "Upcoming Examinations"}
             />
             {examState.loading ? (
               <LoadingState label="Loading exams..." />
+            ) : (!hasExamData || isAccessDenied(examState.error)) ? (
+              <ZeroStateCard
+                icon={FileEdit}
+                title="No examinations scheduled"
+                subtitle="Create an examination to see the upcoming list."
+                actionLabel="+ Create Exam"
+                actionTo="/dashboard/examinations/add"
+              />
             ) : examState.error ? (
               <ErrorState message={examState.error} onRetry={fetchUpcomingExaminations} />
-            ) : examsList.length === 0 ? (
-              <EmptyState message="No upcoming examinations scheduled." />
             ) : (
               <div className="dashboard-card-body">
                 <div className="dashboard-info-list">
@@ -2132,7 +2552,7 @@ export default function DashboardPage() {
               </div>
             )}
           </article>
-        </section>
+        </div>
       </main>}
       <Toast message={toastMessage} onClose={() => setToastMessage("")} />
     </DashboardLayout>

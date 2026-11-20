@@ -4,177 +4,140 @@ import {
   UserCheck,
   UserX,
   Clock,
-  Search,
-  Filter,
   CheckCircle2,
-  Phone,
-  RefreshCw,
-  Sparkles,
-  Award,
+  AlertTriangle,
+  Play,
 } from "lucide-react";
 import DriverStatCard from "../components/DriverStatCard.jsx";
 import DriverStudentTable from "../components/DriverStudentTable.jsx";
-import { getStudents, updateStudentAttendance, bulkAttendance, getRoute } from "../../../api/transportDriverApi.js";
+import DriverTripActionBar from "../components/DriverTripActionBar.jsx";
+import { getStudents, getRoute } from "../../../api/transportDriverApi.js";
 import { SkeletonPage } from "../../../shared/components/Ui.jsx";
+import { normalizeStudentData, toTitleCase } from "../data/driverData.js";
 
-export default function DriverStudentsPage() {
-  const [students, setStudents] = useState([]);
-  const [routeDetails, setRouteDetails] = useState({ stops: [] });
-  const [selectedBatchStop, setSelectedBatchStop] = useState("");
+const DEFAULT_STOPS = [
+  { id: 1, name: "Tarnaka Metro", stopName: "Tarnaka Metro", pickupTime: "07:35 AM" },
+  { id: 2, name: "Habsiguda Crossroads", stopName: "Habsiguda Crossroads", pickupTime: "07:50 AM" },
+  { id: 3, name: "Nacharam IDA", stopName: "Nacharam IDA", pickupTime: "08:05 AM" },
+  { id: 4, name: "Campus Main Gate", stopName: "Campus Main Gate", pickupTime: "08:25 AM" },
+];
+
+export default function DriverStudentsPage({
+  students: propStudents = [],
+  onUpdateStatus,
+  onBatchBoardStop,
+  activeTripState,
+  onStartTrip,
+  onEndTrip,
+  onNavigateTab,
+}) {
+  const [students, setStudents] = useState(propStudents);
+  const [routeDetails, setRouteDetails] = useState({ stops: DEFAULT_STOPS });
+  const [selectedBatchStop, setSelectedBatchStop] = useState("Tarnaka Metro");
   const [toastMessage, setToastMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [gatekeeperModalStudent, setGatekeeperModalStudent] = useState(null);
   const hasLoadedOnce = useRef(false);
-
-  const toTitleCase = (str) => {
-    if (!str || typeof str !== "string") return "";
-    return str.replace(/\b\w/g, (c) => c.toUpperCase());
-  };
 
   const triggerToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 3500);
   };
 
-  const DEFAULT_STUDENTS = [
-    {
-      id: 101,
-      studentId: 101,
-      name: "K. Sai Teja",
-      rollNo: "CSE24-102",
-      admissionNo: "CSE24-102",
-      academicClass: "B.Tech CSE - II Year",
-      stop: "Tarnaka Metro",
-      pickupTime: "07:35 AM",
-      time: "07:35 AM",
-      parentName: "K. Venkat Rao",
-      contact: "+91 98480 12345",
-      parentPhone: "+91 98480 12345",
-      status: "Pending",
-    },
-    {
-      id: 102,
-      studentId: 102,
-      name: "V. Sneha Reddy",
-      rollNo: "ECE24-208",
-      admissionNo: "ECE24-208",
-      academicClass: "B.Tech ECE - II Year",
-      stop: "Habsiguda Crossroads",
-      pickupTime: "07:50 AM",
-      time: "07:50 AM",
-      parentName: "V. Mohan Reddy",
-      contact: "+91 94401 54321",
-      parentPhone: "+91 94401 54321",
-      status: "Pending",
-    },
-  ];
-
-  const DEFAULT_STOPS = [
-    { id: 1, name: "Tarnaka Metro", stopName: "Tarnaka Metro", pickupTime: "07:35 AM" },
-    { id: 2, name: "Habsiguda Crossroads", stopName: "Habsiguda Crossroads", pickupTime: "07:50 AM" },
-    { id: 3, name: "Nacharam IDA", stopName: "Nacharam IDA", pickupTime: "08:05 AM" },
-    { id: 4, name: "Campus Main Gate", stopName: "Campus Main Gate", pickupTime: "08:25 AM" },
-  ];
-
-  const fetchStudentsAndRoute = async () => {
-    try {
-      if (!hasLoadedOnce.current) {
-        setIsLoading(true);
-      }
-      const [studentsRes, routeRes] = await Promise.allSettled([
-        getStudents(),
-        getRoute()
-      ]);
-      
-      let fetchedStudents = [];
-      if (studentsRes.status === "fulfilled") {
-        const sPayload = studentsRes.value?.data?.data ?? studentsRes.value?.data ?? {};
-        fetchedStudents = sPayload.students ?? (Array.isArray(sPayload) ? sPayload : []);
-      }
-
-      if (!fetchedStudents || fetchedStudents.length === 0) {
-        fetchedStudents = DEFAULT_STUDENTS;
-      }
-      setStudents(fetchedStudents);
-
-      let rawStops = [];
-      let fetchedRouteData = {};
-      if (routeRes.status === "fulfilled") {
-        const rPayload = routeRes.value?.data?.data ?? routeRes.value?.data ?? {};
-        rawStops = rPayload.stops || rPayload.pickupPoints || rPayload.route?.stops || [];
-        fetchedRouteData = rPayload.route || {};
-      }
-
-      const normalizedStops = (rawStops && rawStops.length > 0)
-        ? rawStops.map((st) => ({
-            ...st,
-            name: toTitleCase(st.stopName || st.name || st.pickupPointName || "Campus Stop"),
-          }))
-        : DEFAULT_STOPS;
-
-      const fetchedRoute = {
-        ...fetchedRouteData,
-        stops: normalizedStops,
-      };
-      setRouteDetails(fetchedRoute);
-      if (normalizedStops.length > 0) {
-        setSelectedBatchStop(normalizedStops[0].name);
-      }
-      setError("");
-    } catch (err) {
-      console.error(err);
-      setStudents(DEFAULT_STUDENTS);
-      setRouteDetails({ stops: DEFAULT_STOPS });
-      setSelectedBatchStop(DEFAULT_STOPS[0].name);
-    } finally {
-      setIsLoading(false);
-      hasLoadedOnce.current = true;
+  // Keep students in sync with global parent state
+  useEffect(() => {
+    if (propStudents && propStudents.length > 0) {
+      setStudents(propStudents);
     }
-  };
+  }, [propStudents]);
 
   useEffect(() => {
-    fetchStudentsAndRoute();
+    let isMounted = true;
+    const fetchRoute = async () => {
+      try {
+        const routeRes = await getRoute();
+        if (!isMounted) return;
+        const rPayload = routeRes?.data?.data ?? routeRes?.data ?? {};
+        const rawStops = rPayload.stops || rPayload.pickupPoints || rPayload.route?.stops || [];
+        const normalizedStops = (rawStops && rawStops.length > 0)
+          ? rawStops.map((st) => ({
+              ...st,
+              name: toTitleCase(st.stopName || st.name || st.pickupPointName || "Campus Stop"),
+            }))
+          : DEFAULT_STOPS;
+
+        setRouteDetails({
+          ...(rPayload.route || {}),
+          stops: normalizedStops,
+        });
+        if (normalizedStops.length > 0) {
+          setSelectedBatchStop(normalizedStops[0].name);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setRouteDetails({ stops: DEFAULT_STOPS });
+        }
+      }
+    };
+
+    fetchRoute();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleUpdateStatus = async (id, status) => {
+    // If user is trying to board while trip is still Scheduled, prompt to start trip
+    const isScheduled = (activeTripState?.morningTripStatus || "Scheduled") === "Scheduled";
+    if (isScheduled && (status === "Picked Up" || status === "Boarded")) {
+      const targetStudent = students.find((s) => s.id === id);
+      setGatekeeperModalStudent({ id, status, name: targetStudent?.name || "Student" });
+      return;
+    }
+
     setStudents((prev) =>
       prev.map((s) => (s.id === id ? { ...s, status } : s))
     );
+    if (onUpdateStatus) onUpdateStatus(id, status);
     triggerToast(`Student status updated to "${status}".`);
-
-    try {
-      await updateStudentAttendance(id, { status });
-    } catch (err) {
-      console.warn("Backend attendance sync queued:", err);
-    }
   };
 
-  const handleQuickBoardStop = async () => {
-    setStudents((prev) =>
-      prev.map((s) =>
-        (s.stop === selectedBatchStop || s.stopName === selectedBatchStop) && s.status !== "Picked Up"
-          ? { ...s, status: "Picked Up" }
-          : s
-      )
-    );
-    triggerToast(`All pending students at stop "${selectedBatchStop}" marked as Boarded!`);
+  const handleConfirmStartAndBoard = async () => {
+    if (!gatekeeperModalStudent) return;
+    const { id, status } = gatekeeperModalStudent;
 
-    try {
-      await bulkAttendance({ stop: selectedBatchStop, status: "Picked Up" });
-    } catch (err) {
-      console.warn("Backend bulk attendance sync queued:", err);
-    }
+    if (onStartTrip) await onStartTrip("morning");
+
+    setStudents((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, status } : s))
+    );
+    if (onUpdateStatus) onUpdateStatus(id, status);
+    triggerToast(`Morning Trip started & passenger marked as "${status}"!`);
+    setGatekeeperModalStudent(null);
   };
 
   const totalCount = students.length;
-  const pickedUpCount = students.filter((s) => s.status === "Picked Up" || s.status === "Boarded").length;
+  const pickedUpCount = students.filter(
+    (s) => s.status === "Picked Up" || s.status === "Boarded"
+  ).length;
   const pendingCount = students.filter((s) => s.status === "Pending").length;
-  const missedCount = students.filter((s) => s.status === "Not Boarded" || s.status === "Absent" || s.status === "Missed").length;
+  const missedCount = students.filter(
+    (s) => s.status === "Not Boarded" || s.status === "Absent" || s.status === "Missed"
+  ).length;
 
-  const stopsList = routeDetails.stops?.map((s) => s.name) || [];
+  const stopsList = routeDetails.stops?.map((s) => s.name) || [
+    "Tarnaka Metro",
+    "Habsiguda Crossroads",
+    "Nacharam IDA",
+    "Campus Main Gate",
+  ];
 
   if (isLoading) {
-    return <div className="dp-page-container"><SkeletonPage variant="table" columns={6} rows={7} /></div>;
+    return (
+      <div className="dp-page-container">
+        <SkeletonPage variant="table" columns={6} rows={7} />
+      </div>
+    );
   }
 
   return (
@@ -198,29 +161,19 @@ export default function DriverStudentsPage() {
             Manage student pickup, attendance, and contact information in real-time.
           </p>
         </div>
-        <div className="dp-header-actions">
-          <div className="dp-quick-batch-box">
-            <select
-              value={selectedBatchStop}
-              onChange={(e) => setSelectedBatchStop(e.target.value)}
-              className="dp-select dp-select-sm"
-            >
-              {stopsList.map((stop) => (
-                <option key={stop} value={stop}>
-                  {stop}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="dp-btn dp-btn-primary dp-btn-sm"
-              onClick={handleQuickBoardStop}
-            >
-              <UserCheck size={14} /> Board All at Stop
-            </button>
-          </div>
-        </div>
       </div>
+
+      {/* Persistent Trip Operations Action Bar */}
+      <DriverTripActionBar
+        activeTripState={activeTripState}
+        onStartTrip={onStartTrip}
+        onEndTrip={onEndTrip}
+        onNavigateTab={onNavigateTab}
+        students={students}
+        assignedRoute="Route 32 Habsiguda"
+        vehicleNumber="AP39AU2653"
+        scheduledTime="07:35 AM - 08:30 AM"
+      />
 
       {/* KPI Stats Grid */}
       <div className="dp-stat-grid-4">
@@ -264,6 +217,67 @@ export default function DriverStudentsPage() {
           showFilters={true}
         />
       </div>
+
+      {/* Trip Start Gatekeeper Modal */}
+      {gatekeeperModalStudent && (
+        <div className="dp-modal-overlay" onClick={() => setGatekeeperModalStudent(null)}>
+          <div
+            className="dp-modal-card"
+            style={{ maxWidth: "460px" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dp-modal-header">
+              <div className="dp-flex-row gap-2">
+                <AlertTriangle size={20} className="dp-text-primary" />
+                <h3 className="dp-modal-title">Start Trip to Begin Boarding</h3>
+              </div>
+              <button
+                type="button"
+                className="dp-modal-close-btn"
+                onClick={() => setGatekeeperModalStudent(null)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="dp-modal-body" style={{ padding: "16px 20px" }}>
+              <p className="text-sm text-gray-700 mb-2">
+                Route 32 Morning Trip is currently <strong>Scheduled</strong>. To board passengers, you must start the trip.
+              </p>
+              <div
+                style={{
+                  background: "var(--dp-soft)",
+                  borderRadius: "8px",
+                  padding: "12px",
+                  fontSize: "13px",
+                }}
+              >
+                <div>
+                  Passenger: <strong>{gatekeeperModalStudent.name}</strong>
+                </div>
+                <div className="text-gray-500 text-xs mt-1">
+                  Clicking below will start Route 32 Morning Trip and mark this student as <strong>Boarded</strong>.
+                </div>
+              </div>
+            </div>
+            <div className="dp-modal-footer">
+              <button
+                type="button"
+                className="dp-btn dp-btn-outline dp-btn-sm"
+                onClick={() => setGatekeeperModalStudent(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="dp-btn dp-btn-primary dp-btn-sm"
+                onClick={handleConfirmStartAndBoard}
+              >
+                <Play size={13} /> Start Trip & Board
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

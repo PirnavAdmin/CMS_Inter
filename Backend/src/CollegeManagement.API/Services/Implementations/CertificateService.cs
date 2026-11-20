@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Certificate;
@@ -15,6 +16,9 @@ public class CertificateService : ICertificateService
     private readonly ICertificateRepository _repository;
     private readonly INumberSeriesService _numberSeriesService;
     private readonly ITemplateService _templateService;
+    private readonly ICertificateExportService? _exportService;
+    private readonly ICertificateDocumentStorageService? _storageService;
+    private readonly IFeeService? _feeService;
     private readonly IHubContext<NotificationHub>? _hubContext;
     private readonly Microsoft.Extensions.Logging.ILogger<CertificateService>? _logger;
 
@@ -22,14 +26,33 @@ public class CertificateService : ICertificateService
         ICertificateRepository repository, 
         INumberSeriesService numberSeriesService,
         ITemplateService templateService,
+        ICertificateExportService? exportService = null,
+        ICertificateDocumentStorageService? storageService = null,
+        IFeeService? feeService = null,
         IHubContext<NotificationHub>? hubContext = null,
         Microsoft.Extensions.Logging.ILogger<CertificateService>? logger = null)
     {
         _repository = repository;
         _numberSeriesService = numberSeriesService;
         _templateService = templateService;
+        _exportService = exportService;
+        _storageService = storageService;
+        _feeService = feeService;
         _hubContext = hubContext;
         _logger = logger;
+    }
+
+    private async Task BroadcastCertificateEventAsync(string eventType, int? campusId = null, bool includeStudents = false, CancellationToken ct = default)
+    {
+        if (_hubContext == null) return;
+        try
+        {
+            var groups = new List<string> { "Role_admin", "Role_superadmin", "Role_super admin", "Role_principal", "Role_examcell", "Role_exam cell", "Role_exam_cell" };
+            if (includeStudents) groups.Add("Role_student");
+            if (campusId.HasValue && campusId.Value > 0) groups.Add($"Campus_{campusId.Value}");
+            await _hubContext.Clients.Groups(groups.Distinct().ToList()).SendAsync("NotificationReceived", new { type = eventType, campusId }, ct);
+        }
+        catch { }
     }
 
     public async Task<IReadOnlyList<CertificateResponseDto>> GetAllAsync(
@@ -155,13 +178,75 @@ public class CertificateService : ICertificateService
         }
 
         var generatedCert = await _repository.GenerateAsync(request, ct);
-        if (generatedCert != null && _hubContext != null)
+        if (generatedCert != null)
         {
-            try
+            // --- Permanent Server-Side Document Generation & File Path Persistence ---
+            if (_storageService != null && _exportService != null)
             {
-                await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_CERTIFICATE_REQUEST" }, ct);
+                try
+                {
+                    var preview = await GetPreviewAsync(generatedCert.CertificateId, ct);
+                    if (preview == null)
+                    {
+                        preview = _exportService.BuildPreviewFallback(generatedCert);
+                    }
+
+                    var pdfBytes = _exportService.GenerateCertificatePdf(preview);
+                    var (relPath, fullPath, size) = await _storageService.SaveCertificateDocumentAsync(
+                        generatedCert.CertificateNumber, 
+                        pdfBytes, 
+                        ct);
+
+                    var generatedBy = "Admin";
+                    await _repository.UpdateCertificateFileAsync(
+                        generatedCert.CertificateId, 
+                        relPath, 
+                        $"{generatedCert.CertificateNumber}.pdf", 
+                        "application/pdf", 
+                        size, 
+                        generatedBy, 
+                        ct);
+
+                    generatedCert.FilePath = relPath;
+                    generatedCert.FileName = $"{generatedCert.CertificateNumber}.pdf";
+                    generatedCert.FileType = "application/pdf";
+                    generatedCert.FileSize = size;
+                    generatedCert.GeneratedBy = generatedBy;
+                    generatedCert.GeneratedAt = DateTime.UtcNow;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogError(ex, "[CertificateService.GenerateAsync] Failed to render and save permanent certificate document for {CertNo}: {Message}", 
+                        generatedCert.CertificateNumber, ex.Message);
+                }
             }
-            catch { }
+
+            if (_feeService != null && student.StudentId > 0)
+            {
+                try
+                {
+                    var feeDetails = await _feeService.GetStudentFeeDetailsByStudentAsync(student.StudentId);
+                    if (feeDetails != null)
+                    {
+                        var due = feeDetails.OutstandingBalance;
+                        var clearanceStatus = due > 0 ? "Dues Pending" : "Cleared";
+                        generatedCert.FeeClearanceStatus = clearanceStatus;
+                        generatedCert.FeeDueAmount = due;
+                        await _repository.UpdateFeeClearanceAsync(generatedCert.CertificateId, new CertificateFeeClearanceRequestDto
+                        {
+                            Status = clearanceStatus,
+                            DueAmount = due,
+                            ClearedBy = "Fee System Verification"
+                        }, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "[CertificateService.GenerateAsync] Could not fetch student fee details for student {StudentId}", student.StudentId);
+                }
+            }
+
+            await BroadcastCertificateEventAsync("NEW_CERTIFICATE_REQUEST", request.CampusId, false, ct);
         }
         return generatedCert;
     }
@@ -272,14 +357,34 @@ public class CertificateService : ICertificateService
         if (id <= 0 || string.IsNullOrWhiteSpace(status))
             return false;
 
-        var moveResult = await _repository.MoveStatusAsync(id, status, issuedBy, ct);
-        if (moveResult && _hubContext != null)
+        if (status.Equals("Issued", StringComparison.OrdinalIgnoreCase))
         {
-            try
+            var cert = await _repository.GetByIdAsync(id, ct);
+            if (cert != null)
             {
-                await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct);
+                bool isPermitted = !string.IsNullOrWhiteSpace(cert.FeeExemptionReason)
+                    || string.Equals(cert.FeeClearanceStatus, "Principal Permitted", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(cert.FeeClearanceStatus, "Exempted", StringComparison.OrdinalIgnoreCase);
+
+                if (!isPermitted && _feeService != null && cert.StudentId > 0)
+                {
+                    var feeDetails = await _feeService.GetStudentFeeDetailsByStudentAsync(cert.StudentId);
+                    if (feeDetails != null && feeDetails.OutstandingBalance > 0)
+                    {
+                        throw new InvalidOperationException($"Cannot issue certificate {cert.CertificateNumber}. Student {cert.StudentName} (Admission No: {cert.AdmissionNo}) has pending fee dues of ₹{feeDetails.OutstandingBalance:N2}. Fee clearance or Principal Permission is required.");
+                    }
+                }
+                else if (!isPermitted && cert.FeeDueAmount.GetValueOrDefault() > 0)
+                {
+                    throw new InvalidOperationException($"Cannot issue certificate {cert.CertificateNumber}. Student {cert.StudentName} (Admission No: {cert.AdmissionNo}) has pending fee dues of ₹{cert.FeeDueAmount.Value:N2}. Fee clearance or Principal Permission is required.");
+                }
             }
-            catch { }
+        }
+
+        var moveResult = await _repository.MoveStatusAsync(id, status, issuedBy, ct);
+        if (moveResult)
+        {
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", null, true, ct);
         }
         return moveResult;
     }
@@ -290,9 +395,9 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         var count = await _repository.BulkReviewAsync(reviewedBy, campusId, ct);
-        if (count > 0 && _hubContext != null)
+        if (count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", campusId, true, ct);
         }
         return count;
     }
@@ -303,9 +408,9 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         var count = await _repository.BulkApproveAsync(approvedBy, campusId, ct);
-        if (count > 0 && _hubContext != null)
+        if (count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", campusId, true, ct);
         }
         return count;
     }
@@ -316,9 +421,9 @@ public class CertificateService : ICertificateService
         CancellationToken ct = default)
     {
         var count = await _repository.BulkIssueAsync(issuedBy, campusId, ct);
-        if (count > 0 && _hubContext != null)
+        if (count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "CERTIFICATE_STATUS_UPDATED" }, ct); } catch { }
+            await BroadcastCertificateEventAsync("CERTIFICATE_STATUS_UPDATED", campusId, true, ct);
         }
         return count;
     }
@@ -347,9 +452,23 @@ public class CertificateService : ICertificateService
     {
         ArgumentNullException.ThrowIfNull(request);
         var list = await _repository.BulkGenerateAsync(request, ct);
-        if (list.Count > 0 && _hubContext != null)
+        if (list.Count > 0)
         {
-            try { await _hubContext.Clients.All.SendAsync("NotificationReceived", new { type = "NEW_CERTIFICATE_REQUEST" }, ct); } catch { }
+            foreach (var cert in list)
+            {
+                try
+                {
+                    var (content, fileName, contentType) = await GetOrGenerateDocumentAsync(cert.CertificateId, ct);
+                    cert.FileName = fileName;
+                    cert.FileType = contentType;
+                    cert.FileSize = content.Length;
+                }
+                catch (Exception ex)
+                {
+                    _logger?.LogWarning(ex, "[CertificateService.BulkGenerateAsync] Could not save document for {CertId}: {Message}", cert.CertificateId, ex.Message);
+                }
+            }
+            await BroadcastCertificateEventAsync("NEW_CERTIFICATE_REQUEST", null, false, ct);
         }
         return list;
     }
@@ -380,5 +499,72 @@ public class CertificateService : ICertificateService
     {
         if (id <= 0) return false;
         return await _repository.DeleteAsync(id, ct);
+    }
+
+    // =========================================================================
+    // GET OR GENERATE DOCUMENT (Retrieves from Server Storage or Self-Heals)
+    // =========================================================================
+    public async Task<(byte[] content, string fileName, string contentType)> GetOrGenerateDocumentAsync(
+        int id,
+        CancellationToken ct = default)
+    {
+        if (id <= 0) throw new ArgumentException("Invalid certificate ID", nameof(id));
+
+        var cert = await _repository.GetByIdAsync(id, ct);
+        if (cert == null) throw new KeyNotFoundException($"Certificate #{id} not found.");
+
+        var fileName = !string.IsNullOrWhiteSpace(cert.FileName) 
+            ? cert.FileName 
+            : $"{cert.CertificateNumber}.pdf";
+
+        // 1. If physical file exists on permanent server storage, stream directly
+        if (_storageService != null && !string.IsNullOrWhiteSpace(cert.FilePath) && _storageService.DocumentExists(cert.FilePath))
+        {
+            var bytes = await _storageService.GetCertificateDocumentAsync(cert.FilePath, ct);
+            if (bytes != null && bytes.Length > 0)
+            {
+                return (bytes, fileName, cert.FileType ?? "application/pdf");
+            }
+        }
+
+        // 2. Self-Healing: Generate PDF, persist to storage, and update database record
+        if (_exportService == null)
+        {
+            throw new InvalidOperationException("Certificate export service is not available.");
+        }
+
+        var preview = await GetPreviewAsync(id, ct);
+        if (preview == null)
+        {
+            preview = _exportService.BuildPreviewFallback(cert);
+        }
+
+        var generatedBytes = _exportService.GenerateCertificatePdf(preview);
+
+        if (_storageService != null)
+        {
+            try
+            {
+                var (relPath, fullPath, size) = await _storageService.SaveCertificateDocumentAsync(
+                    cert.CertificateNumber, 
+                    generatedBytes, 
+                    ct);
+
+                await _repository.UpdateCertificateFileAsync(
+                    cert.CertificateId, 
+                    relPath, 
+                    fileName, 
+                    "application/pdf", 
+                    size, 
+                    cert.GeneratedBy ?? "Admin", 
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[CertificateService.GetOrGenerateDocumentAsync] Error saving document to storage for #{CertId}: {Message}", id, ex.Message);
+            }
+        }
+
+        return (generatedBytes, fileName, "application/pdf");
     }
 }

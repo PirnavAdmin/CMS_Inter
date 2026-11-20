@@ -4,6 +4,8 @@ import { Lock, Mail, Bus, ShieldCheck, AlertCircle, Eye, EyeOff, KeyRound, Spark
 import pirnavLogo from "@/assets/pirnav-colleges-logo.png";
 import { loginUser } from "@/modules/auth/authService.js";
 import { saveAuthSession, clearAuthSession } from "@/modules/auth/authStorage.js";
+import { getCurrentUserPermissions } from "@/modules/admin/AdminRolesPermissions/rolesPermissions.service.js";
+import { syncUserTheme } from "@/hooks/useTheme.js";
 
 export default function DriverLoginPage({ onLoginSuccess }) {
   const [email, setEmail] = useState("penetirajesh123@gmail.com");
@@ -35,6 +37,18 @@ export default function DriverLoginPage({ onLoginSuccess }) {
       }
 
       saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, rememberMe);
+      try {
+        const permsPromise = getCurrentUserPermissions();
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 2500));
+        const permsRes = await Promise.race([permsPromise, timeoutPromise]);
+        if (permsRes?.data && Array.isArray(permsRes.data)) {
+          result.user = { ...result.user, permissions: permsRes.data };
+          saveAuthSession({ token: result.token, user: result.user, role: result.user.role }, rememberMe);
+        }
+      } catch (permErr) {
+        console.warn("Could not load driver permissions at login:", permErr?.message);
+      }
+      await syncUserTheme({ force: true }).catch(() => {});
 
       if (onLoginSuccess) {
         onLoginSuccess(result);

@@ -19,6 +19,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? status = null,
             int? campusId = null)
         {
+            if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelBlock>();
+            }
+
             return await _dbConnection.QueryAsync<HostelBlock>(
                 "sp_GetHostelBlocks",
                 new

@@ -11,9 +11,29 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import holidayApi from "@/api/holidayApi.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import FacultyMyAttendance from "@/modules/faculty/pages/FacultyMyAttendance.jsx";
+import StaffRegularizePanel from "./StaffRegularizePanel.jsx";
 import "./AttendancePage.css";
 import "./AttendanceTimingConfigPage.css";
+// Only explicit mismatches are rejected; older scoped DTOs omit scope fields.
+function matchesAttendanceScope(row, scope) {
+  if (!row || typeof row !== "object") return false;
+  return Object.entries(scope).every(([key, expected]) => {
+    if (expected == null || expected === "") return true;
+    const actual = row[key] ?? row[key[0].toUpperCase() + key.slice(1)];
+    return actual == null || actual === "" || String(actual) === String(expected);
+  });
+}
+function studentAttendanceEmptyMessage({ loading, setupMessage, error, searching, hasStudents }) {
+  if (setupMessage) return "No attendance records found";
+  if (loading) return "Loading attendance records…";
+  if (error) return "Attendance records could not be loaded. Please try again.";
+  if (searching) return "No students found matching the selected filters.";
+  if (hasStudents === false) return "No students available";
+  return "No attendance records found";
+}
+
 
 const STUDENT_STATUSES = ["Present", "Absent", "Half Day"];
 const STUDENT_SESSION_STATUSES = ["Present", "Absent"];
@@ -49,7 +69,7 @@ const VALUE = {
   "Half-Day": 4,
   Holiday: 5
 };
-const asList = (v) => Array.isArray(v) ? v : Array.isArray(v?.items) ? v.items : Array.isArray(v?.records) ? v.records : Array.isArray(v?.data) ? v.data : [];
+const asList = (v) => (Array.isArray(v) ? v : Array.isArray(v?.items) ? v.items : Array.isArray(v?.Items) ? v.Items : Array.isArray(v?.records) ? v.records : Array.isArray(v?.data) ? v.data : []).filter((row) => row && typeof row === "object");
 const body = (r) => r?.data?.data ?? r?.data ?? r ?? {};
 const get = (o, ...keys) => keys.map((k) => o?.[k]).find((v) => v !== undefined && v !== null);
 // AdmissionDate is the admission DTO's date, never attendance/record CreatedAt.
@@ -97,29 +117,29 @@ const staffType = (v) => {
   return /non/i.test(String(v)) ? 2 : 1;
 };
 const ATTENDANCE_PAGE_SIZE = 5;
+const ATTENDANCE_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
 const Field = ({ label, children }) => <label className="att-field"><span>{label}</span>{children}</label>;
 function Select({ label, value, onChange, items = [], all, disabled = false, mutedPlaceholder = false, error }) { return <Field label={label}><select className={mutedPlaceholder && !value ? "is-placeholder" : undefined} value={value} onChange={onChange} disabled={disabled}>{all ? <option value="">{all}</option> : null}{items.map((x) => { const id = get(x, "id", "Id", "sectionId", "programId", "groupId", "academicLevelId", "departmentId", "facultyId", "staffId", "academicYearId", "boardId") ?? x, name = get(x, "name", "Name", "sectionName", "programName", "programmeName", "groupName", "levelName", "departmentName", "staffName", "facultyName", "academicYearName", "boardName") ?? x; return <option key={String(id)} value={id}>{name}</option>; })}</select>{error && <small className="attendance-import-error" role="alert">{error}</small>}</Field>; }
 
-function AttendancePagination({ page, totalRows, onPageChange, unit = "records" }) {
-  const totalPages = Math.max(1, Math.ceil(totalRows / ATTENDANCE_PAGE_SIZE));
+function AttendancePagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, unit = "records" }) {
+  const [customMode, setCustomMode] = useState(!ATTENDANCE_PAGE_SIZE_OPTIONS.includes(pageSize));
+  const [customSize, setCustomSize] = useState(String(pageSize));
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const start = totalRows ? (currentPage - 1) * ATTENDANCE_PAGE_SIZE + 1 : 0;
-  const end = Math.min(currentPage * ATTENDANCE_PAGE_SIZE, totalRows);
-
-  return (
-    <nav className="att-pagination" aria-label="Attendance pages">
-      <span className="att-pagination-summary">Showing {start}-{end} of {totalRows} {unit}</span>
-      <div className="att-pagination-controls">
-        <button type="button" disabled={currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} aria-label="Previous Page">
-          Previous
-        </button>
-        <span>Page {currentPage} of {totalPages}</span>
-        <button type="button" disabled={currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} aria-label="Next Page">
-          Next
-        </button>
-      </div>
-    </nav>
-  );
+  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
+  return <nav className="att-pagination" aria-label={`Attendance ${unit} pagination`} style={navStyle}>
+    <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
+      <select aria-label="Rows per page" value={customMode || !ATTENDANCE_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
+        if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
+        setCustomMode(false); onPageSizeChange(Number(event.target.value));
+      }}>{ATTENDANCE_PAGE_SIZE_OPTIONS.map((size) => <option key={size} value={size}>{size}</option>)}<option value="custom">Custom</option></select>
+      {customMode ? <input aria-label="Custom rows per page" title="Enter any positive number of rows, then press Enter or leave the field" type="number" min="1" step="1" value={customSize} style={{ ...controlStyle, width: 66, padding: "0 8px", textAlign: "center" }} onChange={(event) => setCustomSize(event.target.value)} onBlur={() => { if (/^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} onKeyDown={(event) => { if (event.key === "Enter" && /^[1-9]\d*$/.test(customSize)) onPageSizeChange(Number(customSize)); }} /> : null}
+    </label>
+    <button type="button" disabled={currentPage <= 1} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: currentPage <= 1 ? 0.48 : 1 }} onClick={() => onPageChange(currentPage - 1)}>Previous</button>
+    <span aria-live="polite" style={{ minWidth: 36, textAlign: "center", whiteSpace: "nowrap" }}>{currentPage} / {totalPages}</span>
+    <button type="button" disabled={currentPage >= totalPages} style={{ ...controlStyle, minWidth: 76, padding: "0 12px", opacity: currentPage >= totalPages ? 0.48 : 1 }} onClick={() => onPageChange(currentPage + 1)}>Next</button>
+  </nav>;
 }
 
 export default function AttendancePage({ area: areaProp } = {}) {
@@ -129,8 +149,15 @@ export default function AttendancePage({ area: areaProp } = {}) {
   const staff = resolvedArea === "staff";
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab");
+  const authUser = getAuthUser();
+  const isAdminWithoutStaff = Boolean(
+    (authUser?.isAdmin || String(authUser?.role || "").toLowerCase().includes("admin")) && !authUser?.staffId
+  );
   const normalizeStaffTab = (t) => {
-    if (!t) return "my-attendance";
+    if (!t) {
+      if (searchParams.get("view") === "regularize" || searchParams.get("regId")) return "staff-attendance";
+      return isAdminWithoutStaff ? "staff-attendance" : "my-attendance";
+    }
     const clean = String(t).trim().toLowerCase().replace(/\s+|_/g, "-");
     if (clean === "staff-attendance" || clean === "staff") return "staff-attendance";
     if (clean === "my-attendance" || clean === "my") return "my-attendance";
@@ -355,7 +382,7 @@ function AttendanceImportModal({ staff, say, onClose }) {
   </div></Modal>;
 }
 
-function useOptions(staff, boardId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const calls = [apiEndpoints.departments.getAll, boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list]; Promise.allSettled(calls.map((url) => apiClient.get(url))).then((rs) => { if (!mounted) return; const values = rs.map((r) => r.status === "fulfilled" ? asList(body(r.value)) : []); setO({ departments: values[0], faculty: values[1] }); }); return () => { mounted = false; }; }, [staff, boardId]); return o; }
+function useOptions(staff, boardId, campusId) { const [o, setO] = useState({}); useEffect(() => { if (!staff) return undefined; let mounted = true; const deptUrl = campusId ? `${apiEndpoints.departments.getAll}?includeInactive=false&campusId=${campusId}` : `${apiEndpoints.departments.getAll}?includeInactive=false`; const facUrl = boardId ? `${apiEndpoints.faculty.list}?boardId=${boardId}` : apiEndpoints.faculty.list; apiClient.get(deptUrl).then((r) => { if (mounted) setO((prev) => ({ ...prev, departments: asList(body(r)) })); }).catch(() => { if (mounted) setO((prev) => ({ ...prev, departments: [] })); }); apiClient.get(facUrl).then((r) => { if (mounted) setO((prev) => ({ ...prev, faculty: asList(body(r)) })); }).catch(() => { if (mounted) setO((prev) => ({ ...prev, faculty: [] })); }); return () => { mounted = false; }; }, [staff, boardId, campusId]); return o; }
 
 function useStudentOptions(boardId, academicYearId, levelId, groupId, programId, campusId, setFilters) {
   const [options, setOptions] = useState({ levels: [], groups: [], programs: [], sections: [], loadingLevels: false, loadingGroups: false, groupsError: "", loadingPrograms: false, loadingSections: false });
@@ -373,21 +400,22 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId,
     });
   };
   useEffect(() => {
-    if (!boardId) { setOptions((value) => ({ ...value, levels: [], groups: [], programs: [], sections: [] })); return undefined; }
+    if (!boardId || !academicYearId || !campusId) { setOptions((value) => ({ ...value, levels: [], groups: [], programs: [], sections: [], loadingLevels: false })); return undefined; }
     let active = true;
     setOptions((value) => ({ ...value, levels: [], loadingLevels: true }));
-    fetchAdminLevels({ boardId, academicYearId })
-      .then((levels) => active && setOptions((value) => ({ ...value, levels, loadingLevels: false })))
+    fetchAdminLevels({ boardId, academicYearId, campusId })
+      .then((levels) => active && setOptions((value) => ({ ...value, levels: asList(levels).filter((row) => matchesAttendanceScope(row, { campusId, boardId, academicYearId })), loadingLevels: false })))
       .catch(() => active && setOptions((value) => ({ ...value, levels: [], loadingLevels: false })));
     return () => { active = false; };
-  }, [boardId, academicYearId]);
+  }, [boardId, academicYearId, campusId]);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     setOptions((current) => ({ ...current, groups: [], loadingGroups: Boolean(boardId), groupsError: "" }));
-    if (!boardId) return () => controller.abort();
+    if (!boardId || !academicYearId || !campusId) { setOptions((value) => ({ ...value, groups: [], loadingGroups: false })); return () => controller.abort(); }
     fetchAdminGroups({ boardId, academicYearId, academicLevelId: levelId, campusId }, { signal: controller.signal }).then((groups) => {
       if (!active) return;
+      groups = asList(groups).filter((row) => matchesAttendanceScope(row, { campusId, boardId, academicYearId }));
       setOptions((current) => ({ ...current, groups, loadingGroups: false, groupsError: levelId && !groups.length ? "No active groups are available for this board and academic year." : "" }));
       setFilters((current) => current.group && !groups.some((group) => String(get(group, "groupId", "GroupId", "id", "Id")) === String(current.group))
         ? { ...current, group: "", program: "", section: "" } : current);
@@ -398,12 +426,14 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId,
   }, [boardId, academicYearId, levelId, campusId, setFilters]);
   useEffect(() => {
     let active = true;
+    if (!boardId || !academicYearId || !campusId) { setOptions((value) => ({ ...value, programs: [], loadingPrograms: false })); return undefined; }
     setOptions((value) => ({ ...value, programs: [], loadingPrograms: true }));
     const endpoint = groupId ? apiEndpoints.groups.programs(groupId) : apiEndpoints.programs.getAll;
-    apiClient.get(endpoint)
+    apiClient.get(endpoint, { params: { campusId, boardId, academicYearId } })
       .then((response) => {
         if (!active) return;
         let progRows = asList(body(response));
+        progRows = progRows.filter((row) => matchesAttendanceScope(row, { campusId, boardId, academicYearId }));
         if (groupId) {
           progRows = scoped(progRows, groupId, ["groupId", "GroupId"]);
         }
@@ -415,9 +445,10 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId,
       })
       .catch(() => active && setOptions((value) => ({ ...value, programs: [], loadingPrograms: false })));
     return () => { active = false; };
-  }, [groupId]);
+  }, [groupId, campusId, boardId, academicYearId]);
   useEffect(() => {
     let active = true;
+    if (!boardId || !academicYearId || !campusId) { setOptions((value) => ({ ...value, sections: [], loadingSections: false })); return undefined; }
     if (groupId && (options.loadingGroups || options.groupsError)) {
       setOptions((current) => ({ ...current, loadingSections: false }));
       return undefined;
@@ -426,7 +457,7 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId,
     const validProgramIds = new Set([programId, get(selectedProgram, "programId", "ProgramId", "programmeId", "ProgrammeId"), get(selectedProgram, "groupProgramId", "GroupProgramId")].filter((id) => id != null && id !== "").map(String));
     const selectedProgramName = String(get(selectedProgram, "programName", "ProgramName", "programmeName", "ProgrammeName", "name", "Name") ?? "").trim().toLowerCase();
     setOptions((value) => ({ ...value, sections: [], loadingSections: true }));
-    const params = { boardId, academicYearId, isActive: true, IsActive: true };
+    const params = { campusId, boardId, academicYearId, isActive: true, IsActive: true };
     if (levelId) params.academicLevelId = levelId;
     if (groupId) params.groupId = groupId;
     if (programId) {
@@ -436,6 +467,7 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId,
     apiClient.get(apiEndpoints.sections.list, { params }).then((response) => {
       if (!active) return;
       let sectionRows = asList(body(response));
+      sectionRows = sectionRows.filter((row) => matchesAttendanceScope(row, { campusId, boardId, academicYearId }));
       sectionRows = scoped(scoped(scoped(scoped(sectionRows, boardId, ["boardId", "BoardId"]), academicYearId, ["academicYearId", "AcademicYearId"]), levelId, ["academicLevelId", "AcademicLevelId", "levelId", "LevelId"]), groupId, ["groupId", "GroupId"]);
       if (programId) {
         sectionRows = sectionRows.filter((section) => {
@@ -451,7 +483,7 @@ function useStudentOptions(boardId, academicYearId, levelId, groupId, programId,
         ? { ...current, section: "" } : current);
     }).catch(() => active && setOptions((value) => ({ ...value, sections: [], loadingSections: false })));
     return () => { active = false; };
-  }, [boardId, academicYearId, levelId, groupId, programId, options.programs, options.loadingGroups, options.groupsError, setFilters]);
+  }, [campusId, boardId, academicYearId, levelId, groupId, programId, options.programs, options.loadingGroups, options.groupsError, setFilters]);
   return options;
 }
 
@@ -465,9 +497,15 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const validEditDate = /^\d{4}-\d{2}-\d{2}$/.test(editDate) && !Number.isNaN(Date.parse(editDate)) && new Date(editDate).toISOString().slice(0, 10) === editDate;
  const importDate = editParams.get("modal") === "import" ? editParams.get("importDate") || "" : "";
  const validImportDate = /^\d{4}-\d{2}-\d{2}$/.test(importDate) && !Number.isNaN(Date.parse(importDate)) && new Date(importDate).toISOString().slice(0, 10) === importDate;
- const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId } = useAcademicContext();
+ const { selectedBoardId: navbarBoardId, selectedAcademicYearId: navbarAcademicYearId, selectedBoard, selectedAcademicYear } = useAcademicContext();
  const campusCtx = useCampusContext();
  const navbarCampusId = campusCtx?.selectedCampus?.campusId || campusCtx?.selectedCampus?.id || null;
+ const attendanceUser = getAuthUser() || {};
+ const collegeId = attendanceUser.collegeId ?? attendanceUser.CollegeId;
+ const campusCollegeId = campusCtx?.selectedCampus?.collegeId ?? campusCtx?.selectedCampus?.CollegeId;
+ const assignedCampuses = attendanceUser.assignedCampusIds;
+ const scopeInvalid = !staff && ((collegeId != null && [campusCollegeId, selectedBoard?.collegeId ?? selectedBoard?.CollegeId, selectedAcademicYear?.collegeId ?? selectedAcademicYear?.CollegeId].some((id) => id != null && String(id) !== String(collegeId))) || (Array.isArray(assignedCampuses) && assignedCampuses.length > 0 && navbarCampusId && !assignedCampuses.some((id) => String(id) === String(navbarCampusId))));
+ const setupMessage = staff ? "" : scopeInvalid ? "Select a campus belonging to your college." : !navbarCampusId ? "Configure or select a campus for your college to load attendance." : !navbarBoardId ? "Configure or select a board for your college to load attendance." : !navbarAcademicYearId ? "No academic year is configured or selected. Set up an academic year for your college to load attendance." : "";
  const restoredState = !staff ? location.state?.attendanceState : null;
  const defaultFilters = { date: editId && validEditDate ? editDate : validImportDate ? importDate : getTodayDate(), level: !staff && editId ? editParams.get("editLevel") || "" : "", group: !staff && editId ? editParams.get("editGroup") || "" : "", section: !staff && editId ? editParams.get("editSection") || "" : "", program: !staff && editId ? editParams.get("editProgram") || "" : "", department: "", type: "", person: "", status: "" };
  const [filterState, setF] = useState(() => {
@@ -476,13 +514,21 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
    return filters;
  });
  const viewParam = editParams.get(staff ? "view" : "tab");
- const viewNames = { attendance: "Attendance", "monthly-report": "Monthly Report", ...(!staff ? { defaulters: "Defaulters" } : {}) };
+ const viewNames = { attendance: "Attendance", "monthly-report": "Monthly Report", ...(staff ? { regularize: "Regularize" } : { defaulters: "Defaulters" }) };
  const selectedView = viewNames[viewParam] || (!viewParam && Object.values(viewNames).includes(restoredState?.filters?.view) ? restoredState.filters.view : "Attendance");
  const f = useMemo(() => ({ ...filterState, view: selectedView }), [filterState, selectedView]);
- const [rows, setRows] = useState(() => restoredState?.rows || []);
+ const [rows, setRows] = useState([]);
  const [report, setReport] = useState(() => restoredState?.report || null);
  const [loaded, setLoaded] = useState(() => Boolean(restoredState?.loaded));
  const [busy, setBusy] = useState(false);
+ const [loadError, setLoadError] = useState("");
+ const [hasStudents, setHasStudents] = useState(null);
+ const [dataScope, setDataScope] = useState("");
+ const loadSequence = useRef(0);
+ const requestScope = JSON.stringify([collegeId, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.view, f.level, f.group, f.program, f.section]);
+ const currentScope = useRef(requestScope);
+ currentScope.current = requestScope;
+ const attendanceScope = { collegeId, campusId: navbarCampusId, boardId: navbarBoardId, academicYearId: navbarAcademicYearId };
  const [editing, setEditing] = useState(null);
  const [editSaving, setEditSaving] = useState(false);
  const [editLoading, setEditLoading] = useState(false);
@@ -550,35 +596,37 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  }, [staff, editRequested, editId, editDate, validEditDate, editKey, restoredEditKey, editParams, navbarCampusId, navbarBoardId, navbarAcademicYearId, editLoadAttempt]);
  const [search, setSearch] = useState(() => restoredState?.search || "");
  const [page, setPage] = useState(() => restoredState?.page || 1);
+ const [pageSize, setPageSize] = useState(ATTENDANCE_PAGE_SIZE);
+ const changePageSize = (size) => { setPageSize(size); setPage(1); };
  const [attendanceThreshold, setAttendanceThreshold] = useState(75);
  const [activeHoliday, setActiveHoliday] = useState(() => restoredState?.activeHoliday || null);
  const [holidayCheckedKey, setHolidayCheckedKey] = useState("");
  const [holidayError, setHolidayError] = useState("");
  const holidayKey = `${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}:${f.date}`;
- const holidayLocked = !staff && (holidayCheckedKey !== holidayKey || Boolean(activeHoliday) || Boolean(holidayError));
- useEffect(() => { onHolidayLockChange?.(holidayLocked, f.date); }, [holidayLocked, f.date, onHolidayLockChange]);
+ const holidayLocked = !staff && (Boolean(setupMessage) || holidayCheckedKey !== holidayKey || Boolean(activeHoliday) || Boolean(holidayError));
+ useEffect(() => { onHolidayLockChange?.(holidayLocked || (!staff && (busy || dataScope !== requestScope || rows.length === 0)), f.date); }, [holidayLocked, staff, busy, dataScope, requestScope, rows.length, f.date, onHolidayLockChange]);
  const [dirty, setDirty] = useState(false);
  const holidaysCacheRef = useRef(new Map());
  const [admissionDates, setAdmissionDates] = useState(new Map());
  useEffect(() => {
-   if (staff) return undefined;
+   if (staff || !navbarCampusId || setupMessage) { setAdmissionDates(new Map()); return undefined; }
    let active = true;
    setAdmissionDates(new Map());
-   apiClient.get("/api/v1/student-admissions", { params: { campusId: num(navbarCampusId) } }).then((response) => {
+   apiClient.get("/api/v1/student-admissions", { params: { campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), ...(collegeId ? { collegeId } : {}) } }).then((response) => {
      if (!active) return;
      const dates = new Map();
-     asList(body(response)).forEach((row) => {
+     asList(body(response)).filter((row) => matchesAttendanceScope(row, attendanceScope)).forEach((row) => {
        const admissionNo = String(get(row, "admissionNo", "AdmissionNo") ?? "").trim();
        if (admissionNo) dates.set(admissionNo, get(row, "admissionDate", "AdmissionDate"));
      });
      setAdmissionDates(dates);
    }).catch(() => { if (active) say("Admission dates could not be loaded. Students without an available admission date are shown last.", "error"); });
    return () => { active = false; };
- }, [staff, navbarCampusId, say]);
+ }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId, collegeId, setupMessage, say]);
  const initialAcademicContext = useRef(`${staff}:${navbarCampusId}:${navbarBoardId}:${navbarAcademicYearId}`);
  const skipInitialPageReset = useRef(true);
- const staffOptions = useOptions(staff, navbarBoardId), studentOptions = useStudentOptions(staff ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, navbarCampusId, setF);
- const options = staff ? staffOptions : studentOptions;
+ const staffOptions = useOptions(staff, navbarBoardId, num(navbarCampusId)), studentOptions = useStudentOptions(staff || setupMessage ? "" : navbarBoardId, navbarAcademicYearId, f.level, f.group, f.program, navbarCampusId, setF);
+ const options = staff ? staffOptions : setupMessage ? { levels: [], groups: [], programs: [], sections: [] } : studentOptions;
 
  const update = (key) => (e) => {
    setPage(1);
@@ -589,7 +637,8 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
    setPage(1);
    setEditParams((previous) => {
      const params = new URLSearchParams(previous);
-     params.set(staff ? "view" : "tab", newView === "Monthly Report" ? "monthly-report" : newView === "Defaulters" ? "defaulters" : "attendance");
+     params.set(staff ? "view" : "tab", newView === "Monthly Report" ? "monthly-report" : newView === "Defaulters" ? "defaulters" : newView === "Regularize" ? "regularize" : "attendance");
+     if (newView !== "Regularize") params.delete("regId");
      return params;
    });
  };
@@ -609,16 +658,36 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  };
 
  const load = async (overrideView) => {
+   if (!staff && setupMessage) return;
+   const sequence = ++loadSequence.current;
+   const scopeKey = requestScope;
+   const isCurrent = () => sequence === loadSequence.current && (staff || scopeKey === currentScope.current);
+   const applyRows = (value) => { if (isCurrent()) { setRows(staff ? value : value.filter((row) => matchesAttendanceScope(row, attendanceScope))); setDataScope(scopeKey); } };
+   const applyReport = (value) => {
+     if (!isCurrent()) return;
+     if (!staff && value && typeof value === "object") {
+       value = { ...value };
+       for (const key of ["studentRows", "rows"]) if (Array.isArray(value[key])) value[key] = value[key].filter((row) => matchesAttendanceScope(row, attendanceScope));
+     }
+     setReport(value); setDataScope(scopeKey);
+   };
    const currentView = typeof overrideView === "string" ? overrideView : f.view;
+   if (staff && currentView === "Regularize") {
+     setLoaded(true);
+     setBusy(false);
+     return;
+   }
    setPage(1);
    setBusy(true);
+   if (!staff) { setRows([]); setReport(null); setHasStudents(null); setLoadError(""); }
    setDirty(false);
    try {
      const holidayPromise = (async () => {
        try {
          const holidays = await holidayApi.getHolidays({ campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), pageSize: 10000 });
+         if (!isCurrent()) return;
          if (holidays == null) throw new Error("Holiday calendar is unavailable");
-         const holidayList = Array.isArray(holidays) ? holidays : (holidays?.data || []);
+         const holidayList = asList(holidays).filter((row) => staff || matchesAttendanceScope(row, attendanceScope));
          const targetDate = f.date.slice(0, 10);
          const match = holidayList.find((h) => {
            if (h.isActive === false || h.IsActive === false || /^(inactive|cancelled|canceled)$/i.test(String(h.status ?? h.Status ?? ""))) return false;
@@ -630,6 +699,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
          setHolidayError("");
          setHolidayCheckedKey(holidayKey);
        } catch {
+         if (!isCurrent()) return;
          setActiveHoliday(null);
          setHolidayError("Holiday calendar could not be checked. Attendance is disabled until it can be verified.");
          setHolidayCheckedKey(holidayKey);
@@ -648,15 +718,15 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                params: { date: f.date, campusId: num(navbarCampusId), boardId: num(navbarBoardId), academicYearId: num(navbarAcademicYearId), academicLevelId: num(f.level), groupId: num(f.group), sectionId: num(f.section), ...(f.program ? { programId: num(f.program) } : {}) }
              });
              const admissions = new Map(asList(body(daily)).map((row) => [String(get(row, "studentId", "id")), get(row, "admissionNo", "admissionNumber")]));
-             setReport({ ...monthlyReport, [studentRowsKey]: monthlyStudents.map((row) => ({ ...row, admissionNo: get(row, "admissionNo", "admissionNumber") || admissions.get(String(get(row, "studentId", "id"))) || "" })) });
+             applyReport({ ...monthlyReport, [studentRowsKey]: monthlyStudents.map((row) => ({ ...row, admissionNo: get(row, "admissionNo", "admissionNumber") || admissions.get(String(get(row, "studentId", "id"))) || "" })) });
            } catch {
-             setReport(monthlyReport);
+             applyReport(monthlyReport);
              say("Monthly attendance loaded, but admission numbers could not be retrieved.", "error");
            }
-         } else setReport(monthlyReport);
+         } else applyReport(monthlyReport);
        } else if (!staff && currentView === "Defaulters") {
-         const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, { params: { ...monthParams(), threshold: 75 } });
-         setRows(asList(body(r)));
+         const r = await apiClient.get(apiEndpoints.attendance.studentDefaulters, { params: { ...monthParams(), threshold: attendanceThreshold === "" ? 0 : Number(attendanceThreshold) } });
+         applyRows(asList(body(r)));
        } else if (staff) {
          const r = await apiClient.post(apiEndpoints.staffAttendance.load, {
            date: f.date,
@@ -668,7 +738,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
            ...(f.status ? { status: VALUE[f.status] } : {}),
            ...(f.person ? { facultyId: num(f.person) } : {})
          });
-         setRows(asList(body(r)).map((row) => ({ ...row,
+         applyRows(asList(body(r)).map((row) => ({ ...row,
            status: Number(row.status) === 0 && row.isAttendanceMarked === false ? "Not Marked" : row.status,
          })));
        } else {
@@ -684,16 +754,34 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
              ...(f.program ? { programId: num(f.program) } : {})
            }
          });
-         setRows(asList(body(r)));
+         const dailyRows = asList(body(r)).filter((row) => matchesAttendanceScope(row, attendanceScope));
+         if (!isCurrent()) return;
+         applyRows(dailyRows);
+         if (dailyRows.length) setHasStudents(true);
+         else {
+           try {
+             const roster = await apiClient.get(apiEndpoints.students.list, { params: { ...attendanceScope, pageNumber: 1, pageSize: 1 } });
+             if (!isCurrent()) return;
+             const data = body(roster);
+             const students = asList(data).filter((row) => matchesAttendanceScope(row, attendanceScope));
+             const total = get(data, "totalCount", "TotalCount");
+             setHasStudents(students.length > 0 || (Number(total) > 0 && asList(data).length === 0));
+           } catch {
+             if (isCurrent()) { setHasStudents(null); setLoadError("Student availability could not be verified. Please reload attendance."); }
+           }
+         }
        }
      })();
 
      await Promise.all([holidayPromise, fetchPromise]);
+     if (!isCurrent()) return;
      setLoaded(true);
    } catch (e) {
+     if (!isCurrent()) return;
+     if (!staff) { setRows([]); setReport(null); setLoadError(getApiErrorMessage(e) || "Attendance could not be loaded."); setLoaded(true); }
      say(getApiErrorMessage(e) || `Failed to load ${staff ? "staff" : "student"} attendance.`, "error");
    } finally {
-     setBusy(false);
+     if (isCurrent()) setBusy(false);
    }
  };
 
@@ -701,14 +789,16 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const dailyLoader = useRef(load);
  dailyLoader.current = load;
  useEffect(() => {
-   if (!staff && (!navbarBoardId || !navbarAcademicYearId)) return;
+   if (!staff) { setRows([]); setReport(null); setDirty(false); setHasStudents(null); setLoadError(""); setBusy(false); }
+   if (!staff && setupMessage) { setLoaded(true); return; }
    const timer = window.setTimeout(() => dailyLoader.current(), 200);
   
 
- return () => window.clearTimeout(timer);
- }, [staff, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view]);
+ return () => { window.clearTimeout(timer); loadSequence.current += 1; };
+ }, [staff, collegeId, setupMessage, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view, f.view === "Defaulters" ? attendanceThreshold : null]);
 
  const markAllPresent = () => {
+   if (!staff && (setupMessage || busy || dataScope !== requestScope || rows.length === 0)) return;
    if (holidayLocked) return say("Attendance cannot be marked on a holiday or while the holiday calendar is unavailable.", "error");
    if (staff) {
      const updated = rows.map((r) => {
@@ -733,6 +823,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  };
 
  const saveAllAttendance = async () => {
+   if (!staff && (setupMessage || busy || dataScope !== requestScope || rows.length === 0)) return;
    if (holidayLocked) return say("Attendance is disabled for this date.", "error");
    setBusy(true);
    try {
@@ -886,7 +977,9 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  };
 
  const normalizedSearch = search.trim().toLowerCase();
- const visible = rows.filter((r) => {
+ const scopedRows = staff ? rows : !setupMessage && dataScope === requestScope ? rows : [];
+ const studentActionsDisabled = !staff && (Boolean(setupMessage) || busy || holidayLocked || scopedRows.length === 0);
+ const visible = scopedRows.filter((r) => {
    if (!normalizedSearch) return true;
    if (staff) return `${get(r, "staffName", "facultyName")} ${get(r, "employeeId", "EmployeeId", "employeeCode", "EmployeeCode") || ""}`.toLowerCase().includes(normalizedSearch);
    return [get(r, "studentName", "name"), get(r, "rollNo", "rollNumber"), get(r, "admissionNo", "admissionNumber"), get(r, "studentId", "id")]
@@ -898,9 +991,9 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  const defaulterRows = f.view === "Defaulters"
    ? visible.filter((row) => attendancePercentage(row) < normalizedThreshold)
    : visible;
- const totalPages = Math.max(1, Math.ceil(defaulterRows.length / ATTENDANCE_PAGE_SIZE));
+ const totalPages = Math.max(1, Math.ceil(defaulterRows.length / pageSize));
  const currentPage = Math.min(page, totalPages);
- const pagedRows = defaulterRows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+ const pagedRows = defaulterRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
  useEffect(() => {
    if (skipInitialPageReset.current) {
@@ -922,24 +1015,28 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                />
              </div>
              <div className="att-toolbar-actions">
-               <button
-                 type="button"
-                 className="cms-btn cms-btn-outline"
-                 onClick={markAllPresent}
-                 disabled={busy || holidayLocked || rows.length === 0}
-                 title="Mark all eligible records as Present"
-               >
-                 <UserCheck size={16} /> Mark All Present
-               </button>
-               {dirty && (
-                 <button
-                   type="button"
-                   className="cms-btn cms-btn-primary"
-                   onClick={saveAllAttendance}
-                   disabled={busy || holidayLocked}
-                 >
-                   Save Attendance
-                 </button>
+               {!staff && (
+                 <>
+                   <button
+                     type="button"
+                     className="cms-btn cms-btn-outline"
+                     onClick={markAllPresent}
+                     disabled={busy || holidayLocked || scopedRows.length === 0}
+                     title="Mark all eligible records as Present"
+                   >
+                     <UserCheck size={16} /> Mark All Present
+                   </button>
+                   {dirty && (
+                     <button
+                       type="button"
+                       className="cms-btn cms-btn-primary"
+                       onClick={saveAllAttendance}
+                       disabled={busy || holidayLocked || studentActionsDisabled}
+                     >
+                       Save Attendance
+                     </button>
+                   )}
+                 </>
                )}
                {staff ? (
                  <>
@@ -962,15 +1059,20 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
  return (
    <>
      <Filters f={f} update={update} o={options} staff={staff} busy={busy} load={load} exportReport={exportReport} search={search} onSearchChange={setSearch} switchView={switchView} />
+     {!staff && loadError && <p className="att-card att-student-setup-message" role="alert">{loadError}</p>}
 
-     {busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
-     {loaded && (f.view === "Monthly Report" ? (
-     <Monthly data={report} staff={staff} monthValue={f.date} page={page} onPageChange={setPage} search={search} onSearchChange={setSearch} admissionDates={admissionDates} />
-     ) : !staff && f.view === "Defaulters" ? (
-       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} onPageChange={setPage} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
+     {staff && f.view === "Regularize" ? (
+       <StaffRegularizePanel departments={options.departments} campusId={num(navbarCampusId)} onNotify={say} />
      ) : (
        <>
-         {activeHoliday && (
+     {staff && busy && !loaded ? <SkeletonPage variant="table" columns={6} rows={6} /> : null}
+     {(loaded || !staff) && (f.view === "Monthly Report" ? (
+     <Monthly data={staff || (!setupMessage && dataScope === requestScope) ? report : null} staff={staff} monthValue={f.date} page={page} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} search={search} onSearchChange={setSearch} admissionDates={admissionDates} />
+     ) : !staff && f.view === "Defaulters" ? (
+       <Defaulters rows={pagedRows} totalRows={defaulterRows.length} page={currentPage} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} threshold={attendanceThreshold} onThresholdChange={(value) => { setAttendanceThreshold(value); setPage(1); }} />
+     ) : (
+       <>
+         {activeHoliday && (staff || (!setupMessage && holidayCheckedKey === holidayKey)) && (
            <div className="att-holiday-banner">
              <span className="att-holiday-banner-badge">Official Holiday</span>
              <strong>{activeHoliday.holidayName || activeHoliday.name}</strong>
@@ -986,8 +1088,8 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
              rows={pagedRows}
              staff={staff}
              holiday={!staff && holidayCheckedKey === holidayKey ? activeHoliday : null}
-             disabled={busy || holidayLocked}
-             emptyMessage={!staff && normalizedSearch ? "No students found matching your search." : undefined}
+             disabled={busy || holidayLocked || studentActionsDisabled}
+             emptyMessage={!staff ? studentAttendanceEmptyMessage({ loading: busy || (!loaded && !setupMessage), setupMessage, error: loadError, searching: Boolean(normalizedSearch || f.level || f.group || f.program || f.section || f.status), hasStudents }) : undefined}
              edit={(record) => {
                if (busy || holidayLocked) return;
                if (staff) {
@@ -1026,10 +1128,12 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                });
              }}
            />
-           <AttendancePagination page={currentPage} totalRows={visible.length} onPageChange={setPage} />
+           <AttendancePagination page={currentPage} totalRows={visible.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} />
          </section>
        </>
      ))}
+       </>
+     )}
      {!staff && holidayError ? <p role="alert" className="att-holiday-banner">{holidayError}</p> : null}
      {editRequested && (editLoading || !editing || restoredEditKey !== editKey || holidayLocked) ? <Modal title={`Edit ${staff ? "Staff" : "Student"} Attendance`} onClose={closeEdit}>{editError ? <><p role="alert">{editError}</p><button type="button" className="cms-btn cms-btn-outline" onClick={() => setEditLoadAttempt((attempt) => attempt + 1)}>Retry</button></> : (!staff && holidayError) || (!staff && activeHoliday) ? <p role="alert">{holidayError || "Attendance cannot be edited on this holiday."}</p> : <SkeletonPage variant="table" columns={2} rows={3} />}</Modal> : null}
      {editRequested && editing && restoredEditKey === editKey && !editLoading && !holidayLocked ? (
@@ -1052,9 +1156,10 @@ function Filters({ f, update, o, staff, busy, load, exportReport, search, onSear
     </div>
     {f.view !== "Attendance" ? <section className="att-card att-student-report-filters"><label className="att-student-top-search"><Search3DIcon size={18} /><input type="search" aria-label="Search students" value={search} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search by name, admission no, roll no..." /></label><StudentAttendanceFilters f={f} update={update} o={o} /></section> : null}
   </>;
+  const isRegularize = f.view === "Regularize";
   return <>
     <div className="att-student-date-card att-staff-date-row">
-      {isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>}
+      {!isRegularize && (isMonth ? <Field label="Month"><div className="att-month-picker"><span>{label}</span><CalendarDays size={18} /><input type="month" value={f.date.slice(0, 7)} onChange={(event) => update("date")({ target: { value: `${event.target.value}-01` } })} /></div></Field> : <Field label="Date"><input type="date" value={f.date} onChange={update("date")} /></Field>)}
       <AttendanceViewSection view={f.view} update={switchView} staff={staff} />
       {isMonth ? <button type="button" className="cms-btn cms-btn-ghost" disabled={busy} onClick={() => exportReport("excel")}>Export</button> : null}
     </div>
@@ -1082,7 +1187,7 @@ function StudentAttendanceFilters({ f, update, o }) {
 }
 
 function AttendanceViewSection({ view, update, staff }) {
-  return <div className="attendance-view-section"><div className="attendance-view-tabs" role="tablist" aria-label="Attendance view"><button type="button" role="tab" aria-selected={view === "Attendance"} className={view === "Attendance" ? "active" : ""} onClick={() => update("Attendance")}>Attendance</button><button type="button" role="tab" aria-selected={view === "Monthly Report"} className={view === "Monthly Report" ? "active" : ""} onClick={() => update("Monthly Report")}>Monthly Report</button>{!staff && <button type="button" role="tab" aria-selected={view === "Defaulters"} className={view === "Defaulters" ? "active" : ""} onClick={() => update("Defaulters")}>Defaulters</button>}</div></div>;
+  return <div className="attendance-view-section"><div className="attendance-view-tabs" role="tablist" aria-label="Attendance view"><button type="button" role="tab" aria-selected={view === "Attendance"} className={view === "Attendance" ? "active" : ""} onClick={() => update("Attendance")}>Attendance</button><button type="button" role="tab" aria-selected={view === "Monthly Report"} className={view === "Monthly Report" ? "active" : ""} onClick={() => update("Monthly Report")}>Monthly Report</button>{staff ? <button type="button" role="tab" aria-selected={view === "Regularize"} className={view === "Regularize" ? "active" : ""} onClick={() => update("Regularize")}>Regularize</button> : <button type="button" role="tab" aria-selected={view === "Defaulters"} className={view === "Defaulters" ? "active" : ""} onClick={() => update("Defaulters")}>Defaulters</button>}</div></div>;
 }
 
 function StudentSummary({ rows }) {
@@ -1171,9 +1276,9 @@ function Summary({ data, student = false }) {
   );
 }
 
-function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }) {
-  const roll = !staff && rows.some((r) => get(r, "rollNo", "rollNumber") != null);
-  const admission = !staff && rows.some((r) => get(r, "admissionNo", "admissionNumber") != null);
+function DailyTable({ rows = [], staff, edit, view, emptyMessage, holiday, disabled }) {
+  const roll = !staff;
+  const admission = !staff;
   return (
     <div className="att-scroll">
       <table className="cms-table att-table">
@@ -1213,7 +1318,11 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                     <td><button type="button" className="att-name-link" onClick={() => view(r)}>{get(r, "staffName", "facultyName")}</button></td>
                     <td>{get(r, "departmentName", "department") || "—"}</td>
                     <td>{get(r, "designationName", "staffTypeName") || "—"}</td>
-                    <td><Pill value={staffStatus(r.status)} staff={true} /></td>
+                    <td>
+                      <Pill value={staffStatus(r.status)} staff={true} />
+                      {r.isMissedCheckout && !r.isMissedCheckoutResolved ? <span className="att-time-tag is-missed">Missed Checkout</span> : null}
+                      {r.isMissedCheckoutResolved ? <span className="att-time-tag is-resolved">Regularized</span> : null}
+                    </td>
                     <td>
                       <span className={r.isLate || staffStatus(r.status) === "Late" ? "att-time-late" : ""}>{get(r, "inTime") || "—"}</span>
                       {(r.isLate || staffStatus(r.status) === "Late") && get(r, "inTime") ? <span className="att-time-tag is-late">Late</span> : null}
@@ -1221,6 +1330,7 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                     <td>
                       <span className={r.isEarlyCheckout || /early checkout/i.test(r.remarks || "") ? "att-time-early" : ""}>{get(r, "outTime") || "—"}</span>
                       {(r.isEarlyCheckout || /early checkout/i.test(r.remarks || "")) && get(r, "outTime") ? <span className="att-time-tag is-early">Early</span> : null}
+                      {r.isMissedCheckout && !r.isMissedCheckoutResolved && !get(r, "outTime") ? <span className="att-time-tag is-missed">Missed</span> : null}
                     </td>
                   </>
                 ) : (
@@ -1235,16 +1345,27 @@ function DailyTable({ rows, staff, edit, view, emptyMessage, holiday, disabled }
                   </>
                 )}
                 <td>
-                  <button className="cms-action-btn" disabled={disabled} title={holiday ? "Holiday — attendance disabled" : "Edit Attendance"} aria-label="Edit Attendance" onClick={() => edit(r)}>
-                    <Pencil size={16} />
-                  </button>
+                  {(() => {
+                    const noStaffRecord = staff && !r.staffAttendanceId && !r.isAttendanceMarked;
+                    return (
+                      <button
+                        className="cms-action-btn"
+                        disabled={disabled || noStaffRecord}
+                        title={noStaffRecord ? "Only existing attendance records can be edited; missing punches must go through Regularization." : holiday ? "Holiday — attendance disabled" : "Edit Attendance"}
+                        aria-label="Edit Attendance"
+                        onClick={() => edit(r)}
+                      >
+                        <Pencil size={16} />
+                      </button>
+                    );
+                  })()}
                 </td>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan="9">
-                <div className="cms-empty">{emptyMessage || "No attendance records match the selected filters."}</div>
+              <td colSpan={8}>
+                <div className="cms-empty" role="status">{emptyMessage || "No attendance records match the selected filters."}</div>
               </td>
             </tr>
           )}
@@ -1324,8 +1445,11 @@ function Edit({ editing, setEditing, staff, date, save, close, busy }) {
             />
             <div className="att-time-fields">
               <StaffTimeInput label="In Time" value={editing.inTime} disabled={busy} onChange={(value) => setEditing({ ...editing, inTime: value })} />
-              <StaffTimeInput label="Out Time" value={editing.outTime} disabled={busy} onChange={(value) => setEditing({ ...editing, outTime: value })} />
+              <StaffTimeInput label="Out Time" value={editing.outTime} disabled={busy || (Boolean(r.isMissedCheckout) && !r.isMissedCheckoutResolved)} onChange={(value) => setEditing({ ...editing, outTime: value })} />
             </div>
+            {r.isMissedCheckout && !r.isMissedCheckoutResolved && (
+              <p className="att-reg-unreviewed-note">Out Time cannot be fabricated for an unresolved Missed Checkout. Use Staff Attendance → Regularize to review the staff member's regularization request.</p>
+            )}
           </>
         ) : (
           <>
@@ -1390,7 +1514,7 @@ function MonthlyPill({ value, staff }) {
   return <span className={`att-month-status ${type}`}>{normalized}</span>;
 }
 
-function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onSearchChange = () => {}, admissionDates = new Map() }) {
+function Monthly({ data, staff, monthValue, page, pageSize, onPageChange, onPageSizeChange, search = "", onSearchChange = () => {}, admissionDates = new Map() }) {
   const headers = data?.dayHeaders ?? data?.headers ?? [], rawRows = data?.studentRows ?? data?.staffRows ?? data?.rows ?? [];
   const normalizedSearch = search.trim().toLowerCase();
   const rows = rawRows.filter((r) => {
@@ -1400,9 +1524,9 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
       .some((value) => String(value ?? "").toLowerCase().includes(normalizedSearch));
   });
   if (!staff) rows.sort((a, b) => compareAdmissionDates(a, b, admissionDates));
-  const totalPages = Math.max(1, Math.ceil(rows.length / ATTENDANCE_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const pagedRows = rows.slice((currentPage - 1) * ATTENDANCE_PAGE_SIZE, currentPage * ATTENDANCE_PAGE_SIZE);
+  const pagedRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const monthlyLegend = (<div className="att-month-legend">
           <span><i className="att-month-p">P</i> Present</span>
           <span><i className="att-month-a">A</i> Absent</span>
@@ -1463,7 +1587,7 @@ function Monthly({ data, staff, monthValue, page, onPageChange, search = "", onS
           </tbody>
         </table>
       </div>
-      <AttendancePagination page={currentPage} totalRows={rows.length} onPageChange={onPageChange} />
+      <AttendancePagination page={currentPage} totalRows={rows.length} pageSize={pageSize} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
     </section>
   );
 }
@@ -1498,7 +1622,7 @@ function MonthRow({ r, headers, staff }) {
   );
 }
 
-function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThresholdChange }) {
+function Defaulters({ rows, totalRows, page, pageSize, onPageChange, onPageSizeChange, threshold, onThresholdChange }) {
   const normalizedThreshold = threshold === "" ? 0 : Number(threshold);
   return (
     <>
@@ -1561,7 +1685,7 @@ function Defaulters({ rows, totalRows, page, onPageChange, threshold, onThreshol
           </tbody>
         </table>
       </div>
-      <AttendancePagination page={page} totalRows={totalRows} onPageChange={onPageChange} unit="students" />
+      <AttendancePagination page={page} totalRows={totalRows} pageSize={pageSize} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} unit="students" />
     </section>
     </>
   );

@@ -158,8 +158,11 @@ namespace CollegeManagement.API.Services.Exports
                     table.Cell().BorderBottom(1).BorderColor(BorderColor).Padding(5).Text("House Rent Allowance (HRA) & Allowances");
                     table.Cell().BorderBottom(1).BorderColor(BorderColor).Padding(5).AlignRight().Text("As per Junior College Bylaws");
 
-                    table.Cell().Background("#F8FAFC").Padding(5).Text("Gross Salary / CTC").Bold();
-                    table.Cell().Background("#F8FAFC").Padding(5).AlignRight().Text(_model.GrossSalary.HasValue ? $"Rs. {_model.GrossSalary.Value:N2}" : "Competitive / Industry Standard").Bold().FontColor(DarkGreen);
+                    table.Cell().BorderBottom(1).BorderColor(BorderColor).Padding(5).Text("Gross Monthly Salary").Bold();
+                    table.Cell().BorderBottom(1).BorderColor(BorderColor).Padding(5).AlignRight().Text(_model.GrossSalary.HasValue ? $"Rs. {_model.GrossSalary.Value:N2}" : "As per Institutional Scale").Bold().FontColor(DarkGreen);
+
+                    table.Cell().Background("#F8FAFC").Padding(5).Text("Annual CTC (Cost to Company)").Bold();
+                    table.Cell().Background("#F8FAFC").Padding(5).AlignRight().Text(_model.GrossSalary.HasValue ? $"Rs. {(_model.GrossSalary.Value * 12):N2}" : "As per Institutional Scale").Bold().FontColor(DarkGreen);
                 });
 
                 // Terms

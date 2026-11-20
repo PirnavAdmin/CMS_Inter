@@ -164,6 +164,11 @@ export function InventoryDataProvider({ children }) {
           perform(() => inventoryAction(`movements/${encodeURIComponent(id)}/reverse`)),
         returnItem: (id) =>
           perform(() => inventoryAction(`movements/${encodeURIComponent(id)}/return`)),
+        cancelOrder: (id) =>
+          perform(
+            () => inventoryAction(`orders/${encodeURIComponent(id)}/cancel`, "patch"),
+            "Purchase order cancelled",
+          ),
         applyLeave: (values) =>
           perform(
             () => submitLeave(values, stateRef.current.leaveCategories),

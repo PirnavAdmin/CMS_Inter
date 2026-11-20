@@ -13,6 +13,7 @@ namespace CollegeManagement.API.Repositories
             int? groupId = null,
             int? academicLevelId = null,
             bool? isActive = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default);
 
         Task<SubjectDto?> GetByIdAsync(int subjectId, CancellationToken cancellationToken = default);
@@ -27,11 +28,11 @@ namespace CollegeManagement.API.Repositories
 
         Task<List<SubjectDto>> GetByGroupIdAsync(int groupId, CancellationToken cancellationToken = default);
 
-        Task<List<SubjectDto>> GetByContextAsync(int boardId, int groupId, int academicLevelId, CancellationToken cancellationToken = default);
+        Task<List<SubjectDto>> GetByContextAsync(int boardId, int groupId, int academicLevelId, int? collegeId = null, CancellationToken cancellationToken = default);
 
-        Task<List<SubjectDto>> SearchAsync(string? search, int? boardId, int? groupId, int? academicLevelId, bool? isActive, CancellationToken cancellationToken = default);
+        Task<List<SubjectDto>> SearchAsync(string? search, int? boardId, int? groupId, int? academicLevelId, bool? isActive, int? collegeId = null, CancellationToken cancellationToken = default);
 
-        Task<List<SubjectDto>> GetActiveAsync(CancellationToken cancellationToken = default);
+        Task<List<SubjectDto>> GetActiveAsync(int? collegeId = null, CancellationToken cancellationToken = default);
 
         Task<List<SubjectDto>> GetByBoardIdAsync(int boardId, CancellationToken cancellationToken = default);
 

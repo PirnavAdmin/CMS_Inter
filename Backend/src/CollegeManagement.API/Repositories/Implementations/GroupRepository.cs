@@ -19,10 +19,12 @@ namespace CollegeManagement.API.Repositories
     public class GroupRepository : IGroupRepository
     {
         private readonly AppDbContext _context;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
-        public GroupRepository(AppDbContext context)
+        public GroupRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync(CancellationToken cancellationToken = default)
@@ -51,9 +53,24 @@ namespace CollegeManagement.API.Repositories
             int? academicLevelId = null,
             bool? isActive = null,
             int? masterGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
+
+            if (!collegeId.HasValue || collegeId <= 0)
+            {
+                var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                         ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+                if (int.TryParse(claim, out int cid) && cid > 0)
+                {
+                    collegeId = cid;
+                }
+                else
+                {
+                    collegeId = 1;
+                }
+            }
 
             var cmd = new CommandDefinition(
                 "sp_GetAllGroups",
@@ -64,7 +81,8 @@ namespace CollegeManagement.API.Repositories
                     p_AcademicYearId = academicYearId,
                     p_AcademicLevelId = academicLevelId,
                     p_IsActive = isActive,
-                    p_MasterGroupId = masterGroupId
+                    p_MasterGroupId = masterGroupId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -113,6 +131,7 @@ namespace CollegeManagement.API.Repositories
             int boardId,
             int? academicYearId = null,
             int? academicLevelId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -123,7 +142,8 @@ namespace CollegeManagement.API.Repositories
                 {
                     p_BoardId = boardId,
                     p_AcademicYearId = academicYearId,
-                    p_AcademicLevelId = academicLevelId
+                    p_AcademicLevelId = academicLevelId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -142,6 +162,7 @@ namespace CollegeManagement.API.Repositories
 
         public async Task<GroupResponse> CreateAsync(
             CreateGroupRequest request,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             if (request == null)
@@ -160,7 +181,8 @@ namespace CollegeManagement.API.Repositories
                     p_GroupCode = request.GroupCode.Trim(),
                     p_Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                     p_IsActive = request.IsActive,
-                    p_MasterGroupId = (int?)null
+                    p_MasterGroupId = (int?)null,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -176,7 +198,8 @@ namespace CollegeManagement.API.Repositories
                 await SyncGroupProgramsAsync(created.GroupId, programIds, cancellationToken);
             }
 
-            return (await GetByIdAsync(created.GroupId, cancellationToken))!;
+            var fetched = await GetByIdAsync(created.GroupId, cancellationToken);
+            return fetched ?? created;
         }
 
         // =========================================================
@@ -305,6 +328,7 @@ namespace CollegeManagement.API.Repositories
             string groupCode,
             int? boardId = null,
             int? excludeGroupId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -315,7 +339,8 @@ namespace CollegeManagement.API.Repositories
                 {
                     p_BoardId = boardId,
                     p_GroupCode = groupCode.Trim(),
-                    p_ExcludeGroupId = excludeGroupId
+                    p_ExcludeGroupId = excludeGroupId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken
@@ -394,6 +419,7 @@ namespace CollegeManagement.API.Repositories
             int? boardId = null,
             int? academicYearId = null,
             int? academicLevelId = null,
+            int? collegeId = null,
             CancellationToken cancellationToken = default)
         {
             var connection = await GetOpenConnectionAsync(cancellationToken);
@@ -404,7 +430,8 @@ namespace CollegeManagement.API.Repositories
                 {
                     p_BoardId = boardId,
                     p_AcademicYearId = academicYearId,
-                    p_AcademicLevelId = academicLevelId
+                    p_AcademicLevelId = academicLevelId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: cancellationToken

@@ -60,12 +60,15 @@ export async function createTemplate(templateData) {
     templateCode: templateData.templateCode || templateData.code || `TMPL_${Date.now()}`,
     title: templateData.title || templateData.name || "Untitled Template",
     category: templateData.category || "Student Certificate",
+    certificateType: templateData.certificateType || templateData.category || null,
     contentBody: templateData.contentBody || templateData.content || "",
     placeholders: Array.isArray(templateData.placeholders)
       ? templateData.placeholders
       : Array.isArray(templateData.dynamicFields)
       ? templateData.dynamicFields
       : [],
+    logoPath: templateData.logoPath || null,
+    isDefault: Boolean(templateData.isDefault),
     isActive: templateData.isActive !== false && templateData.status !== "Inactive",
   };
   const response = await apiClient.post(apiEndpoints.settingsTemplates.create, payload);
@@ -80,12 +83,15 @@ export async function updateTemplate(id, templateData) {
   const payload = {
     title: templateData.title || templateData.name,
     category: templateData.category || "Student Certificate",
+    certificateType: templateData.certificateType || templateData.category || null,
     contentBody: templateData.contentBody || templateData.content || "",
     placeholders: Array.isArray(templateData.placeholders)
       ? templateData.placeholders
       : Array.isArray(templateData.dynamicFields)
       ? templateData.dynamicFields
       : [],
+    logoPath: templateData.logoPath || null,
+    isDefault: Boolean(templateData.isDefault),
     isActive: templateData.isActive !== false && templateData.status !== "Inactive",
   };
   const response = await apiClient.put(apiEndpoints.settingsTemplates.update(id), payload);
@@ -119,6 +125,37 @@ export async function previewTemplate(previewPayload) {
   return response.data;
 }
 
+/**
+ * 10. POST /api/v1/settings/templates/upload-logo
+ * Upload a persistent logo image file to server storage.
+ */
+export async function uploadTemplateLogo(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await apiClient.post(apiEndpoints.settingsTemplates.uploadLogo, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data;
+}
+
+/**
+ * 11. POST /api/v1/settings/templates/{id}/duplicate
+ * Duplicate an existing template.
+ */
+export async function duplicateTemplate(id) {
+  const response = await apiClient.post(apiEndpoints.settingsTemplates.duplicate(id));
+  return response.data;
+}
+
+/**
+ * 12. POST /api/v1/settings/templates/{id}/set-default
+ * Mark a template as default for its category.
+ */
+export async function setDefaultTemplate(id) {
+  const response = await apiClient.post(apiEndpoints.settingsTemplates.setDefault(id));
+  return response.data;
+}
+
 const templateApi = {
   getTemplates,
   getTemplateCategories,
@@ -129,7 +166,9 @@ const templateApi = {
   deleteTemplate,
   toggleTemplateActive,
   previewTemplate,
+  uploadTemplateLogo,
+  duplicateTemplate,
+  setDefaultTemplate,
 };
 
 export default templateApi;
-

@@ -14,7 +14,8 @@ import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
 import { Settings } from "lucide-react";
-import { usePermissions } from "@/modules/admin/AdminRolesPermissions/permissionUtils.jsx";
+import { useStudentProfile } from "../context/StudentProfileContext.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 // Shared by the Student sidebar and its navbar search.
 export const studentMenuGroups = [
@@ -40,8 +41,9 @@ export const studentMenuGroups = [
   ]],
 ];
 
-export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
-  const { canView } = usePermissions();
+export default function StudentSidebar({ open, collapsed, mobile, onClose, onResizePointerDown, onResizePointerMove, onResizePointerUp, onResizePointerCancel }) {
+  const { facilityAccess = { loading: true, type: null } } = useStudentProfile() || {};
+  const { canView, permissions, loading } = useEffectivePermissions();
 
   return (
     <aside id="sp-student-sidebar" className={`sp-sidebar ${open ? "is-open" : ""}`} inert={mobile && !open ? true : undefined}>
@@ -51,7 +53,24 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
       <nav aria-label="Student Portal pages">
         {studentMenuGroups.map(([heading, links]) => {
           const visibleLinks = links.filter(([label, path, icon, moduleKey]) => {
-            if (!moduleKey || moduleKey === "dashboard" || moduleKey === "profile") return true;
+            const isFacilityItem =
+              path === "transport" ||
+              path === "hostel" ||
+              moduleKey === "transport" ||
+              moduleKey === "hostel-management";
+
+            if (isFacilityItem) {
+              if (facilityAccess.loading) return false;
+              const facilityAllowed =
+                (facilityAccess.type === "transport" && (path === "transport" || moduleKey === "transport")) ||
+                (facilityAccess.type === "hostel" && (path === "hostel" || moduleKey === "hostel-management"));
+              if (!facilityAllowed) return false;
+              if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+              return canView(moduleKey);
+            }
+
+            if (!moduleKey || moduleKey === "dashboard") return true;
+            if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
             return canView(moduleKey);
           });
 
@@ -84,6 +103,16 @@ export default function StudentSidebar({ open, collapsed, mobile, onClose }) {
           );
         })}
       </nav>
+      {!mobile && !collapsed ? <div
+        className="sp-sidebar-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize Student Portal sidebar"
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+        onPointerCancel={onResizePointerCancel}
+      /> : null}
     </aside>
   );
 }

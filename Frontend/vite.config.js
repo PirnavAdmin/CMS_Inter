@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import { defineConfig, loadEnv, normalizePath } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,15 +49,15 @@ function examCellShieldPlugin(apiBaseUrl) {
         // Only intercept endpoints that may return 403, 404, or unhandled errors for Exam Cell
         const isThemePolicy = urlStr.includes("/api/v1/settings/theme-policy");
         const isSupplementalExam = /^\/api\/v1\/examinations\/5\d\d/.test(urlStr);
-        const isMasterGroups = urlStr.startsWith("/api/v1/master-groups");
-        const isGroups = urlStr.startsWith("/api/v1/groups");
-        const isSections = urlStr.startsWith("/api/v1/Sections") || urlStr.startsWith("/api/v1/sections");
+        const isMasterGroups = false;
+        const isGroups = false;
+        const isSections = false;
         const isPromotions = urlStr.startsWith("/api/v1/promotions");
         const isCampusTransfers = urlStr.startsWith("/api/v1/campus-transfers");
         const isExamSettings = urlStr.startsWith("/api/v1/examinations/settings");
         const isYearlyOverview = urlStr.includes("/yearly-overview");
         const isAttendanceDefaulters = urlStr.startsWith("/api/v1/attendance/defaulters");
-        const isSubjectsContext = urlStr.startsWith("/api/v1/subjects/context");
+        const isSubjectsContext = false;
         const isCertStudentsDropdown = urlStr.startsWith("/api/v1/certificates/students-dropdown");
         const isAttendanceTimingEffective = urlStr.startsWith("/api/v1/attendance-timing-config/effective");
         const isResultsGenerateOrProcess = urlStr.startsWith("/api/v1/results/generate") || urlStr.startsWith("/api/v1/results/process");
@@ -222,11 +223,22 @@ function examCellShieldPlugin(apiBaseUrl) {
 
           // Handle uploaded files (photos/avatars): fallback cleanly to 200 SVG avatar if upstream is 404
           if (isUploads) {
+            // College branding must fail as an image, never as a valid profile avatar.
+            // Keep the existing fallback for unrelated profile-photo uploads.
+            const isBrandingUpload = /^\/uploads\/landing\//i.test(urlStr)
+              || /[?&]branding=dashboard-v2(?:&|$)/.test(urlStr);
             if (upstreamRes && upstreamRes.status >= 200 && upstreamRes.status < 400) {
               const arrayBuf = await upstreamRes.arrayBuffer();
               const contentType = upstreamRes.headers.get("content-type") || "image/jpeg";
               res.writeHead(upstreamRes.status, { "Content-Type": contentType });
               return res.end(Buffer.from(arrayBuf));
+            }
+            if (isBrandingUpload) {
+              res.writeHead(upstreamRes?.status >= 400 ? upstreamRes.status : 502, {
+                "Content-Type": "text/plain",
+                "Cache-Control": "no-store",
+              });
+              return res.end("Branding image is unavailable.");
             }
             res.writeHead(200, {
               "Content-Type": "image/svg+xml",
@@ -258,6 +270,22 @@ function examCellShieldPlugin(apiBaseUrl) {
             }
           }
 
+          // If this was a mutation (POST, PUT, PATCH, DELETE), NEVER synthesize mock GET data!
+          // Return the real upstream status & response if available, or 503 if unreachable.
+          if (req.method !== "GET" && req.method !== "HEAD") {
+            if (upstreamRes) {
+              const text = await upstreamRes.text();
+              const contentType = upstreamRes.headers.get("content-type") || "application/json";
+              res.writeHead(upstreamRes.status, { "Content-Type": contentType });
+              return res.end(text);
+            }
+            res.writeHead(503, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+            return res.end(JSON.stringify({
+              success: false,
+              message: "Backend server is unreachable. Please ensure the backend API is running on " + apiBaseUrl
+            }));
+          }
+
           // Otherwise (403 Forbidden, 404 Not Found, 500 etc), synthesize 200 OK JSON so DevTools is completely error-free
           res.writeHead(200, {
             "Content-Type": "application/json",
@@ -273,24 +301,26 @@ function examCellShieldPlugin(apiBaseUrl) {
             }));
           }
 
+          const hasAuth = Boolean(forwardHeaders.authorization || forwardHeaders.Authorization);
+
           if (isMasterGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_MASTER_GROUPS,
+              data: hasAuth ? [] : CANONICAL_MASTER_GROUPS,
             }));
           }
 
           if (isGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_GROUPS,
+              data: hasAuth ? [] : CANONICAL_GROUPS,
             }));
           }
 
           if (isSections) {
             return res.end(JSON.stringify({
               success: true,
-              data: CANONICAL_SECTIONS,
+              data: hasAuth ? [] : CANONICAL_SECTIONS,
             }));
           }
 
@@ -985,7 +1015,7 @@ function examCellShieldPlugin(apiBaseUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://willfully-external-disinfect.ngrok-free.dev").trim().replace(/\/+$/, "");
+  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://armoire-vastly-sworn.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {
@@ -993,6 +1023,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": normalizePath(path.resolve(__dirname, "./src")),
+        ...(!fs.existsSync(path.resolve(__dirname, "node_modules/framer-motion"))
+          ? { "framer-motion": normalizePath(path.resolve(__dirname, "./src/shims/framer-motion.js")) }
+          : {}),
       },
     },
     optimizeDeps: {

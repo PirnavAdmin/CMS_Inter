@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Subject;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -23,10 +24,28 @@ namespace CollegeManagement.API.Controllers
     public class SubjectsController : ControllerBase
     {
         private readonly ISubjectService _service;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public SubjectsController(ISubjectService service)
+        public SubjectsController(ISubjectService service, IJwtTokenHelper jwtTokenHelper)
         {
             _service = service;
+            _jwtTokenHelper = jwtTokenHelper;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                return collegeId.Value;
+            }
+            return TenantIsolationActionFilter.NoCampusSentinel;
         }
 
         /// <summary>
@@ -41,15 +60,21 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? departmentId = null,
             CancellationToken cancellationToken = default)
         {
+            var scopedCollegeId = ResolveCollegeId();
+            if (scopedCollegeId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SubjectDto>());
+            }
+
             string? deptName = await _service.ResolveDepartmentNameAsync(department, departmentId, cancellationToken);
 
             if ((boardId.HasValue && boardId.Value > 0) || (groupId.HasValue && groupId.Value > 0) || (academicLevelId.HasValue && academicLevelId.Value > 0))
             {
-                var contextSubjects = await _service.GetByContextAsync(boardId ?? 0, groupId ?? 0, academicLevelId ?? 0, cancellationToken);
+                var contextSubjects = await _service.GetByContextAsync(boardId ?? 0, groupId ?? 0, academicLevelId ?? 0, scopedCollegeId, cancellationToken);
                 return Ok(_service.ApplyDepartmentFilter(contextSubjects, deptName));
             }
 
-            var subjects = await _service.GetAllAsync(null, boardId, groupId, academicLevelId, null, cancellationToken);
+            var subjects = await _service.GetAllAsync(null, boardId, groupId, academicLevelId, null, scopedCollegeId, cancellationToken);
             return Ok(_service.ApplyDepartmentFilter(subjects, deptName));
         }
 
@@ -67,8 +92,14 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? departmentId = null,
             CancellationToken cancellationToken = default)
         {
+            var scopedCollegeId = ResolveCollegeId();
+            if (scopedCollegeId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SubjectDto>());
+            }
+
             string? deptName = await _service.ResolveDepartmentNameAsync(department, departmentId, cancellationToken);
-            var results = await _service.SearchAsync(search, boardId, groupId, academicLevelId, isActive, cancellationToken);
+            var results = await _service.SearchAsync(search, boardId, groupId, academicLevelId, isActive, scopedCollegeId, cancellationToken);
             return Ok(_service.ApplyDepartmentFilter(results, deptName));
         }
 
@@ -87,7 +118,13 @@ namespace CollegeManagement.API.Controllers
             if (groupId <= 0 && (boardId <= 0 || academicLevelId <= 0))
                 return BadRequest(new { message = "Valid GroupId or BoardId and AcademicLevelId are required." });
 
-            var subjects = await _service.GetByContextAsync(boardId, groupId, academicLevelId, cancellationToken);
+            var scopedCollegeId = ResolveCollegeId();
+            if (scopedCollegeId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SubjectDto>());
+            }
+
+            var subjects = await _service.GetByContextAsync(boardId, groupId, academicLevelId, scopedCollegeId, cancellationToken);
             return Ok(subjects);
         }
 
@@ -119,8 +156,14 @@ namespace CollegeManagement.API.Controllers
             [FromQuery] int? departmentId = null,
             CancellationToken cancellationToken = default)
         {
+            var scopedCollegeId = ResolveCollegeId();
+            if (scopedCollegeId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<SubjectDto>());
+            }
+
             string? deptName = await _service.ResolveDepartmentNameAsync(department, departmentId, cancellationToken);
-            var active = await _service.GetActiveAsync(cancellationToken);
+            var active = await _service.GetActiveAsync(scopedCollegeId, cancellationToken);
             return Ok(_service.ApplyDepartmentFilter(active, deptName));
         }
 

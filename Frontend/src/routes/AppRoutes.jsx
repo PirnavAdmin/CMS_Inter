@@ -37,6 +37,7 @@ import StudentProfilePage from "@/modules/admin/AdminStudents/StudentProfilePage
 import StudentEnrollmentPage from "@/modules/admin/AdminStudents/StudentEnrollmentPage.jsx";
 // Code-split Settings & Admin configurations for bundle optimization
 const SettingsPage = lazy(() => import("@/modules/admin/AdminSettings/SettingsPage.jsx"));
+import PaymentGatewayConfigPage from "@/modules/admin/AdminSettings/PaymentGatewayConfigPage.jsx";
 const LOPConfigurationPage = lazy(() => import("@/modules/admin/AdminLOPConfiguration/LOPConfigurationPage.jsx"));
 const CampusImagesConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusImagesConfigurationPage.jsx"));
 const RolesPermissionsPage = lazy(() => import("@/modules/admin/AdminRolesPermissions/RolesPermissionsPage.jsx"));
@@ -51,6 +52,7 @@ import ReimbursementPage from "@/modules/admin/AdminReimbursements/Reimbursement
 import AdminProfilePage from "@/modules/admin/AdminProfile/AdminProfilePage.jsx";
 const CampusConfigurationPage = lazy(() => import("@/modules/admin/AdminSettings/CampusConfigurationPage.jsx"));
 const AuditLogsPage = lazy(() => import("@/modules/admin/AdminAuditLogs/AuditLogsPage.jsx"));
+const EnquiryManagementPage = lazy(() => import("@/modules/admin/AdminEnquiry/EnquiryManagementPage.jsx"));
 
 const SettingsFallback = () => (
   <div className="p-8 text-sm text-slate-500 flex items-center justify-center min-h-[300px]">
@@ -97,6 +99,7 @@ import {
   HostelAttendanceRegister,
   HostelReports,
 } from "@/modules/admin/AdminHostel/index.js";
+const WardenWorkspacePage = lazy(() => import("@/modules/warden/WardenWorkspacePage.jsx"));
 
 const moduleConfigs = {
   courses: courseGroupConfig,
@@ -175,15 +178,34 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute requireWarden />}>
         <Route path="/warden-dashboard" element={<HostelDashboard />} />
         <Route path="/warden-dashboard/overview" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/students" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/rooms" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/beds" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/allocations" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/leave-requests" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/complaints" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/attendance" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/profile" element={<HostelDashboard />} />
-        <Route path="/warden-dashboard/reports" element={<HostelDashboard />} />
+        <Route element={<ProtectedRoute requiredModule="hostel-management" />}>
+          <Route path="/warden-dashboard/students" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/rooms" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/beds" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/allocations" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/leave-requests" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/complaints" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/attendance" element={<HostelDashboard />} />
+          <Route path="/warden-dashboard/reports" element={<HostelDashboard />} />
+        </Route>
+        <Route element={<ProtectedRoute requiredModule="staff-attendance" />}>
+          <Route path="/warden-dashboard/my-attendance" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="attendance" /></Suspense>} />
+        </Route>
+        <Route element={<ProtectedRoute requiredModule="staff-leave-management" />}>
+          <Route path="/warden-dashboard/my-leaves" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="leaves" /></Suspense>} />
+        </Route>
+        <Route element={<ProtectedRoute requiredModule="holiday-management" />}>
+          <Route path="/warden-dashboard/holidays" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="holidays" /></Suspense>} />
+        </Route>
+        <Route element={<ProtectedRoute requiredModule="reimbursement" />}>
+          <Route path="/warden-dashboard/expenses" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="expenses" /></Suspense>} />
+        </Route>
+        <Route element={<ProtectedRoute requiredModule="profile" />}>
+          <Route path="/warden-dashboard/profile" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="profile" /></Suspense>} />
+        </Route>
+        <Route element={<ProtectedRoute requiredModule="settings" />}>
+          <Route path="/warden-dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><WardenWorkspacePage page="settings" /></Suspense>} />
+        </Route>
         <Route path="/warden-dashboard/*" element={<HostelDashboard />} />
 
         {/* Legacy /warden Aliases redirect to /warden-dashboard */}
@@ -201,11 +223,19 @@ export default function AppRoutes() {
 
       <Route element={<ProtectedRoute requirePrincipal />}>
         <Route path="/principal-dashboard" element={<PrincipalDashboard />} />
+        <Route path="/principal-dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
+        <Route path="/principal-dashboard/enquiries" element={<Navigate to="/principal-dashboard/enquiry-management" replace />} />
+      </Route>
+
+      <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="payment-gateway" />}>
+        <Route path="/dashboard/settings/payment-gateway" element={<Suspense fallback={<SettingsFallback />}><PaymentGatewayConfigPage /></Suspense>} />
       </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>
         <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/dashboard/academic-calendar" element={<AcademicCalendarPage />} />
+        <Route element={<ProtectedRoute requiredModule="timetable" />}>
+          <Route path="/dashboard/academic-calendar" element={<AcademicCalendarPage />} />
+        </Route>
         {/* Board & Academic Year */}
         <Route element={<ProtectedRoute requiredModule="board-academic-year" />}>
           <Route path="/dashboard/board-academic-year" element={<BoardAcademicYearManagementPage />} />
@@ -313,7 +343,9 @@ export default function AppRoutes() {
           <Route path="/dashboard/attendance/staff" element={<AttendancePage area="staff" />} />
           <Route path="/dashboard/attendance/staff/:staffId/overview" element={<AttendanceOverviewPage />} />
         </Route>
-        <Route path="/dashboard/attendance/:area" element={<AttendancePage />} />
+        <Route element={<ProtectedRoute requiredModule="attendance" />}>
+          <Route path="/dashboard/attendance/:area" element={<AttendancePage />} />
+        </Route>
 
         {/* Staff Leave Management */}
         <Route element={<ProtectedRoute requiredModule="staff-leave-management" />}>
@@ -367,9 +399,17 @@ export default function AppRoutes() {
           <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
           <Route path="/dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
         </Route>
+        {/* Enquiry Management Module */}
+        <Route element={<ProtectedRoute requiredModule="enquiry-management" />}>
+          <Route path="/dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
+          <Route path="/dashboard/enquiries" element={<Navigate to="/dashboard/enquiry-management" replace />} />
+        </Route>
+
         {/* Settings General & Admin Profile */}
-        <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
-        <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+        <Route element={<ProtectedRoute requiredModule="settings" />}>
+          <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
+          <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+        </Route>
         <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
         <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
@@ -408,8 +448,11 @@ export default function AppRoutes() {
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="number-series" />}>
           <Route path="/dashboard/settings/number-series" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="dashboard" /></Suspense>} />
+          <Route path="/dashboard/settings/number_series" element={<Navigate to="/dashboard/settings/number-series" replace />} />
           <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="edit" /></Suspense>} />
+          <Route path="/dashboard/settings/number_series/:seriesId/edit" element={<Navigate to="/dashboard/settings/number-series/:seriesId/edit" replace />} />
           <Route path="/dashboard/settings/number-series/:seriesId" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="detail" /></Suspense>} />
+          <Route path="/dashboard/settings/number_series/:seriesId" element={<Navigate to="/dashboard/settings/number-series/:seriesId" replace />} />
         </Route>
 
         {/* Templates Management Module Routes */}
@@ -533,7 +576,9 @@ export default function AppRoutes() {
 
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
         {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
-        <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
+        <Route element={<ProtectedRoute requiredModule="student-management" />}>
+          <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
+        </Route>
       </Route>
 
       <Route element={<ProtectedRoute requireStudent />}>
@@ -548,22 +593,23 @@ export default function AppRoutes() {
       <Route element={<ProtectedRoute requireParent />}>
         <Route element={<ParentPortalProvider><ErrorBoundary><Outlet /></ErrorBoundary></ParentPortalProvider>}>
           <Route path="/parent-dashboard" element={<ParentDashboard />} />
-          <Route path="/parent-dashboard/children" element={<ParentChildrenPage />} />
-          <Route path="/parent-dashboard/children/:id" element={<ParentChildDetailsRoute />} />
-          <Route path="/parent-dashboard/attendance" element={<ParentAttendancePage />} />
-          <Route path="/parent-dashboard/academics" element={<ParentAcademicsPage />} />
-          <Route path="/parent-dashboard/examinations" element={<ParentExaminationsPage />} />
+          <Route path="/parent-dashboard/children" element={<ProtectedRoute requiredModule="student-management"><ParentChildrenPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/children/:id" element={<ProtectedRoute requiredModule="student-management"><ParentChildDetailsRoute /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/attendance" element={<ProtectedRoute requiredModule="attendance"><ParentAttendancePage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/academics" element={<ProtectedRoute requiredModule="results"><ParentAcademicsPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/examinations" element={<ProtectedRoute requiredModule="examination"><ParentExaminationsPage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/results" element={<Navigate to="/parent-dashboard/academics?tab=results" replace />} />
-          <Route path="/parent-dashboard/fees" element={<ParentFeesPage />} />
-          <Route path="/parent-dashboard/timetable" element={<ParentTimetablePage />} />
+          <Route path="/parent-dashboard/fees" element={<ProtectedRoute requiredModule="fee-management"><ParentFeesPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/pay-fee" element={<ProtectedRoute requiredModule="fee-management"><ParentFeesPage initialView="pay" /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/timetable" element={<ProtectedRoute requiredModule="timetable"><ParentTimetablePage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/leave" element={<Navigate to="/parent-dashboard" replace />} />
-          <Route path="/parent-dashboard/communication" element={<ParentCommunicationPage />} />
-          <Route path="/parent-dashboard/announcements" element={<ParentAnnouncementsPage />} />
+          <Route path="/parent-dashboard/communication" element={<ProtectedRoute requiredModule="reports-analytics"><ParentCommunicationPage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/announcements" element={<ProtectedRoute requiredModule="reports-analytics"><ParentAnnouncementsPage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/events" element={<Navigate to="/parent-dashboard/announcements?tab=events" replace />} />
-          <Route path="/parent-dashboard/documents" element={<ParentDocumentsPage />} />
+          <Route path="/parent-dashboard/documents" element={<ProtectedRoute requiredModule="certificates"><ParentDocumentsPage /></ProtectedRoute>} />
           <Route path="/parent-dashboard/notifications" element={<ParentNotificationsPage />} />
-          <Route path="/parent-dashboard/profile" element={<ParentProfilePage />} />
-          <Route path="/parent-dashboard/settings" element={<ParentSettingsPage />} />
+          <Route path="/parent-dashboard/profile" element={<ProtectedRoute requiredModule="profile"><ParentProfilePage /></ProtectedRoute>} />
+          <Route path="/parent-dashboard/settings" element={<ProtectedRoute requiredModule="settings"><ParentSettingsPage /></ProtectedRoute>} />
         </Route>
       </Route>
 
@@ -585,11 +631,17 @@ export default function AppRoutes() {
         <Route path="/transport-manager" element={<Navigate to="/transport-manager/overview" replace />} />
         <Route path="/transport-manager/*" element={<TransportManagerRoutes />} />
       </Route>
-      <Route path="/driver" element={<DriverDashboard />} />
-      <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
-      <Route path="/driver/*" element={<DriverDashboard />} />
-      <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
-      <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      {/* Driver Portal Protected with Driver Role */}
+      <Route element={<ProtectedRoute requireDriver />}>
+        <Route path="/driver" element={<DriverDashboard />} />
+        <Route path="/driver/*" element={<DriverDashboard />} />
+        <Route path="/driver-dashboard" element={<Navigate to="/driver" replace />} />
+        <Route path="/driver-dashboard/*" element={<DriverDashboard />} />
+      </Route>
+      {/* Inventory Portal Protected with Authentication */}
+      <Route element={<ProtectedRoute />}>
+        <Route path="/inventory-dashboard/*" element={<InventoryDashboard />} />
+      </Route>
       <Route path="/staff/onboarding/:id" element={<StaffManagementPage />} />
       <Route path="/staff/onboarding/:id/complete-profile" element={<StaffManagementPage />} />
       <Route path="/mock-staff-portal/:id" element={<StaffManagementPage />} />

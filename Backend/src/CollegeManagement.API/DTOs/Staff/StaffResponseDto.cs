@@ -94,6 +94,8 @@ namespace CollegeManagement.API.DTOs.Staff
         public DateTime? TransferredAt { get; set; }
 
         public string? PhotoPath { get; set; }
+        public string? OfferLetterPath { get; set; }
+        public string? OfferLetterUrl => OfferLetterPath;
         public string? ProfilePhoto => PhotoPath;
         public string? PhotoUrl => PhotoPath;
 

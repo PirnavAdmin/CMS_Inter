@@ -1,6 +1,6 @@
 import ThemeSettingsCard from "@/shared/components/ThemeSettingsCard.jsx";
 import { useState, useEffect } from "react";
-import { Settings, Bell, Lock, Globe, Shield, CheckCircle2, Save } from "lucide-react";
+import { Settings, Bell, Lock, Shield, CheckCircle2, Save } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import { Modal, Toast } from "@/shared/components/Ui.jsx";
 import { changeParentPassword } from "@/api/parentApi.js";
@@ -177,34 +177,6 @@ export default function ParentSettingsPage() {
             >
               <Lock size={14} /> Update Password
             </button>
-          </div>
-        </div>
-
-        {/* Regional Preferences */}
-        <div className="parent-card">
-          <div className="parent-card-header">
-            <h3 className="parent-card-title">
-              <Globe size={18} /> Regional & Language Preferences
-            </h3>
-          </div>
-          <div className="parent-card-body" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-            <div>
-              <strong style={{ fontSize: 14, display: "block" }}>Preferred Portal Language</strong>
-              <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>Language for circulars and notifications</span>
-            </div>
-            <select
-              className="cms-select"
-              style={{ width: 180 }}
-              value={language}
-              onChange={(e) => {
-                setLanguage(e.target.value);
-                setToastMessage(`Language set to ${e.target.value}`);
-              }}
-            >
-              <option value="English">English</option>
-              <option value="Telugu">Telugu (తెలుగు)</option>
-              <option value="Hindi">Hindi (हिंदी)</option>
-            </select>
           </div>
         </div>
 

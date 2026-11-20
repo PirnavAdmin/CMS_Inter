@@ -20,18 +20,22 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? approvalStatus = null,
             string? feeSettlementStatus = null,
             DateTime? requestDate = null,
-            string? search = null)
+            string? search = null,
+            int? allocationId = null,
+            int? campusId = null)
         {
             return await _dbConnection.QueryAsync<HostelTransferVacate>(
                 "sp_GetHostelTransferVacate",
                 new
                 {
                     p_StudentId = studentId,
+                    p_AllocationId = allocationId,
                     p_RequestType = string.IsNullOrWhiteSpace(requestType) ? null : requestType.Trim(),
                     p_ApprovalStatus = string.IsNullOrWhiteSpace(approvalStatus) ? null : approvalStatus.Trim(),
                     p_FeeSettlementStatus = string.IsNullOrWhiteSpace(feeSettlementStatus) ? null : feeSettlementStatus.Trim(),
                     p_RequestDate = requestDate?.Date,
-                    p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim()
+                    p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
         }

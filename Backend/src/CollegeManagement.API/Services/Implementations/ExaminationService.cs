@@ -365,10 +365,11 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             // Populate category and schedule mode
-            response.ExamCategory = !string.IsNullOrWhiteSpace(exam.ExamPattern) && exam.ExamPattern.ToLower().Contains("objective")
-                ? "Objective"
-                : "Regular";
-            response.ScheduleMode = exam.ExamSchedules?.FirstOrDefault(s => s.IsActive && !string.IsNullOrWhiteSpace(s.ScheduleMode))?.ScheduleMode ?? "SUBJECT_WISE";
+            bool isByIdObjective = Helpers.ExaminationFormatHelper.IsObjectiveExam(exam);
+            response.ExamCategory = isByIdObjective ? "Objective" : "Regular";
+            response.Category = response.ExamCategory;
+            response.ScheduleMode = exam.ExamSchedules?.FirstOrDefault(s => s.IsActive && !string.IsNullOrWhiteSpace(s.ScheduleMode))?.ScheduleMode
+                ?? (isByIdObjective ? "PATTERN_WISE" : "SUBJECT_WISE");
 
             // Authoritative IST Status
             var istNow = Helpers.ExaminationStatusHelper.GetIstNow();
@@ -455,23 +456,22 @@ namespace CollegeManagement.API.Services.Implementations
                     r.AcademicLevelIds = new List<int> { r.AcademicLevelId };
                 }
 
-                string existingCat = r.ExamCategory ?? r.Category ?? string.Empty;
-                if (!string.Equals(existingCat, "Regular", StringComparison.OrdinalIgnoreCase))
-                {
-                    bool isObjPattern = (!string.IsNullOrWhiteSpace(r.ExamPattern) && 
-                        (r.ExamPattern.Contains("objective", StringComparison.OrdinalIgnoreCase) || 
-                         r.ExamPattern.Contains("jee", StringComparison.OrdinalIgnoreCase) || 
-                         r.ExamPattern.Contains("neet", StringComparison.OrdinalIgnoreCase)));
-                    
-                    r.ExamCategory = isObjPattern || string.Equals(existingCat, "Objective", StringComparison.OrdinalIgnoreCase)
-                        ? "Objective"
-                        : "Regular";
-                }
-                else
-                {
-                    r.ExamCategory = "Regular";
-                }
+                bool hasObjectiveSchedule = r.Schedules != null && r.Schedules.Any(s =>
+                    Helpers.ExaminationFormatHelper.IsObjectiveConfiguration(null, null, null, s.ScheduleMode, s.ExamMode, s.PatternName));
+                bool isObjResolved = hasObjectiveSchedule || Helpers.ExaminationFormatHelper.IsObjectiveConfiguration(
+                    r.ExamPattern,
+                    r.ExamType,
+                    null,
+                    r.ScheduleMode,
+                    null,
+                    r.PatternName);
+
+                r.ExamCategory = isObjResolved ? "Objective" : "Regular";
                 r.Category = r.ExamCategory;
+                if (isObjResolved && (string.IsNullOrWhiteSpace(r.ScheduleMode) || string.Equals(r.ScheduleMode, "SUBJECT_WISE", StringComparison.OrdinalIgnoreCase)))
+                {
+                    r.ScheduleMode = "PATTERN_WISE";
+                }
 
                 if (r.SelectedSubjectIds == null || !r.SelectedSubjectIds.Any())
                 {
@@ -1070,13 +1070,14 @@ namespace CollegeManagement.API.Services.Implementations
             var response = _mapper.Map<ExamScheduleResponse>(schedule);
 
             var exam = schedule.Examination ?? await _examinationRepository.GetExaminationByIdAsync(schedule.ExaminationId);
-            bool isExamRegular = exam != null && string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
-            bool isObj = !isExamRegular && (
-                         string.Equals(response.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(response.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(response.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(response.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                         (exam != null && string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase)));
+            bool isExplicitRegularExam = exam != null && !string.IsNullOrWhiteSpace(exam.ExamPattern) && exam.ExamPattern.Contains("regular", StringComparison.OrdinalIgnoreCase);
+            bool isExplicitObjectiveSchedule =
+                string.Equals(response.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(response.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(response.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(response.ScheduleMode, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(response.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase);
+            bool isObj = isExplicitObjectiveSchedule || (!isExplicitRegularExam && exam != null && Helpers.ExaminationFormatHelper.IsObjectiveExam(exam, schedule));
 
             if (isObj)
             {
@@ -1143,13 +1144,14 @@ namespace CollegeManagement.API.Services.Implementations
                         if (s.GroupId == null || s.GroupId <= 0) s.GroupId = exam.GroupId;
                         if (s.AcademicLevelId == null || s.AcademicLevelId <= 0) s.AcademicLevelId = exam.AcademicLevelId;
 
-                        bool isExamRegular = exam != null && string.Equals(exam.ExamCategory, "Regular", StringComparison.OrdinalIgnoreCase);
-                        bool isObjSchedule = !isExamRegular && (
+                        bool isExplicitRegularExam = exam != null && !string.IsNullOrWhiteSpace(exam.ExamPattern) && exam.ExamPattern.Contains("regular", StringComparison.OrdinalIgnoreCase);
+                        bool isExplicitObjectiveSchedule =
                                               string.Equals(s.ScheduleMode, "PATTERN_WISE", StringComparison.OrdinalIgnoreCase) ||
                                               string.Equals(s.ScheduleMode, "COMBINED_OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
                                               string.Equals(s.ScheduleMode, "COMBINED", StringComparison.OrdinalIgnoreCase) ||
-                                              string.Equals(s.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase) ||
-                                              string.Equals(exam.ExamCategory, "Objective", StringComparison.OrdinalIgnoreCase));
+                                              string.Equals(s.ScheduleMode, "OBJECTIVE", StringComparison.OrdinalIgnoreCase) ||
+                                              string.Equals(s.ExamMode, "Objective", StringComparison.OrdinalIgnoreCase);
+                        bool isObjSchedule = isExplicitObjectiveSchedule || (!isExplicitRegularExam && exam != null && Helpers.ExaminationFormatHelper.IsObjectiveExam(exam));
 
                         if (isObjSchedule)
                         {

@@ -214,7 +214,7 @@ namespace CollegeManagement.API.Services.Exports
                         SalaryRow(list, "Tax Deducted at Source (TDS)", _model.TDS);
                         SalaryRow(list, "Employee State Insurance (ESI)", _model.ESI);
                         SalaryRow(list, "Insurance & Other Deductions", _model.InsuranceOtherDeduction);
-                        SalaryRow(list, "—", 0); // Spacer for height alignment
+                        SalaryRow(list, _model.LopDays > 0 ? $"Loss of Pay (LOP - {_model.LopDays:0.#} d)" : "Loss of Pay (LOP)", _model.LopDeduction);
                     });
 
                     deductionsCol.Item().LineHorizontal(0.5f).LineColor(BorderColor);

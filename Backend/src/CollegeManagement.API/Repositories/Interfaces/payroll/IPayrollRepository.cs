@@ -6,7 +6,7 @@ namespace CollegeManagement.API.Repositories.Interfaces.Payroll
     {
         // Salary Structures
         Task<int> CreateSalaryStructureAsync(CreateSalaryStructureRequest request);
-        Task<IEnumerable<SalaryStructureDto>> GetSalaryStructuresAsync(string? staffType, string? search);
+        Task<IEnumerable<SalaryStructureDto>> GetSalaryStructuresAsync(string? staffType, string? search, int? campusId = null);
         Task<SalaryStructureDto?> GetSalaryStructureByIdAsync(int id);
         Task<bool> UpdateSalaryStructureAsync(int id, UpdateSalaryStructureRequest request);
         Task<bool> DeleteSalaryStructureAsync(int id);
@@ -25,7 +25,7 @@ AssignSalaryStructureRequest request);
         Task<bool> UpdateSalaryAssignmentStatusAsync(int id, string status);
 
         // Payslips
-        Task<int> GeneratePayslipAsync(GeneratePayslipRequest request);
+        Task<int> GeneratePayslipAsync(GeneratePayslipRequest request, decimal lopDays = 0m, decimal lopDeduction = 0m);
         Task<IEnumerable<int>> GenerateBulkPayslipsAsync(GenerateBulkPayslipRequest request);
         Task<bool> UpdatePayslipStatusAsync(int id, string status);
         Task<PayslipEmailDetailsDto?> GetPayslipEmailDetailsAsync(int payslipId);

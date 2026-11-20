@@ -775,11 +775,24 @@ END //
 CREATE PROCEDURE `sp_GetEvaluationMarksList`(
     IN p_SubjectId INT,
     IN p_SectionId INT,
-    IN p_ExaminationId INT
-,
-    IN p_CampusId INT)
+    IN p_ExaminationId INT,
+    IN p_CampusId INT
+)
 BEGIN
-    SELECT 
+    DECLARE v_ScheduleMode VARCHAR(50) DEFAULT '';
+    DECLARE v_ScheduleExamMode VARCHAR(50) DEFAULT '';
+    DECLARE v_ScheduleMax DECIMAL(10,2) DEFAULT NULL;
+
+    SELECT COALESCE(es.ScheduleMode, ''), COALESCE(es.ExamMode, ''), NULLIF(es.MaxMarks, 0)
+    INTO v_ScheduleMode, v_ScheduleExamMode, v_ScheduleMax
+    FROM `ExamSchedules` es
+    WHERE es.ExamId = p_ExaminationId
+      AND es.IsActive = 1
+      AND (es.SubjectId = p_SubjectId OR FIND_IN_SET(p_SubjectId, REPLACE(COALESCE(es.IncludedSubjectIds, ''), ' ', '')) > 0)
+    ORDER BY (es.SubjectId = p_SubjectId) DESC, es.ScheduleId DESC
+    LIMIT 1;
+
+    SELECT
         m.MarkId,
         m.Board,
         m.BoardId,
@@ -816,6 +829,9 @@ BEGIN
         COALESCE(s.SubjectName, '') AS SubjectName,
         COALESCE(s.SubjectCode, '') AS SubjectCode,
         COALESCE(s.TotalMarks, 100) AS SubjectMaxMarks,
+        COALESCE(v_ScheduleMax, NULLIF(e.TotalMarks, 0), s.TotalMarks, 100) AS ScheduleMaxMarks,
+        v_ScheduleMode AS ScheduleMode,
+        v_ScheduleExamMode AS ScheduleExamMode,
         COALESCE(s.Practical, 0) AS IsPractical,
         COALESCE(s.SubjectType, 'Theory') AS SubjectType,
         COALESCE(st.StudentName, m.StudentName, '') AS FullStudentName,

@@ -7,8 +7,9 @@ import {
   ROLE_SEEDS,
   USER_ASSIGNMENT_FALLBACK,
 } from "./rolesPermissions.constants.js";
-import { normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
+import { normalizeModuleKey, normalizePermissionPayload, normalizeRoleCode, sortRolesByPriority } from "./permissionUtils.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { ACCOUNTANT_SIDEBAR_NAVIGATION, DRIVER_SIDEBAR_NAVIGATION, EXAMINATION_CELL_SIDEBAR_NAVIGATION, FACULTY_SIDEBAR_NAVIGATION, HOSTEL_WARDEN_NAVIGATION, INVENTORY_MANAGER_SIDEBAR_NAVIGATION, PARENT_SIDEBAR_NAVIGATION, RECEPTIONIST_SIDEBAR_NAVIGATION, ROLE_SIDEBAR_MODULE_KEYS, STUDENT_SIDEBAR_NAVIGATION, TRANSPORT_MANAGER_SIDEBAR_NAVIGATION } from "@/navigation/roleSidebarRegistry.js";
 
 const cloneItem = (item) => {
   if (!item || typeof item !== "object") return item;
@@ -26,15 +27,28 @@ const apiResult = (data, source = "api") => ({ data: clone(data), meta: { source
 
 const notifyRolesUpdated = () => {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("roles-updated"));
     try {
       localStorage.setItem("cms_permissions_updated_at", String(Date.now()));
     } catch {
       // ignore
     }
+    window.dispatchEvent(new Event("roles-updated"));
   }
 };
 
+// Live role-code -> numeric roleId map populated from backend responses (getRoles / getRoleById).
+const dynamicRoleIdByCode = new Map();
+
+const cacheRoleIdMapping = (role) => {
+  if (!role || typeof role !== "object") return;
+  const numericId = Number(role.roleId ?? role.id);
+  const code = normalizeRoleCode(role.code || role.roleCode || role.roleName || role.name);
+  if (code && !Number.isNaN(numericId) && numericId > 0) {
+    dynamicRoleIdByCode.set(code, numericId);
+  }
+};
+
+// Non-colliding fallback IDs for core seeded roles; other roles resolve dynamically via dynamicRoleIdByCode.
 const ROLE_CODE_TO_ID = {
   SUPER_ADMIN: 1,
   ADMIN: 2,
@@ -51,22 +65,22 @@ const ROLE_CODE_TO_ID = {
   PLACEMENT_OFFICER: 11,
   BUS_DRIVER: 12,
   DRIVER: 12,
-  ATTENDANT: 13,
   OFFICE_STAFF: 13,
-  RECEPTIONIST: 13,
   DEAN: 14,
-  LAB_ASSISTANT: 14,
-  ADMISSION_STAFF: 14,
   PRINCIPAL: 15,
   INVENTORY_MANAGER: 16,
   INVENTORY: 16,
   UNASSIGNED: 17,
+  TRANSPORT_MANAGER: 18,
 };
 
 const resolveRoleIdParam = (roleId, roleCode) => {
   const parsed = Number(roleId);
   if (!Number.isNaN(parsed) && parsed > 0) return parsed;
   const norm = normalizeRoleCode(roleCode || roleId);
+  if (norm && dynamicRoleIdByCode.has(norm)) {
+    return dynamicRoleIdByCode.get(norm);
+  }
   return ROLE_CODE_TO_ID[norm] || roleId;
 };
 
@@ -76,13 +90,19 @@ const normalizeRole = (role = {}) => {
   const matchedSeed = ROLE_SEEDS.find(
     (s) => s.code === code || s.roleId === (role.roleId ?? role.id) || s.id === role.id
   );
+  const staffType = role.staffType || role.StaffType || matchedSeed?.staffType || "Both";
   return {
     ...role,
     id: String(role.id ?? role.roleId ?? role.code ?? role.name),
-    roleId: Number(role.roleId ?? role.id) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
+    roleId: Number(role.roleId ?? role.id) || dynamicRoleIdByCode.get(code) || matchedSeed?.roleId || ROLE_CODE_TO_ID[code] || undefined,
     code,
     name: role.name || role.roleName || matchedSeed?.name || (code === "ACCOUNTANT" ? "Accountant" : code),
     description: role.description || matchedSeed?.description || "",
+    staffType,
+    departmentId: role.departmentId ?? role.DepartmentId ?? null,
+    departmentName: role.departmentName ?? role.DepartmentName ?? "",
+    designationId: role.designationId ?? role.DesignationId ?? null,
+    designationName: role.designationName ?? role.DesignationName ?? "",
     isSystemRole: role.isSystemRole ?? matchedSeed?.isSystemRole ?? false,
     isProtected: role.isProtected ?? matchedSeed?.isProtected ?? (code === "SUPER_ADMIN"),
     icon: role.icon || matchedSeed?.icon,
@@ -113,7 +133,10 @@ const normalizeUserAssignment = (user = {}) => {
     department: user.department || "",
     designation: user.designation || "",
     roleCodes: roleCodes.map(normalizeRoleCode).filter(Boolean),
-    status: user.status || "Active",
+    isActive: user.isActive !== undefined && user.isActive !== null
+      ? Boolean(user.isActive)
+      : String(user.status || "Active").trim().toLowerCase() !== "inactive",
+    status: user.status || (user.isActive === false ? "Inactive" : "Active"),
   };
 };
 
@@ -142,16 +165,7 @@ export function transformBackendPermissionsToMatrix(rawPermissions = []) {
 
   items.forEach((item) => {
     const rawModule = item.moduleKey || item.moduleId || item.subModule || item.module || "";
-    let modId = String(rawModule).trim().toLowerCase().replace(/&/g, "").replace(/\//g, "-").replace(/\s+/g, "-");
-    if (modId === "staff-reimbursements" || modId === "staff-reimbursement" || modId === "reimbursements") {
-      modId = "reimbursement";
-    }
-    if (modId === "reports") {
-      modId = "reports-analytics";
-    }
-    if (modId === "inventory") {
-      modId = "inventory-management";
-    }
+    let modId = normalizeModuleKey(rawModule);
     if (!modId) return;
 
     if (!moduleMap.has(modId)) {
@@ -191,7 +205,10 @@ export async function getRoles(filters = {}) {
     const response = await apiClient.get(apiEndpoints.roles.cards, { params: filters });
     const payload = response?.data?.data || response?.data || [];
     if (Array.isArray(payload) && payload.length > 0) {
-      return apiResult(sortRolesByPriority(payload.map(normalizeRole)), "api");
+      payload.forEach(cacheRoleIdMapping);
+      const normalizedRoles = payload.map(normalizeRole);
+      normalizedRoles.forEach(cacheRoleIdMapping);
+      return apiResult(sortRolesByPriority(normalizedRoles), "api");
     }
   } catch (err) {
     console.warn("Live getRoles failed, falling back to cached/seed data:", err?.message);
@@ -205,7 +222,12 @@ export async function getRoleById(roleId) {
   const targetId = resolveRoleIdParam(roleId);
   try {
     const response = await apiClient.get(apiEndpoints.roles.getById(targetId));
-    if (response?.data?.data) return apiResult(normalizeRole(response.data.data), "api");
+    if (response?.data?.data) {
+      cacheRoleIdMapping(response.data.data);
+      const normalized = normalizeRole(response.data.data);
+      cacheRoleIdMapping(normalized);
+      return apiResult(normalized, "api");
+    }
   } catch (err) {
     console.warn("Live getRoleById failed:", err?.message);
   }
@@ -219,9 +241,16 @@ export async function createRole(payload = {}) {
     const response = await apiClient.post(apiEndpoints.roles.create, {
       roleName: payload.name || payload.roleName || payload.code,
       description: payload.description || "",
+      staffType: payload.staffType || "Both",
+      departmentId: payload.departmentId || null,
+      designationId: payload.designationId || null,
+      newDepartmentName: payload.newDepartmentName || null,
+      newDesignationName: payload.newDesignationName || null,
     });
     notifyRolesUpdated();
-    return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
+    const created = normalizeRole(response?.data?.data || response?.data);
+    cacheRoleIdMapping(created);
+    return apiResult(created, "api");
   } catch (err) {
     console.error("createRole failed:", err);
     throw err;
@@ -233,10 +262,17 @@ export async function updateRole(roleId, payload = {}) {
     const response = await apiClient.put(apiEndpoints.roles.update(roleId), {
       roleName: payload.name || payload.roleName || payload.code,
       description: payload.description || "",
+      staffType: payload.staffType || undefined,
+      departmentId: payload.departmentId !== undefined ? payload.departmentId : undefined,
+      designationId: payload.designationId !== undefined ? payload.designationId : undefined,
+      newDepartmentName: payload.newDepartmentName || null,
+      newDesignationName: payload.newDesignationName || null,
       isActive: payload.isActive ?? true,
     });
     notifyRolesUpdated();
-    return apiResult(normalizeRole(response?.data?.data || response?.data), "api");
+    const created = normalizeRole(response?.data?.data || response?.data);
+    cacheRoleIdMapping(created);
+    return apiResult(created, "api");
   } catch (err) {
     console.error("updateRole failed:", err);
     throw err;
@@ -288,12 +324,89 @@ export async function getModulesAndPermissions() {
   return apiResult(ALL_PERMISSION_MODULES, "catalog");
 }
 
+export function getRoleEligibleModules(roleCode, catalog = ALL_PERMISSION_MODULES) {
+  if (normalizeRoleCode(roleCode) === "ACCOUNTANT") {
+    return ACCOUNTANT_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "EXAMINATION_CELL") {
+    return EXAMINATION_CELL_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "BUS_DRIVER") {
+    return DRIVER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "INVENTORY_MANAGER") {
+    return INVENTORY_MANAGER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "HOSTEL_WARDEN") {
+    return HOSTEL_WARDEN_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "STUDENT") {
+    return STUDENT_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "FACULTY") {
+    return FACULTY_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "PARENT") {
+    return PARENT_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  if (normalizeRoleCode(roleCode) === "TRANSPORT_MANAGER") {
+    return TRANSPORT_MANAGER_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  const normalizedRole = normalizeRoleCode(roleCode);
+  if (
+    normalizedRole === "RECEPTIONIST" ||
+    normalizedRole === "NON_TEACHING" ||
+    normalizedRole === "NON_TEACHING_STAFF"
+  ) {
+    return RECEPTIONIST_SIDEBAR_NAVIGATION.map((item) => ({
+      ...item,
+      name: item.label,
+    }));
+  }
+  const keys = ROLE_SIDEBAR_MODULE_KEYS[normalizeRoleCode(roleCode)];
+  if (keys === null) return catalog;
+  if (!keys) return catalog;
+  const order = new Map(keys.map((key, index) => [key, index]));
+  return catalog
+    .filter((module) => order.has(module.id))
+    .sort((left, right) => order.get(left.id) - order.get(right.id));
+}
+
 export async function getRolePermissions(roleId, roleCode) {
   const targetId = resolveRoleIdParam(roleId, roleCode);
   try {
     const response = await apiClient.get(apiEndpoints.roles.permissions(targetId));
     const matrixData = response?.data?.data?.permissions || response?.data?.data || response?.data;
-    if (Array.isArray(matrixData) && matrixData.length > 0) {
+    // An empty array is a valid saved state: it means every permission is off.
+    // Do not replace it with frontend defaults after a successful API response.
+    if (Array.isArray(matrixData)) {
       return apiResult(transformBackendPermissionsToMatrix(matrixData), "api");
     }
   } catch (err) {
@@ -363,9 +476,9 @@ export async function updateRolePermissions(roleId, payload) {
     notifyRolesUpdated();
 
     try {
-      const refreshed = await getRolePermissions(targetId);
-      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
-        return apiResult(refreshed.data, "api");
+      const refreshed = await getRolePermissions(targetId, payload?.roleCode);
+      if (refreshed?.meta?.source === "api") {
+        return refreshed;
       }
     } catch {
       // Fallback to normalized
@@ -397,13 +510,15 @@ export async function getUserPermissions(userId, roleCode) {
   try {
     const response = await apiClient.get(apiEndpoints.roles.userPermissions(userId));
     const matrixData = response?.data?.data?.permissions || response?.data?.data || response?.data;
-    if (Array.isArray(matrixData) && matrixData.length > 0) {
+    // An empty response is an intentional "no permissions" state, not a
+    // failed request that should fall back to another role's permissions.
+    if (Array.isArray(matrixData)) {
       return apiResult(transformBackendPermissionsToMatrix(matrixData), "api");
     }
   } catch (err) {
     console.warn("Live getUserPermissions failed:", err?.message);
   }
-  return getRolePermissions(roleCode || "ADMIN", roleCode);
+  return getRolePermissions(roleCode || "UNASSIGNED", roleCode);
 }
 
 export async function getUserRoleDetails(userId) {
@@ -459,9 +574,9 @@ export async function updateUserPermissions(userId, payload) {
     notifyRolesUpdated();
 
     try {
-      const refreshed = await getUserPermissions(userId);
-      if (refreshed?.data && Array.isArray(refreshed.data) && refreshed.data.length > 0) {
-        return apiResult(refreshed.data, "api");
+      const refreshed = await getUserPermissions(userId, payload?.roleCode);
+      if (refreshed?.meta?.source === "api") {
+        return refreshed;
       }
     } catch {
       // Fallback to normalized
@@ -494,6 +609,7 @@ export async function getUserRoleAssignments(params = {}) {
   const search = String(params.search || "").trim().toLowerCase();
   const roleCode = params.roleCode ? normalizeRoleCode(params.roleCode) : null;
   const userType = String(params.userType || "").trim().toLowerCase();
+  const statusParam = String(params.status || "").trim().toLowerCase();
   const page = Number(params.page || 1);
   const pageSize = Number(params.pageSize || 8);
 
@@ -502,7 +618,8 @@ export async function getUserRoleAssignments(params = {}) {
       .some((value) => String(value || "").toLowerCase().includes(search));
     const matchesRole = !roleCode || (user.roleCodes || []).includes(roleCode);
     const matchesUserType = !userType || String(user.userType || "").toLowerCase() === userType;
-    return matchesSearch && matchesRole && matchesUserType;
+    const matchesStatus = !statusParam || statusParam === "all" || String(user.status || "Active").toLowerCase() === statusParam;
+    return matchesSearch && matchesRole && matchesUserType && matchesStatus;
   });
   const start = (page - 1) * pageSize;
   return apiResult({
@@ -540,14 +657,46 @@ export async function removeRoleFromUser(userId, roleCode) {
   }
 }
 
+export async function updateUserStatus(userId, isActive, reason = "") {
+  try {
+    const response = await apiClient.patch(apiEndpoints.roles.updateUserStatus(userId), {
+      isActive: Boolean(isActive),
+      reason,
+    });
+    notifyRolesUpdated();
+    return apiResult(
+      response?.data?.data || {
+        userId,
+        isActive: Boolean(isActive),
+        status: isActive ? "Active" : "Inactive",
+      },
+      "api",
+    );
+  } catch (err) {
+    console.error("updateUserStatus failed:", err);
+    throw err;
+  }
+}
+
 export async function getCurrentUserPermissions() {
   try {
     const response = await apiClient.get(apiEndpoints.roles.myPermissions);
-    const permissions = response?.data?.permissions || response?.data?.data || response?.data;
+    const permissions =
+      response?.data?.permissions ??
+      response?.data?.Permissions ??
+      response?.data?.data ??
+      response?.data?.Data ??
+      response?.data;
     if (Array.isArray(permissions)) {
       // Valid API response (whether permissions exist or are legitimately empty for this user)
       return apiResult(transformBackendPermissionsToMatrix(permissions), "api");
     }
+    const authUser = getAuthUser();
+    const existingPerms = authUser?.permissions || authUser?.rolePermissions;
+    if (Array.isArray(existingPerms) && existingPerms.length > 0) {
+      return apiResult(existingPerms, "cache");
+    }
+    return apiResult([], "error");
   } catch (err) {
     console.warn("Live getCurrentUserPermissions failed:", err?.message);
     // On network failure only, preserve the existing authenticated user's session cache if available
@@ -558,8 +707,6 @@ export async function getCurrentUserPermissions() {
     }
     return apiResult([], "error");
   }
-
-  return apiResult([], "api");
 }
 
 export async function cloneRole(sourceRoleId, { newName, description = "" }) {
@@ -578,31 +725,52 @@ export async function cloneRole(sourceRoleId, { newName, description = "" }) {
   return apiResult(newRole, "api");
 }
 
-export function exportPermissionsToCsv(role, matrix = []) {
+export function exportPermissionsToCsv(role, matrix = [], modules = []) {
   if (!role || !Array.isArray(matrix)) return;
 
   const rows = [
-    ["Module ID", "Module Name", "Screen ID", "Screen Name", "View", "Add/Create", "Edit/Update", "Delete"],
+    ["Module ID", "Module Name", "Section", "Module Access", "View", "Add/Create", "Edit/Update", "Delete"],
   ];
+  const moduleById = new Map((modules || []).map((module) => [module.id, module]));
+  const actionsByModule = new Map();
+  (matrix || []).forEach((permission) => {
+    const rawKey = String(permission.module || permission.id || "").trim().toLowerCase();
+    const normKey = normalizeModuleKey(rawKey);
+    const actions = permission.actions || [];
+    if (rawKey) actionsByModule.set(rawKey, actions);
+    if (normKey) actionsByModule.set(normKey, actions);
+  });
 
-  matrix.forEach((mod) => {
-    const screens = mod.screens && mod.screens.length > 0
-      ? mod.screens
-      : [{ screenId: "", screenName: "(Whole Module)", actions: mod.actions }];
+  const exportRows = modules.length
+    ? modules.map((module) => {
+        const permKey = String(module.permissionKey || "").trim().toLowerCase();
+        const idKey = String(module.id || "").trim().toLowerCase();
+        const actions = (
+          (permKey && actionsByModule.get(permKey)) ||
+          (permKey && actionsByModule.get(normalizeModuleKey(permKey))) ||
+          actionsByModule.get(idKey) ||
+          actionsByModule.get(normalizeModuleKey(idKey)) ||
+          (module.legacyPermissionKeys || []).map((k) => actionsByModule.get(k) || actionsByModule.get(normalizeModuleKey(k))).find(Boolean) ||
+          []
+        );
+        return { module: module.permissionKey || module.id, name: module.name, section: module.section, actions };
+      })
+    : matrix;
 
-    screens.forEach((scr) => {
-      const actions = scr.actions || [];
-      rows.push([
-        `"${mod.module || mod.id || ""}"`,
-        `"${mod.name || mod.module || ""}"`,
-        `"${scr.screenId || ""}"`,
-        `"${scr.screenName || scr.name || ""}"`,
-        actions.includes("view") ? "YES" : "NO",
-        actions.includes("create") ? "YES" : "NO",
-        actions.includes("edit") ? "YES" : "NO",
-        actions.includes("delete") ? "YES" : "NO",
-      ]);
-    });
+  exportRows.forEach((mod) => {
+    const moduleId = mod.module || mod.id || "";
+    const definition = moduleById.get(moduleId);
+    const actions = mod.actions || [];
+    rows.push([
+      `"${moduleId}"`,
+      `"${definition?.name || mod.name || moduleId}"`,
+      `"${definition?.section || ""}"`,
+      actions.length > 0 ? "YES" : "NO",
+      actions.includes("view") ? "YES" : "NO",
+      actions.includes("create") ? "YES" : "NO",
+      actions.includes("edit") ? "YES" : "NO",
+      actions.includes("delete") ? "YES" : "NO",
+    ]);
   });
 
   const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
@@ -621,3 +789,65 @@ export const rolesPermissionsApiConfig = Object.freeze({
   apiIntegrationEnabled: true,
 });
 
+
+export async function getDepartmentLookup() {
+  try {
+    const res = await apiClient.get(apiEndpoints.departments?.getAll || "/api/v1/departments", {
+      params: { includeInactive: false },
+    });
+    const raw = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    return raw.filter(
+      (d) => d && d.isActive !== false && d.status !== "Inactive" && d.Status !== "Inactive"
+    );
+  } catch (err) {
+    console.warn("Failed to load departments lookup:", err);
+    return [];
+  }
+}
+
+export async function getDesignationLookup(departmentId = null) {
+  try {
+    const params = {
+      includeInactive: false,
+      ...(departmentId ? { departmentId } : {}),
+    };
+    const res = await apiClient.get(apiEndpoints.designations?.getAll || "/api/v1/designations", { params });
+    const raw = res?.data?.data || res?.data?.items || (Array.isArray(res?.data) ? res.data : []);
+    return raw.filter(
+      (d) => d && d.isActive !== false && d.status !== "Inactive" && d.Status !== "Inactive"
+    );
+  } catch (err) {
+    console.warn("Failed to load designations lookup:", err);
+    return [];
+  }
+}
+
+export async function createQuickDepartment(payload = {}) {
+  const res = await apiClient.post(apiEndpoints.departments?.create || "/api/v1/departments", {
+    departmentName: payload.departmentName,
+    staffType: payload.staffType || "Both",
+    description: payload.description || "",
+  });
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    try { window.sessionStorage.removeItem("cms_cached_departments"); } catch {}
+  }
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new Event("departments-updated")); } catch {}
+  }
+  return res?.data?.data || res?.data;
+}
+
+export async function createQuickDesignation(payload = {}) {
+  const res = await apiClient.post(apiEndpoints.designations?.create || "/api/v1/designations", {
+    name: payload.name,
+    departmentId: payload.departmentId || null,
+    staffType: payload.staffType || "Both",
+  });
+  if (typeof window !== "undefined" && window.sessionStorage) {
+    try { window.sessionStorage.removeItem("cms_cached_designations"); } catch {}
+  }
+  if (typeof window !== "undefined") {
+    try { window.dispatchEvent(new Event("designations-updated")); } catch {}
+  }
+  return res?.data?.data || res?.data;
+}

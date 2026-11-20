@@ -7,6 +7,18 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleAssignment
         [JsonPropertyName("assignmentId")]
         public long AssignmentId { get; set; }
 
+        [JsonPropertyName("collegeId")]
+        public int CollegeId { get; set; }
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("academicYearId")]
+        public int? AcademicYearId { get; set; }
+
+        [JsonPropertyName("boardId")]
+        public int? BoardId { get; set; }
+
         [JsonPropertyName("id")]
         public string Id => AssignmentId.ToString();
 

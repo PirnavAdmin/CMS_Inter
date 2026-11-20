@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useCallback, useState } from "react";
+import { useExamCellTab } from "../statePersistence.js";
 import {
   UserRound,
   Landmark,
@@ -22,7 +23,7 @@ import {
 } from "lucide-react";
 import api, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
-import { getAuthUser } from "@/features/authStorage.js";
+import { getAuthUser } from "@/modules/auth/authStorage.js";
 import Page from "../layout/ExamCellPageLayout.jsx";
 import { payload } from "./Dashboard.jsx";
 import "./Profile.css";
@@ -98,75 +99,77 @@ const experienceFields = [
   ["roles", "Key Roles & Responsibilities", "text", false],
 ];
 
-const DEFAULT_EXPERIENCE = [
-  {
-    organization: "Pirnav Junior College",
-    designation: "Examination Incharge",
-    fromDate: "2021-06-01",
-    toDate: "Present",
-    totalYears: 5,
-    roles: "Supervision of board tests, biometric attendance, and university hall ticket verification",
-  },
-  {
-    organization: "Sri Chaitanya Educational Institutions",
-    designation: "Assistant Exam Coordinator",
-    fromDate: "2018-05-15",
-    toDate: "2021-05-30",
-    totalYears: 3,
-    roles: "Tabulation of term scores and question paper confidentiality",
-  },
-];
+const DEFAULT_EXPERIENCE = [];
 
-const DEFAULT_DOCUMENTS = [
-  { name: "Resume / Curriculum Vitae", type: "PDF", size: "1.2 MB", date: "15 Jan 2026", status: "Verified" },
-  { name: "Aadhaar Card Copy", type: "PDF", size: "840 KB", date: "10 Feb 2026", status: "Verified" },
-  { name: "PAN Card Document", type: "JPG", size: "620 KB", date: "10 Feb 2026", status: "Verified" },
-  { name: "Master of Science Degree Certificate", type: "PDF", size: "2.4 MB", date: "22 Feb 2026", status: "Verified" },
-  { name: "Staff Appointment & Joining Order", type: "PDF", size: "1.8 MB", date: "01 Jun 2021", status: "Verified" },
-];
+const DEFAULT_DOCUMENTS = [];
 
 export default function Profile() {
   const [user] = useState(() => getAuthUser() || {});
   const [profile, setProfile] = useState(() => {
     const auth = getAuthUser() || {};
     return {
-      firstName: "preethi",
-      lastName: "y",
+      firstName: auth.firstName || (auth.name ? auth.name.split(" ")[0] : "") || "",
+      lastName: auth.lastName || (auth.name ? auth.name.split(" ").slice(1).join(" ") : "") || "",
       middleName: "",
-      gender: "Female",
-      dateOfBirth: "1989-07-13",
-      maritalStatus: "Married",
+      gender: auth.gender || "",
+      dateOfBirth: auth.dateOfBirth || auth.dob || "",
+      maritalStatus: auth.maritalStatus || "",
       nationality: "Indian",
-      aadhaar: "348512407895",
-      panNumber: "ABCDE1234F",
-      bloodGroup: "O+",
+      aadhaar: auth.aadhaar || auth.aadhaarNumber || "",
+      panNumber: auth.panNumber || auth.pan || "",
+      bloodGroup: auth.bloodGroup || "",
       designation: "Examination Incharge",
       departmentName: "Examinations",
-      employeeId: "MNT0043",
+      employeeId: auth.employeeId || auth.staffId || "",
       campusName: "Main Campus (HQ)",
-      email: "anusha987r@gmail.com",
-      mobile: "7989149180",
-      bankName: "State Bank of India",
-      accountHolderName: "Preethi Y",
-      accountNumber: "389201948102",
-      ifscCode: "SBIN0004921",
-      branch: "Main Campus Branch",
+      email: auth.email || "",
+      mobile: auth.mobile || auth.phoneNumber || auth.phone || "",
+      bankName: auth.bankName || "",
+      accountHolderName: auth.accountHolderName || auth.name || "",
+      accountNumber: auth.accountNumber || "",
+      ifscCode: auth.ifscCode || "",
+      branch: auth.branch || "",
       accountType: "Salary",
-      currentAddress: "Plot No. 42, Green Valley Enclave",
-      permanentAddress: "Plot No. 42, Green Valley Enclave",
-      city: "Hyderabad",
-      district: "Hyderabad",
-      state: "Telangana",
-      pincode: "500084",
+      currentAddress: auth.currentAddress || auth.address || "",
+      permanentAddress: auth.permanentAddress || auth.address || "",
+      city: auth.city || "",
+      district: auth.district || "",
+      state: auth.state || "",
+      pincode: auth.pincode || auth.pin || "",
       country: "India",
       ...auth,
     };
   });
 
   const identifier = user.staffId || user.staff?.id || user.employeeId || profile.employeeId;
-  const staffId = profile.staffId || user.staffId || user.employeeId || profile.employeeId || "MNT0043";
+  const staffId = profile.staffId || user.staffId || user.employeeId || profile.employeeId || "";
 
-  const [step, setStep] = useState(0);
+  const SECTION_KEYS = useMemo(() => ["personal", "bank", "address", "experience", "documents", "preview"], []);
+  const [activeTab, setActiveTab] = useExamCellTab({
+    moduleKey: "profile",
+    defaultTab: "personal",
+    tabAliases: {
+      "personal": "personal",
+      "personal-info": "personal",
+      "bank": "bank",
+      "bank-info": "bank",
+      "address": "address",
+      "address-info": "address",
+      "experience": "experience",
+      "documents": "documents",
+      "preview": "preview",
+    },
+  });
+
+  const step = useMemo(() => {
+    const idx = SECTION_KEYS.indexOf(activeTab.toLowerCase());
+    return idx >= 0 ? idx : 0;
+  }, [activeTab, SECTION_KEYS]);
+
+  const setStep = useCallback((newStep) => {
+    const key = SECTION_KEYS[newStep] || "personal";
+    setActiveTab(key);
+  }, [setActiveTab, SECTION_KEYS]);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [busy, setBusy] = useState(false);
@@ -251,7 +254,7 @@ export default function Profile() {
     [profile.firstName, profile.lastName].filter(Boolean).join(" ") ||
     profile.fullName ||
     profile.name ||
-    "preethi y";
+    (user?.name || user?.fullName || "User");
 
   const beginEdit = () => {
     setDraft(
@@ -315,6 +318,7 @@ export default function Profile() {
       setError(getApiErrorMessage(err) || "Unable to save profile details.");
     } finally {
       setBusy(false);
+
     }
   };
 
@@ -331,15 +335,24 @@ export default function Profile() {
       setError(getApiErrorMessage(err) || "Unable to save experience.");
     } finally {
       setBusy(false);
+
     }
   };
 
-  const uploadDocument = (event) => {
+  const uploadDocument = async (event) => {
     event.preventDefault();
     if (!documentFile) return;
     setBusy(true);
     setError("");
-    setTimeout(() => {
+    try {
+      const formData = new FormData();
+      formData.append("file", documentFile);
+      formData.append("documentType", documentType);
+      try {
+        await api.post(apiEndpoints.faculty.uploadDocument(staffId), formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+      } catch {}
       const newDoc = {
         name: `${documentType} - ${documentFile.name}`,
         type: documentFile.name.endsWith(".pdf") ? "PDF" : "IMG",
@@ -351,8 +364,12 @@ export default function Profile() {
       setDocumentFile(null);
       setNotice("Document uploaded successfully.");
       setTimeout(() => setNotice(""), 3500);
+
+    } catch (err) {
+      setError(getApiErrorMessage(err) || "Failed to upload document.");
+    } finally {
       setBusy(false);
-    }, 500);
+    }
   };
 
   const renderFields = (entry) => (
@@ -371,14 +388,24 @@ export default function Profile() {
       {/* PROFILE HEADER HERO CARD */}
       <section className="ec-card ec-profile-header-card">
         <div className="ec-profile-header-left">
-          <span className="ec-profile-avatar-circle">
-            {displayName
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((word) => word[0])
-              .join("")
-              .toLowerCase()}
+          <span className="ec-profile-avatar-circle" style={{ overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+            {profile.photoUrl || profile.photoPath || profile.profilePhoto ? (
+              <img
+                src={profile.photoUrl || profile.photoPath || profile.profilePhoto}
+                alt={displayName}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            ) : (
+              displayName
+                .split(/\s+/)
+                .slice(0, 2)
+                .map((word) => word[0])
+                .join("")
+                .toLowerCase()
+            )}
           </span>
+
           <div className="ec-profile-header-meta">
             <div className="ec-profile-name-row">
               <h2>{displayName}</h2>

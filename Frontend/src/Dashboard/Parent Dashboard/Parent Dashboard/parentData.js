@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAcademicContext } from "../../context/AcademicContext.jsx";
 import { getAuthUser } from "../../features/authStorage.js";
 import { useParentPortalContext } from "./context/ParentPortalContext.jsx";
-import { holidayRecords } from "@/data/mockData.js";
 
 // ==========================================================================
 // PIRNAV COLLEGE ERP — PARENT MODULE DATA & IN-MEMORY STATE (NO STORAGE)
@@ -201,7 +200,7 @@ export const useParentPortal = () => {
     rawTimetable: [],
     childAttendance: null,
     attendanceOverview: null,
-    holidays: holidayRecords || [],
+    holidays: [],
     announcements: collegeAnnouncements || [],
     events: upcomingEvents || [],
     refreshHolidays: () => {},

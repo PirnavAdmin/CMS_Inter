@@ -27,178 +27,13 @@ import Search3DIcon from "@/components/common/Search3DIcon.jsx";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
-const MOCK_LEVEL_SUMMARIES = [
-  { id: "lvl-1", name: "1st Year", total: 622, present: 590, absent: 22, late: 10, leave: 0, percentage: 94.8 },
-  { id: "lvl-2", name: "2nd Year", total: 626, present: 586, absent: 30, late: 10, leave: 0, percentage: 93.6 },
-];
+const MOCK_LEVEL_SUMMARIES = [];
 
-const MOCK_GROUP_SUMMARIES = [
-  { id: "grp-mpc", name: "MPC", level: "1st Year", total: 310, present: 295, absent: 10, late: 5, leave: 0, percentage: 95.1, color: "#2563eb" },
-  { id: "grp-bipc", name: "BIPC", level: "1st Year", total: 250, present: 235, absent: 10, late: 5, leave: 0, percentage: 94.0, color: "#7c3aed" },
-  { id: "grp-cec", name: "CEC", level: "1st Year", total: 180, present: 166, absent: 10, late: 4, leave: 0, percentage: 92.2, color: "#f59e0b" },
-  { id: "grp-mec", name: "MEC", level: "2nd Year", total: 160, present: 150, absent: 7, late: 3, leave: 0, percentage: 93.8, color: "#16a34a" },
-  { id: "grp-hec", name: "HEC", level: "2nd Year", total: 120, present: 110, absent: 7, late: 3, leave: 0, percentage: 91.7, color: "#e11d48" },
-];
+const MOCK_GROUP_SUMMARIES = [];
 
-const MOCK_SECTION_SUMMARIES = [
-  { id: "sec-mpc-a", name: "Section A", groupName: "MPC", levelName: "1st Year", classTeacher: "K. Venkatesh", total: 52, present: 50, absent: 1, late: 1, leave: 0, percentage: 96.2 },
-  { id: "sec-mpc-b", name: "Section B", groupName: "MPC", levelName: "1st Year", classTeacher: "S. Anitha", total: 48, present: 45, absent: 2, late: 1, leave: 0, percentage: 93.8 },
-  { id: "sec-bipc-a", name: "Section A", groupName: "BIPC", levelName: "1st Year", classTeacher: "P. Rajesh", total: 60, present: 57, absent: 2, late: 1, leave: 0, percentage: 95.0 },
-  { id: "sec-cec-a", name: "Section A", groupName: "CEC", levelName: "1st Year", classTeacher: "M. Lakshmi", total: 58, present: 54, absent: 3, late: 1, leave: 0, percentage: 93.1 },
-];
+const MOCK_SECTION_SUMMARIES = [];
 
-const MOCK_STUDENTS = [
-  {
-    id: "101",
-    rollNumber: "2026-MPC-001",
-    admissionNumber: "ADM-2026-101",
-    name: "Aarav Sharma",
-    level: "1st Year",
-    group: "MPC",
-    section: "Section A",
-    status: "Present",
-    inTime: "08:42 AM",
-    outTime: "04:15 PM",
-    markedAt: "08:45 AM",
-    markedBy: "K. Venkatesh (Class Teacher)",
-    remarks: "On time",
-  },
-  {
-    id: "102",
-    rollNumber: "2026-MPC-002",
-    admissionNumber: "ADM-2026-102",
-    name: "Bhavya Reddy",
-    level: "1st Year",
-    group: "MPC",
-    section: "Section A",
-    status: "Present",
-    inTime: "08:44 AM",
-    outTime: "04:15 PM",
-    markedAt: "08:45 AM",
-    markedBy: "K. Venkatesh (Class Teacher)",
-    remarks: "",
-  },
-  {
-    id: "103",
-    rollNumber: "2026-MPC-003",
-    admissionNumber: "ADM-2026-103",
-    name: "Charan Kumar",
-    level: "1st Year",
-    group: "MPC",
-    section: "Section A",
-    status: "Absent",
-    inTime: "—",
-    outTime: "—",
-    markedAt: "09:00 AM",
-    markedBy: "K. Venkatesh (Class Teacher)",
-    remarks: "Informed via phone call",
-  },
-  {
-    id: "104",
-    rollNumber: "2026-MPC-004",
-    admissionNumber: "ADM-2026-104",
-    name: "Deepika Rao",
-    level: "1st Year",
-    group: "MPC",
-    section: "Section A",
-    status: "Late",
-    inTime: "09:12 AM",
-    outTime: "04:15 PM",
-    markedAt: "09:15 AM",
-    markedBy: "K. Venkatesh (Class Teacher)",
-    remarks: "Bus delay",
-  },
-  {
-    id: "105",
-    rollNumber: "2026-MPC-005",
-    admissionNumber: "ADM-2026-105",
-    name: "Eshwar Varma",
-    level: "1st Year",
-    group: "MPC",
-    section: "Section A",
-    status: "On Leave",
-    inTime: "—",
-    outTime: "—",
-    markedAt: "08:30 AM",
-    markedBy: "Admin Office",
-    remarks: "Medical leave approved",
-  },
-  {
-    id: "106",
-    rollNumber: "2026-BIPC-001",
-    admissionNumber: "ADM-2026-106",
-    name: "Farhan Ahmed",
-    level: "1st Year",
-    group: "BIPC",
-    section: "Section A",
-    status: "Present",
-    inTime: "08:38 AM",
-    outTime: "04:15 PM",
-    markedAt: "08:45 AM",
-    markedBy: "P. Rajesh",
-    remarks: "",
-  },
-  {
-    id: "107",
-    rollNumber: "2026-BIPC-002",
-    admissionNumber: "ADM-2026-107",
-    name: "Gautami Nair",
-    level: "1st Year",
-    group: "BIPC",
-    section: "Section A",
-    status: "Present",
-    inTime: "08:40 AM",
-    outTime: "04:15 PM",
-    markedAt: "08:45 AM",
-    markedBy: "P. Rajesh",
-    remarks: "",
-  },
-  {
-    id: "108",
-    rollNumber: "2026-CEC-001",
-    admissionNumber: "ADM-2026-108",
-    name: "Harish Gupta",
-    level: "1st Year",
-    group: "CEC",
-    section: "Section A",
-    status: "Absent",
-    inTime: "—",
-    outTime: "—",
-    markedAt: "09:05 AM",
-    markedBy: "M. Lakshmi",
-    remarks: "Unexcused absence",
-  },
-  {
-    id: "109",
-    rollNumber: "2026-MEC-001",
-    admissionNumber: "ADM-2026-109",
-    name: "Ishita Roy",
-    level: "2nd Year",
-    group: "MEC",
-    section: "Section A",
-    status: "Present",
-    inTime: "08:41 AM",
-    outTime: "04:15 PM",
-    markedAt: "08:45 AM",
-    markedBy: "S. Rao",
-    remarks: "",
-  },
-  {
-    id: "110",
-    rollNumber: "2026-HEC-001",
-    admissionNumber: "ADM-2026-110",
-    name: "Jaya Prakash",
-    level: "2nd Year",
-    group: "HEC",
-    section: "Section A",
-    status: "Not Marked",
-    inTime: "—",
-    outTime: "—",
-    markedAt: "—",
-    markedBy: "—",
-    remarks: "Pending entry",
-  },
-];
+const MOCK_STUDENTS = [];
 
 function statusClass(status) {
   switch (status) {
@@ -310,10 +145,10 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
 
   // Overall Statistics calculated from filtered list
   const stats = useMemo(() => {
-    const total = 1248;
-    const present = 1176;
-    const absent = 52;
-    const late = 20;
+    const total = 0;
+    const present = 0;
+    const absent = 0;
+    const late = 0;
     const leave = 0;
     const pct = ((present / total) * 100).toFixed(1);
     return { total, present, absent, late, leave, pct };

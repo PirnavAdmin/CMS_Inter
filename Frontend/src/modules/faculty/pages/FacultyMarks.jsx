@@ -48,21 +48,32 @@ const extractId = (val) => {
   return str;
 };
 
-const isObjectiveExam = (exam) => {
+const isObjectiveExam = (exam, schedules = []) => {
+  const schedList = Array.isArray(schedules)
+    ? schedules
+    : (Array.isArray(exam?.schedules) ? exam.schedules : (Array.isArray(exam?.examinationSchedules) ? exam.examinationSchedules : []));
+
+  for (const sch of schedList) {
+    const schExamMode = String(sch?.examMode || "").trim().toUpperCase();
+    if (schExamMode === "OBJECTIVE") return true;
+    const schMode = String(sch?.scheduleMode || sch?.mode || "").trim().toUpperCase();
+    if (["OBJECTIVE", "COMBINED_OBJECTIVE", "PATTERN_WISE", "COMBINED"].includes(schMode)) return true;
+    const schPat = String(sch?.patternName || "").trim().toLowerCase();
+    if (schPat && !schPat.includes("regular")) return true;
+  }
+
   if (!exam) return false;
-  const cat = String(exam.examCategory || exam.category || "").trim().toUpperCase();
-  if (cat === "OBJECTIVE") return true;
-  if (cat === "REGULAR") return false;
 
   const mode = String(exam.scheduleMode || exam.mode || exam.examMode || "").trim().toUpperCase();
-  if (["OBJECTIVE", "COMBINED_OBJECTIVE"].includes(mode)) return true;
-  if (mode === "SUBJECT_WISE" || mode === "REGULAR") return false;
+  if (["OBJECTIVE", "COMBINED_OBJECTIVE", "PATTERN_WISE", "COMBINED"].includes(mode)) return true;
 
   const pat = String(exam.examPattern || exam.pattern || exam.patternName || "").trim().toLowerCase();
   if (pat.includes("regular")) return false;
   if (
     pat.includes("objective") ||
     pat.includes("mains") ||
+    pat.includes("advance") ||
+    pat.includes("eamcet") ||
     pat.includes("neet") ||
     pat.includes("jee") ||
     pat.includes("bitsat") ||
@@ -70,6 +81,104 @@ const isObjectiveExam = (exam) => {
   ) {
     return true;
   }
+
+  const cat = String(exam.examCategory || exam.category || "").trim().toUpperCase();
+  if (cat === "OBJECTIVE") return true;
+  if (cat === "REGULAR") return false;
+
+  return false;
+};
+
+// Helper to strictly determine if an examination matches the selected academic group
+const isExamMatchingGroup = (exam, targetGroupId, targetGroupName, allGroups = []) => {
+  if (!exam || !targetGroupId) return false;
+
+  const cleanTargetId = String(targetGroupId).trim();
+  const cleanTargetName = String(targetGroupName || "").trim().toLowerCase();
+
+  // All other group names in the college (e.g. ["bipc", "mec", "cec", "hec"])
+  const otherGroupNames = (allGroups || [])
+    .filter((g) => {
+      const gid = String(g.id || g.groupId || "").trim();
+      return gid && gid !== cleanTargetId;
+    })
+    .map((g) => String(g.name || g.groupName || "").trim().toLowerCase())
+    .filter((name) => name.length >= 2);
+
+  // 1. Check positive numeric groupId / GroupId
+  const rawGid = exam.groupId ?? exam.GroupId;
+  const numGid = rawGid != null && rawGid !== "" ? Number(rawGid) : null;
+  const hasValidNumGid = numGid !== null && !isNaN(numGid) && numGid > 0;
+
+  // 2. Check groupIds array
+  const rawGids = exam.groupIds ?? exam.GroupIds;
+  const hasGidsArray = Array.isArray(rawGids) && rawGids.length > 0;
+  const gidsSet = hasGidsArray ? new Set(rawGids.map((id) => String(id).trim())) : null;
+
+  // 3. Check groupName / GroupName
+  const examGName = String(exam.groupName ?? exam.GroupName ?? exam.group?.name ?? exam.group?.groupName ?? "").trim().toLowerCase();
+
+  // 4. Check groupSubjectSelections (Objective examinations)
+  const gSubjectSelections = exam.groupSubjectSelections;
+  const hasGSubjSelections = gSubjectSelections && typeof gSubjectSelections === "object" && Object.keys(gSubjectSelections).length > 0;
+  const gSubjKeys = hasGSubjSelections ? Object.keys(gSubjectSelections).map((k) => String(k).trim()) : [];
+
+  // Exclude explicit mismatches first:
+  // A) Exam specifies a different valid groupId, and groupIds does not include targetGroupId
+  if (hasValidNumGid && String(numGid) !== cleanTargetId) {
+    if (!hasGidsArray || !gidsSet.has(cleanTargetId)) {
+      return false;
+    }
+  }
+
+  // B) Exam has groupIds array and targetGroupId is NOT in it
+  if (hasGidsArray && !gidsSet.has(cleanTargetId)) {
+    return false;
+  }
+
+  // C) Exam has groupSubjectSelections and targetGroupId is NOT among the group keys
+  if (hasGSubjSelections && !gSubjKeys.includes(cleanTargetId)) {
+    return false;
+  }
+
+  // D) Exam has explicit groupName of another known group
+  if (examGName) {
+    if (cleanTargetName && (examGName === cleanTargetName || examGName.includes(cleanTargetName))) {
+      return true;
+    }
+    if (otherGroupNames.some((other) => examGName === other || (other.length >= 3 && examGName.includes(other)))) {
+      return false;
+    }
+  }
+
+  // E) Exam title or code specifically mentions another group as a whole word
+  const examTitleAndCode = `${exam.examName || ""} ${exam.examinationName || ""} ${exam.name || ""} ${exam.examCode || ""} ${exam.code || ""}`.toLowerCase();
+  const mentionsOtherGroup = otherGroupNames.some(
+    (other) => other && other.length >= 3 && new RegExp(`\\b${other}\\b`, "i").test(examTitleAndCode)
+  );
+  if (mentionsOtherGroup) {
+    const mentionsTargetGroup = cleanTargetName && cleanTargetName.length >= 2 && new RegExp(`\\b${cleanTargetName}\\b`, "i").test(examTitleAndCode);
+    if (!mentionsTargetGroup) {
+      return false;
+    }
+  }
+
+  // Positive matches:
+  if (hasValidNumGid && String(numGid) === cleanTargetId) return true;
+  if (hasGidsArray && gidsSet.has(cleanTargetId)) return true;
+  if (hasGSubjSelections && gSubjKeys.includes(cleanTargetId)) return true;
+  if (cleanTargetName && examGName && (examGName === cleanTargetName || examGName.includes(cleanTargetName))) return true;
+  if (cleanTargetName && cleanTargetName.length >= 2 && new RegExp(`\\b${cleanTargetName}\\b`, "i").test(examTitleAndCode)) return true;
+
+  // Schedules check
+  const schedules = exam.schedules || exam.examinationSchedules || [];
+  if (Array.isArray(schedules) && schedules.length > 0) {
+    const schedGids = schedules.map((s) => s.groupId != null ? String(s.groupId).trim() : "").filter(Boolean);
+    if (schedGids.length > 0) {
+      return schedGids.includes(cleanTargetId);
+    }
+  }
+
   return false;
 };
 
@@ -310,9 +419,19 @@ export default function FacultyMarks() {
     maxTotal: 100,
     maxTheory: 100,
     maxInternal: 0,
+    maxPractical: 0,
+    showInternal: false,
+    showPractical: false,
+    showTheory: true,
+    showObtained: false,
     passingMarks: 35,
     examDate: null,
+    isObjective: false,
+    category: "REGULAR",
   });
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [liveAnnouncement, setLiveAnnouncement] = useState("");
+  const inputRefs = useRef({});
   const [evaluationStatus, setEvaluationStatus] = useState("NOT STARTED");
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [savingMarks, setSavingMarks] = useState(false);
@@ -330,6 +449,7 @@ export default function FacultyMarks() {
   // View Results Modal State
   const [viewResultsEval, setViewResultsEval] = useState(null);
   const [resultsModalPage, setResultsModalPage] = useState(1);
+  const [resultsModalLoading, setResultsModalLoading] = useState(false);
   const resultsPageSize = 5;
 
   // Report Tab Filters & Pagination State
@@ -383,7 +503,13 @@ export default function FacultyMarks() {
             empId: ev.facultyCode || ev.empId || (staffId ? `EMP-${staffId}` : ""),
             status: normalizedStatus,
             statusCode: normalizedStatus,
+            mode: String(ev.mode || "").toUpperCase() || null,
+            maxMarks: ev.maxMarks != null ? Number(ev.maxMarks) : null,
+            internalMax: ev.internalMax != null ? Number(ev.internalMax) : null,
+            practicalMax: ev.practicalMax != null ? Number(ev.practicalMax) : null,
+            theoryMax: ev.theoryMax != null ? Number(ev.theoryMax) : null,
             adminRemarks: ev.rejectionReason || ev.remarks || ev.adminRemarks || "",
+            totalStudents: Number(ev.totalStudents || (Array.isArray(ev.students) ? ev.students.length : (Array.isArray(ev.rows) ? ev.rows.length : 0))),
             rows: ev.rows || ev.students || [],
             submittedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split("T")[0] : (ev.submittedAt ? String(ev.submittedAt).split("T")[0] : ""),
             updatedAt: ev.lastSubmittedAt ? String(ev.lastSubmittedAt).split("T")[0] : (ev.updatedAt ? String(ev.updatedAt).split("T")[0] : ""),
@@ -407,7 +533,7 @@ export default function FacultyMarks() {
           return merged;
         });
       } else {
-        setEvaluationsLedger({});
+        setEvaluationsLedger({}); // EVAL_EMPTY
       }
     } catch (err) {
       console.warn("Could not load faculty evaluations from API:", err);
@@ -638,6 +764,24 @@ export default function FacultyMarks() {
     });
   }, [timetableSlots, selectedLevel, selectedGroup, selectedProgram, sectionsList]);
 
+  /* duplicate context helpers start
+  const selectedGroupName = useMemo(() => {
+    const found = timetableGroups.find((g) => String(g.id) === String(selectedGroup));
+    return found?.name || "";
+  }, [timetableGroups, selectedGroup]);
+
+  const selectedProgramName = useMemo(() => {
+    const found = timetablePrograms.find((p) => String(p.id) === String(selectedProgram));
+    return found?.name || "";
+  }, [timetablePrograms, selectedProgram]);
+
+  const selectedSectionCleanName = useMemo(() => {
+    const found = timetableSections.find((s) => String(s.id) === String(selectedSection));
+    return found?.name || "";
+  }, [timetableSections, selectedSection]);
+
+  duplicate context helpers end */
+
   // Fetch Completed Examinations matching Academic Context (Strictly completed only)
   useEffect(() => {
     let isMounted = true;
@@ -647,8 +791,15 @@ export default function FacultyMarks() {
     const cleanYear = extractId(selectedYear);
     const params = {
       campusId: effectiveCampusId,
-      ...(cleanBoard ? { boardId: Number(cleanBoard) } : {}),
-      ...(cleanYear ? { academicYearId: Number(cleanYear) } : {}),
+      CampusId: effectiveCampusId,
+      ...(cleanBoard ? { boardId: Number(cleanBoard), BoardId: Number(cleanBoard) } : {}),
+      ...(cleanYear ? { academicYearId: Number(cleanYear), AcademicYearId: Number(cleanYear) } : {}),
+      ...(selectedLevel ? { academicLevelId: Number(selectedLevel), AcademicLevelId: Number(selectedLevel) } : {}),
+      ...(selectedGroup ? { groupId: Number(selectedGroup), GroupId: Number(selectedGroup) } : {}),
+      ...(selectedProgram ? { programId: Number(selectedProgram), ProgramId: Number(selectedProgram) } : {}),
+      status: "COMPLETED",
+
+
     };
 
     apiClient.get("/api/v1/examinations", { params })
@@ -674,10 +825,17 @@ export default function FacultyMarks() {
                 (Array.isArray(e.academicLevelIds) && e.academicLevelIds.map(String).includes(String(selectedLevel)));
               if (!matchesLevel) return false;
             }
+            if (selectedProgram) {
+              const matchesProgram = !e.programId || String(e.programId) === String(selectedProgram) ||
+                (Array.isArray(e.programIds) && e.programIds.map(String).includes(String(selectedProgram)));
+              if (!matchesProgram) return false;
+            }
             if (selectedGroup) {
-              const matchesGroup = !e.groupId || String(e.groupId) === String(selectedGroup) ||
-                (Array.isArray(e.groupIds) && e.groupIds.map(String).includes(String(selectedGroup)));
-              if (!matchesGroup) return false;
+              const curGName = timetableGroups.find((g) => String(g.id) === String(selectedGroup))?.name || ""; if (!isExamMatchingGroup(e, selectedGroup, curGName, timetableGroups)) { return false;
+            }
+
+
+
             }
 
             return true;
@@ -688,18 +846,25 @@ export default function FacultyMarks() {
       .catch((err) => console.warn("Error fetching examinations:", err));
 
     return () => { isMounted = false; };
-  }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, context?.profile?.campusId, academicCtx.selectedCampus]);
+  }, [selectedBoard, selectedYear, selectedLevel, selectedGroup, selectedProgram, timetableGroups, context?.profile?.campusId, academicCtx.selectedCampus]);
+
+  // Group-Filtered examinations list ensuring the dropdown strictly shows only group examinations
+  const filteredExaminationsList = useMemo(() => {
+    if (!selectedGroup) return examinationsList;
+    const gName = timetableGroups.find((g) => String(g.id) === String(selectedGroup))?.name || ""; return examinationsList.filter((ex) => isExamMatchingGroup(ex, selectedGroup, gName, timetableGroups));
+  }, [examinationsList, selectedGroup, timetableGroups]);
 
   // Keep selectedExam synchronized if the filtered completed exam list changes
   useEffect(() => {
-    if (selectedExam && examinationsList.length > 0) {
-      const exists = examinationsList.some((e) => String(e.examinationId || e.id || e.examId) === String(selectedExam));
+    if (selectedExam) {
+      const exists = filteredExaminationsList.some((e) => String(e.examinationId || e.id || e.examId) === String(selectedExam));
       if (!exists) {
         setSelectedExam("");
         setCurrentStudents([]);
+        setSubjectInclusionError(null);
       }
     }
-  }, [examinationsList, selectedExam]);
+  }, [filteredExaminationsList, selectedExam]);
 
   // Authoritative Faculty-Allocated Subjects matching Section & Academic Context (NO unrestricted fallbacks)
   const filteredSubjects = useMemo(() => {
@@ -731,6 +896,7 @@ export default function FacultyMarks() {
               subjectName: s.subjectName,
               subjectCode: s.subjectCode || "",
             });
+
           }
         }
       }
@@ -756,8 +922,8 @@ export default function FacultyMarks() {
   }, [timetableSections, selectedSection]);
 
   const selectedExamInfo = useMemo(() => {
-    return examinationsList.find((e) => String(e.examinationId || e.id) === String(selectedExam)) || null;
-  }, [examinationsList, selectedExam]);
+    return filteredExaminationsList.find((e) => String(e.examinationId || e.id) === String(selectedExam)) || null;
+  }, [filteredExaminationsList, selectedExam]);
 
   const selectedExamName = selectedExamInfo
     ? `${selectedExamInfo.examName || selectedExamInfo.name || "Exam"} (${selectedExamInfo.examCode || selectedExamInfo.code || selectedExamInfo.examinationId || "EXAM"})`
@@ -853,9 +1019,10 @@ export default function FacultyMarks() {
         return (targetCode && aCode === targetCode) || (targetName && aName === targetName);
       });
 
+      setFieldErrors({});
+      setLiveAnnouncement("");
+
       // Strict validation: Verify faculty subject is officially included in the selected examination configuration
-      // For Regular: must have individual schedule (or in allocatedSubjectIds)
-      // For Objective: check in exam object in included subjects
       const inclusionCheck = validateSubjectExamInclusion(selectedExamObj, newSubject, targetSubj, altAlloc, schedules);
       if (!inclusionCheck.isValid) {
         setSubjectInclusionError(inclusionCheck.error);
@@ -867,48 +1034,140 @@ export default function FacultyMarks() {
       }
       setSubjectInclusionError(null);
 
-      // Resolve schedule config (examDate, maxTotal, maxTheory, maxInternal, passingMarks)
-      const isObjective = isObjectiveExam(selectedExamObj);
-      let examDate = null;
-      let passingMarks = 35;
-      let maxTotal = 100;
-      let maxTheory = 100;
-      let maxInternal = 0;
+      // Fetch authoritative evaluation header/maxima AND subject metadata from DB endpoints
+      const subjLookupBoard = cleanBoard || selectedExamObj?.boardId;
+      const subjLookupGroup = selectedGroup || selectedExamObj?.groupId;
+      const subjLookupLevel = selectedLevel || selectedExamObj?.academicLevelId;
+      const [evalStudentsRes, subjectsCtxRes] = await Promise.all([
+        apiClient
+          .get(`/api/v1/faculty/evaluations/${newSubject}_${targetSec}_${newExam}/students`, {
+            params: { campusId: effectiveCampusId },
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+            skipGlobalLoader: true,
+          })
+          .catch(() => null),
+        (subjLookupGroup || (subjLookupBoard && subjLookupLevel))
+          ? apiClient
+              .get("/api/v1/subjects/context", {
+                params: {
+                  ...(subjLookupBoard ? { boardId: Number(subjLookupBoard) } : {}),
+                  ...(subjLookupGroup ? { groupId: Number(subjLookupGroup) } : {}),
+                  ...(subjLookupLevel ? { academicLevelId: Number(subjLookupLevel) } : {}),
+                },
+                skipGlobalLoader: true,
+              })
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
 
-      if (selectedExamObj) {
-        passingMarks = Number(selectedExamObj.passingMarks || selectedExamObj.passMarks || 35);
-        maxTotal = Number(selectedExamObj.maxMarks || selectedExamObj.totalMarks || 100);
+      const evalHeader = evalStudentsRes?.data?.data || evalStudentsRes?.data || null;
+      const subjectsCtxRaw = subjectsCtxRes?.data?.data || subjectsCtxRes?.data || [];
+      const subjectsCtxList = Array.isArray(subjectsCtxRaw) ? subjectsCtxRaw : [];
+      const subjectMeta = subjectsCtxList.find((sub) => {
+        const sid = String(sub.subjectId ?? sub.id ?? "").trim();
+        if (sid === String(newSubject).trim()) return true;
+        if (altAlloc?.subjectId && sid === String(altAlloc.subjectId).trim()) return true;
+        const sc = String(sub.subjectCode || "").trim().toLowerCase();
+        const sn = String(sub.subjectName || "").trim().toLowerCase();
+        if (targetCode && sc && sc === targetCode) return true;
+        if (targetName && sn && sn === targetName) return true;
+        return false;
+      }) || null;
 
-        const subjSchedule = schedules.find((sch) => {
-          const schId = String(sch.subjectId).trim();
-          if (schId === String(newSubject).trim()) return true;
-          if (altAlloc?.subjectId && schId === String(altAlloc.subjectId).trim()) return true;
-          if (Array.isArray(sch.includedSubjectIds)) {
-            if (sch.includedSubjectIds.map(String).includes(String(newSubject).trim())) return true;
-            if (altAlloc?.subjectId && sch.includedSubjectIds.map(String).includes(String(altAlloc.subjectId).trim())) return true;
-          }
-          const sCode = (sch.subjectCode || "").trim().toLowerCase();
-          const sName = (sch.subjectName || "").trim().toLowerCase();
-          if (targetCode && sCode === targetCode) return true;
-          if (targetName && sName === targetName) return true;
-          return false;
-        }) || (schedules.length > 0 ? schedules[0] : null);
-
-        if (subjSchedule) {
-          examDate = subjSchedule.examDate || subjSchedule.date || selectedExamObj.startDate || selectedExamObj.endDate;
-          if (subjSchedule.maxMarks) maxTotal = Number(subjSchedule.maxMarks);
-          if (subjSchedule.theoryMarks != null) maxTheory = Number(subjSchedule.theoryMarks);
-          if (subjSchedule.internalMarks != null) maxInternal = Number(subjSchedule.internalMarks);
-          if (subjSchedule.passingMarks != null) passingMarks = Number(subjSchedule.passingMarks);
-        } else {
-          examDate = selectedExamObj.startDate || selectedExamObj.examDate || selectedExamObj.endDate;
+      const subjSchedule = schedules.find((sch) => {
+        const schId = String(sch.subjectId).trim();
+        if (schId === String(newSubject).trim()) return true;
+        if (altAlloc?.subjectId && schId === String(altAlloc.subjectId).trim()) return true;
+        if (Array.isArray(sch.includedSubjectIds)) {
+          if (sch.includedSubjectIds.map((x) => String(x).trim()).includes(String(newSubject).trim())) return true;
+          if (altAlloc?.subjectId && sch.includedSubjectIds.map((x) => String(x).trim()).includes(String(altAlloc.subjectId).trim())) return true;
         }
+        const sCode = (sch.subjectCode || "").trim().toLowerCase();
+        const sName = (sch.subjectName || "").trim().toLowerCase();
+        if (targetCode && sCode === targetCode) return true;
+        if (targetName && sName === targetName) return true;
+        return false;
+      }) || (schedules.length > 0 ? schedules[0] : null);
+
+      const headerMode = String(evalHeader?.mode || "").trim().toUpperCase();
+      const isObjective = headerMode === "OBJECTIVE" || isObjectiveExam(selectedExamObj, schedules);
+
+      let examDate = subjSchedule?.examDate || subjSchedule?.date || selectedExamObj?.startDate || selectedExamObj?.examDate || selectedExamObj?.endDate || null;
+      let maxTotal = 100;
+      let maxInternal = 0;
+      let maxPractical = 0;
+      let maxTheory = 0;
+      let showInternal = false;
+      let showPractical = false;
+      let showTheory = false;
+      let showObtained = false;
+      let passingMarks = 35;
+
+      if (isObjective) {
+        maxInternal = 0;
+        maxPractical = 0;
+        maxTheory = 0;
+        showInternal = false;
+        showPractical = false;
+        showTheory = false;
+        showObtained = true;
+        maxTotal = Number(
+          (subjSchedule?.maxMarks && Number(subjSchedule.maxMarks) > 0 ? subjSchedule.maxMarks : null) ??
+          (evalHeader?.maxMarks && Number(evalHeader.maxMarks) > 0 ? evalHeader.maxMarks : null) ??
+          (selectedExamObj?.totalMarks && Number(selectedExamObj.totalMarks) > 0 ? selectedExamObj.totalMarks : null) ??
+          (subjectMeta?.totalMarks && Number(subjectMeta.totalMarks) > 0 ? subjectMeta.totalMarks : null) ??
+          100
+        );
+        const pct = Number(evalHeader?.passPercentage || selectedExamObj?.passPercentage || 0);
+        passingMarks = Number(
+          (subjSchedule?.passingMarks && Number(subjSchedule.passingMarks) > 0 ? subjSchedule.passingMarks : null) ??
+          (pct > 0 ? Math.round((pct / 100) * maxTotal) : null) ??
+          (subjectMeta?.passingMarks && Number(subjectMeta.passingMarks) > 0 ? subjectMeta.passingMarks : null) ??
+          35
+        );
+      } else {
+        const rawInt = Number(evalHeader?.internalMax ?? subjectMeta?.internalMarks ?? 0);
+        const rawPrac = Number(evalHeader?.practicalMax ?? subjectMeta?.practicalMarks ?? 0);
+        const rawTh = Number(evalHeader?.theoryMax ?? subjectMeta?.externalMarks ?? 0);
+        const schedExamMode = String(subjSchedule?.examMode || "").trim().toLowerCase();
+        const examTypeLower = String(selectedExamObj?.examType || selectedExamObj?.assessmentTypeName || "").trim().toLowerCase();
+        const examNameLower = String(selectedExamObj?.examName || selectedExamObj?.name || "").trim().toLowerCase();
+
+        if (rawInt + rawPrac + rawTh > 0) {
+          maxInternal = rawInt;
+          maxPractical = rawPrac;
+          maxTheory = rawTh;
+        } else if (schedExamMode === "practical" || examTypeLower.includes("practical") || examNameLower.includes("practical")) {
+          maxPractical = Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || selectedExamObj?.totalMarks || 100);
+        } else if (schedExamMode === "internal" || examTypeLower.includes("internal")) {
+          maxInternal = Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || selectedExamObj?.totalMarks || 100);
+        } else {
+          maxTheory = Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || selectedExamObj?.totalMarks || 100);
+        }
+
+        showInternal = maxInternal > 0;
+        showPractical = maxPractical > 0;
+        showTheory = maxTheory > 0;
+        showObtained = false;
+        maxTotal = (maxInternal + maxPractical + maxTheory) || Number(subjSchedule?.maxMarks || evalHeader?.maxMarks || subjectMeta?.totalMarks || 100);
+        passingMarks = Number(
+          (subjSchedule?.passingMarks && Number(subjSchedule.passingMarks) > 0 ? subjSchedule.passingMarks : null) ??
+          (subjectMeta?.passingMarks && Number(subjectMeta.passingMarks) > 0 ? subjectMeta.passingMarks : null) ??
+          selectedExamObj?.passingMarks ??
+          selectedExamObj?.passMarks ??
+          35
+        );
       }
 
       setCurrentConfig({
         maxTotal,
         maxTheory,
         maxInternal,
+        maxPractical,
+        showInternal,
+        showPractical,
+        showTheory,
+        showObtained,
         passingMarks,
         examDate,
         isObjective,
@@ -1116,28 +1375,43 @@ export default function FacultyMarks() {
       let effectiveRoster = [];
 
       if (marksMap.size > 0) {
-        // When marks exist: strictly show ONLY students who have marks in this examination/subject (e.g. exactly 5 students!)
-        const seenIds = new Set();
+        // Match section students: strictly from this section roster (no foreign students injected)
         rawStudentList.forEach((st) => {
-          const sId = String(st.studentId);
-          if (marksMap.has(sId)) {
+
+          const targetStudentId = String(st.studentId);
+          if (marksMap.has(targetStudentId) || liveStatus === "NOT STARTED" || liveStatus === "DRAFT") {
             effectiveRoster.push(st);
-            seenIds.add(sId);
+
           }
         });
-        marksMap.forEach((mark, sId) => {
-          if (!seenIds.has(String(sId))) {
-            effectiveRoster.push({
-              studentId: Number(sId),
-              admissionNo: mark.admissionNo || "",
-              rollNo: String(mark.rollNo || ""),
-              name: mark.studentName || `Student #${sId}`,
-              admissionDate: null,
-            });
-            seenIds.add(String(sId));
+        if (effectiveRoster.length === 0) { effectiveRoster = rawStudentList; }
+      } else {
+        /* STRAY_OLD_CODE_START
+
+        }
+// CLEAN_SECTION_DONE
+// UNUSED_MARKS_LOOP
+
+
+
+
+
+          }
+        });
+
+
+
+
+
+
+
+
+
+
           }
         });
       } else {
+        STRAY_OLD_CODE_END */
         // Fresh entry: show eligible section students filtered by admission date
         effectiveRoster = rawStudentList.filter((student) => {
           const studentJoinDate = student.admissionDate || student.allocatedDate || student.dateOfAdmission;
@@ -1152,23 +1426,49 @@ export default function FacultyMarks() {
         });
       }
 
+      // Also hydrate marksMap from evalHeader.students if saved marks exist there
+      if (evalHeader && Array.isArray(evalHeader.students) && (evalHeader.evaluationId > 0 || String(evalHeader.status || "").toUpperCase() !== "DRAFT")) {
+        evalHeader.students.forEach((es) => {
+          const sId = String(es.studentId ?? "");
+          if (sId && !marksMap.has(sId)) {
+            marksMap.set(sId, es);
+          }
+        });
+      }
+
       // Map student rows
       const mappedRows = effectiveRoster.map((student) => {
         const mark = marksMap.get(String(student.studentId));
-        if (mark) {
+        const hasRecordedMark = Boolean(
+          mark && (
+            Number(mark.markId || 0) > 0 ||
+            Boolean(mark.isAbsent || mark.absent) ||
+            liveStatus !== "NOT STARTED" ||
+            Number(mark.totalMarks ?? mark.obtainedMarks ?? mark.total ?? 0) > 0 ||
+            Number(mark.internalMarks ?? mark.internal ?? 0) > 0 ||
+            Number(mark.practicalMarks ?? mark.practical ?? 0) > 0 ||
+            Number(mark.theoryMarks ?? mark.theory ?? 0) > 0 ||
+            Boolean(mark.remarks)
+          )
+        );
+        if (mark && hasRecordedMark) {
           const isAbsent = Boolean(mark.isAbsent || mark.absent);
-          const internal = Number(mark.internalMarks ?? mark.internal ?? 0);
-          const theory = Number(mark.theoryMarks ?? mark.theory ?? 0);
-          const obtainedMarks = Number(mark.obtainedMarks ?? mark.totalMarks ?? mark.total ?? (internal + theory));
-          const total = isAbsent ? 0 : (isObjective ? obtainedMarks : (internal + theory || obtainedMarks));
-          const percentage = isAbsent ? "0.00%" : `${((total / maxTotal) * 100).toFixed(2)}%`;
+          const internal = isObjective || !showInternal ? 0 : Number(mark.internalMarks ?? mark.internal ?? 0);
+          const practical = isObjective || !showPractical ? 0 : Number(mark.practicalMarks ?? mark.practical ?? 0);
+          const theory = isObjective || !showTheory ? 0 : Number(mark.theoryMarks ?? mark.theory ?? 0);
+          const obtainedRaw = mark.obtainedMarks ?? mark.totalMarks ?? mark.total ?? (internal + practical + theory);
+          const obtainedMarks = isAbsent ? "" : Number(obtainedRaw ?? 0);
+          const componentSum = (showInternal ? internal : 0) + (showPractical ? practical : 0) + (showTheory ? theory : 0);
+          const total = isAbsent ? 0 : (isObjective ? Number(obtainedMarks || 0) : (componentSum || Number(obtainedRaw || 0)));
+          const percentage = isAbsent ? "0.00%" : `${((total / (maxTotal || 1)) * 100).toFixed(2)}%`;
           return {
             studentId: student.studentId,
             rollNo: mark.rollNo || student.rollNo || "",
             name: mark.studentName || student.name || `Student #${student.studentId}`,
-            internal: isAbsent ? 0 : internal,
-            theory: isAbsent ? 0 : theory,
-            obtainedMarks: isAbsent ? 0 : obtainedMarks,
+            internal: isAbsent ? 0 : (isObjective ? 0 : (showInternal ? internal : 0)),
+            practical: isAbsent ? 0 : (isObjective ? 0 : (showPractical ? practical : 0)),
+            theory: isAbsent ? 0 : (isObjective ? 0 : (showTheory ? theory : 0)),
+            obtainedMarks: isAbsent ? "" : (isObjective ? obtainedMarks : total),
             totalScore: total,
             percentage: percentage,
             absent: isAbsent,
@@ -1179,9 +1479,10 @@ export default function FacultyMarks() {
             studentId: student.studentId,
             rollNo: student.rollNo || "",
             name: student.name || `Student #${student.studentId}`,
-            internal: 0,
-            theory: 0,
-            obtainedMarks: 0,
+            internal: isObjective || !showInternal ? 0 : "",
+            practical: isObjective || !showPractical ? 0 : "",
+            theory: isObjective || !showTheory ? 0 : "",
+            obtainedMarks: "",
             totalScore: 0,
             percentage: "0.00%",
             absent: false,
@@ -1201,27 +1502,75 @@ export default function FacultyMarks() {
     }
   };
 
-  // Student mark input change handlers with component limits & validation
+  const getMaxForField = (field) => {
+    if (field === "internal") return Number(currentConfig.maxInternal || 0);
+    if (field === "practical") return Number(currentConfig.maxPractical || 0);
+    if (field === "theory") return Number(currentConfig.maxTheory || 0);
+    return Number(currentConfig.maxTotal || 100);
+  };
+
+  const getFieldLabel = (field) => {
+    if (field === "internal") return "Internal";
+    if (field === "practical") return "Practical";
+    if (field === "theory") return "Theory";
+    return "Obtained";
+  };
+
+  const validateSingleMarkValue = (field, rawVal, { allowEmpty = true } = {}) => {
+    if (rawVal === "" || rawVal === null || rawVal === undefined) {
+      return allowEmpty ? null : `Please enter ${getFieldLabel(field).toLowerCase()} marks.`;
+    }
+    const num = Number(rawVal);
+    const maxAllowed = getMaxForField(field);
+    if (isNaN(num)) return "Enter a valid number.";
+    if (num < 0) return "Marks cannot be negative.";
+    if (num > maxAllowed) return `Marks cannot exceed ${maxAllowed}.`;
+    return null;
+  };
+
+  const handleStudentMarkBlur = (studentId, field, rawVal) => {
+    const err = validateSingleMarkValue(field, rawVal, { allowEmpty: true });
+    const errKey = `${studentId}_${field}`;
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (err) {
+        next[errKey] = err;
+        setLiveAnnouncement(`${getFieldLabel(field)} marks error: ${err}`);
+      } else {
+        delete next[errKey];
+      }
+      return next;
+    });
+  };
+
+  // Student mark input change handlers (validation runs on blur/submit; valid edits clear errors on input)
   const handleStudentMarkChange = (studentId, field, rawVal) => {
+    if (field === "internal" || field === "practical" || field === "theory" || field === "obtainedMarks") {
+      const errKey = `${studentId}_${field}`;
+      const err = validateSingleMarkValue(field, rawVal, { allowEmpty: true });
+      if (!err) {
+        setFieldErrors((prev) => {
+          if (!prev[errKey]) return prev;
+          const next = { ...prev };
+          delete next[errKey];
+          return next;
+        });
+      }
+    }
+
     setCurrentStudents((prev) =>
       prev.map((s) => {
         if (s.studentId !== studentId) return s;
 
         let val = rawVal;
-        if (field === "internal" || field === "theory" || field === "obtainedMarks") {
-          if (val === "" || val === null) {
+        if (field === "internal" || field === "practical" || field === "theory" || field === "obtainedMarks") {
+          if (val === "" || val === null || val === undefined) {
             val = "";
           } else {
-            let num = Number(val);
-            if (isNaN(num)) return s;
-            if (num < 0) num = 0;
-            const maxAllowed = field === "internal"
-              ? (currentConfig.maxInternal || 20)
-              : field === "theory"
-                ? (currentConfig.maxTheory || 100)
-                : (currentConfig.maxTotal || 100);
-            if (num > maxAllowed) num = maxAllowed;
-            val = num;
+            const num = Number(val);
+            if (!isNaN(num)) {
+              val = num;
+            }
           }
         }
 
@@ -1230,115 +1579,178 @@ export default function FacultyMarks() {
         let total = 0;
 
         if (currentConfig.isObjective) {
-          total = next.absent ? 0 : Number(next.obtainedMarks ?? val ?? 0);
-          next.obtainedMarks = next.absent ? 0 : val;
+          const parsedObj = next.obtainedMarks === "" || next.obtainedMarks === null || next.obtainedMarks === undefined ? 0 : Number(next.obtainedMarks);
+          total = next.absent ? 0 : (isNaN(parsedObj) ? 0 : parsedObj);
+          next.internal = 0;
+          next.practical = 0;
+          next.theory = 0;
           next.totalScore = total;
         } else {
-          const internal = Number(next.internal || 0);
-          const theory = Number(next.theory || 0);
-          total = next.absent ? 0 : internal + theory;
+          const internal = currentConfig.showInternal ? Number(next.internal || 0) : 0;
+          const practical = currentConfig.showPractical ? Number(next.practical || 0) : 0;
+          const theory = currentConfig.showTheory ? Number(next.theory || 0) : 0;
+          total = next.absent ? 0 : (internal + practical + theory);
+          next.obtainedMarks = total;
           next.totalScore = total;
         }
 
-        next.percentage = next.absent ? "0.00%" : `${((total / max) * 100).toFixed(2)}%`;
+        next.percentage = next.absent ? "0.00%" : `${((total / (max || 1)) * 100).toFixed(2)}%`;
         return next;
       })
     );
   };
 
   const handleToggleAbsent = (studentId) => {
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith(`${studentId}_`)) delete next[k];
+      });
+      return next;
+    });
     setCurrentStudents((prev) =>
       prev.map((s) => {
         if (s.studentId !== studentId) return s;
         const nextAbsent = !s.absent;
-        const internal = nextAbsent ? 0 : Number(s.internal || 0);
-        const theory = nextAbsent ? 0 : Number(s.theory || 0);
-        const total = nextAbsent ? 0 : internal + theory;
         const max = currentConfig.maxTotal || 100;
+        if (nextAbsent) {
+          return {
+            ...s,
+            absent: true,
+            internal: 0,
+            practical: 0,
+            theory: 0,
+            obtainedMarks: "",
+            totalScore: 0,
+            percentage: "0.00%",
+            remarks: s.remarks || "Absent",
+          };
+        }
+        const total = currentConfig.isObjective
+          ? Number(s.obtainedMarks || 0)
+          : (currentConfig.showInternal ? Number(s.internal || 0) : 0) +
+            (currentConfig.showPractical ? Number(s.practical || 0) : 0) +
+            (currentConfig.showTheory ? Number(s.theory || 0) : 0);
         return {
           ...s,
-          absent: nextAbsent,
-          internal: nextAbsent ? 0 : s.internal,
-          theory: nextAbsent ? 0 : s.theory,
+          absent: false,
+          internal: currentConfig.isObjective || !currentConfig.showInternal ? 0 : (s.internal === 0 ? "" : s.internal),
+          practical: currentConfig.isObjective || !currentConfig.showPractical ? 0 : (s.practical === 0 ? "" : s.practical),
+          theory: currentConfig.isObjective || !currentConfig.showTheory ? 0 : (s.theory === 0 ? "" : s.theory),
+          obtainedMarks: currentConfig.isObjective ? (s.obtainedMarks || "") : total,
           totalScore: total,
-          percentage: nextAbsent ? "0.00%" : `${((total / max) * 100).toFixed(2)}%`,
-          remarks: nextAbsent ? "Absent" : "",
+          percentage: `${((total / (max || 1)) * 100).toFixed(2)}%`,
+          remarks: s.remarks === "Absent" ? "" : s.remarks,
         };
       })
     );
   };
 
-  // Save Draft handler - authorized faculty API
-  const handleSaveDraft = async () => {
-        if (!selectedExam || !selectedSubject || !selectedSection) return;
-    if (subjectInclusionError) {
-      notify(subjectInclusionError, "error");
-      return;
-    }
-    if (currentStudents.length === 0) {
-      notify("No eligible students to save marks for.", "error");
-      return;
-    }
+  const validateStudentsBeforeSave = ({ requireAll = false } = {}) => {
+    const errors = {};
+    let firstInvalidStudentId = null;
+    let firstInvalidField = null;
+    let firstMessage = null;
+
+    const activeFields = currentConfig.isObjective
+      ? ["obtainedMarks"]
+      : [
+          ...(currentConfig.showInternal ? ["internal"] : []),
+          ...(currentConfig.showPractical ? ["practical"] : []),
+          ...(currentConfig.showTheory ? ["theory"] : []),
+        ];
 
     for (const s of currentStudents) {
       if (s.absent) continue;
-      const internal = Number(s.internal || 0);
-      const theory = Number(s.theory || 0);
-      if (internal < 0 || theory < 0) {
-        notify(`Marks cannot be negative for student ${s.name}.`, "error");
-        return;
+      for (const field of activeFields) {
+        const err = validateSingleMarkValue(field, s[field], { allowEmpty: !requireAll });
+        if (err) {
+          const errKey = `${s.studentId}_${field}`;
+          errors[errKey] = err;
+          if (!firstMessage) {
+            firstInvalidStudentId = s.studentId;
+            firstInvalidField = field;
+            firstMessage = `${s.name} (${getFieldLabel(field)}): ${err}`;
+          }
+        }
       }
-      if (s.remarks && s.remarks.length > 250) {
-        notify(`Remarks cannot exceed 250 characters for student ${s.name}.`, "error");
-        return;
+      if (s.remarks && s.remarks.length > 250 && !firstMessage) {
+        firstMessage = `Remarks cannot exceed 250 characters for student ${s.name}.`;
       }
     }
 
-    setSavingMarks(true);
+    setFieldErrors(errors);
+    if (firstMessage) {
+      setLiveAnnouncement(firstMessage);
+      notify(firstMessage, "error");
+      if (firstInvalidStudentId && firstInvalidField) {
+        const targetIndex = currentStudents.findIndex((st) => st.studentId === firstInvalidStudentId);
+        if (targetIndex >= 0) {
+          const targetPage = Math.floor(targetIndex / pageSize) + 1;
+          if (targetPage !== currentPage) setCurrentPage(targetPage);
+        }
+        setTimeout(() => {
+          const el = inputRefs.current[`${firstInvalidStudentId}_${firstInvalidField}`];
+          if (el && typeof el.focus === "function") el.focus();
+        }, 40);
+      }
+      return false;
+    }
+    return true;
+  };
+
+  const buildStudentMarkPayloads = (targetStatusLabel) => {
     const authUser = getAuthUser();
     const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id;
     const campusId = context?.profile?.campusId || authUser?.campusId || academicCtx.selectedCampus || 1;
+    const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
+    const resolvedBoardName = timetableInfo.boardName || "BIEAP";
+    const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
+    const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
+    const resolvedLevelName = "Intermediate";
+    const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
     const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
-    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
 
-    const updatedEval = {
+    const draftPayload = {
       evaluationId: key,
-      section: selectedSectionCleanName,
-      sectionId: Number(selectedSection),
-      examId: selectedExam,
-      examinationId: Number(selectedExam),
-      examName: selectedExamName,
-      subjectId: selectedSubject,
-      subjectName: selectedSubjectName,
-      faculty: context?.profile?.name || authUser?.fullName || "Faculty",
-      empId: staffId ? `EMP-${staffId}` : "",
-      status: "DRAFT",
-      adminRemarks: "Draft saved by faculty.",
-      rows: currentStudents,
-    };
-
-    try {
-      const draftPayload = {
-        evaluationId: key,
-        students: currentStudents.map((s) => ({
+      students: currentStudents.map((s) => {
+        if (currentConfig.isObjective) {
+          const score = s.absent ? 0 : Math.round(Number(s.obtainedMarks || 0));
+          return {
+            studentId: Number(s.studentId),
+            internalMarks: 0,
+            practicalMarks: 0,
+            theoryMarks: 0,
+            obtainedMarks: score,
+            totalMarks: score,
+            isAbsent: Boolean(s.absent),
+            remarks: s.remarks || "",
+          };
+        }
+        const internal = s.absent || !currentConfig.showInternal ? 0 : Math.round(Number(s.internal || 0));
+        const practical = s.absent || !currentConfig.showPractical ? 0 : Math.round(Number(s.practical || 0));
+        const theory = s.absent || !currentConfig.showTheory ? 0 : Math.round(Number(s.theory || 0));
+        const total = s.absent ? 0 : (internal + practical + theory);
+        return {
           studentId: Number(s.studentId),
-          internalMarks: Number(s.internal || 0),
-          theoryMarks: Number(s.theory || 0),
-          practicalMarks: 0,
-          totalMarks: Number(s.totalScore || 0),
+          internalMarks: internal,
+          practicalMarks: practical,
+          theoryMarks: theory,
+          obtainedMarks: total,
+          totalMarks: total,
           isAbsent: Boolean(s.absent),
           remarks: s.remarks || "",
-        })),
-      };
+        };
+      }),
+    };
 
-      const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
-      const resolvedBoardName = timetableInfo.boardName || "BIEAP";
-      const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
-      const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
-      const resolvedLevelName = "Intermediate";
-      const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
-
-      const bulkPayload = currentStudents.map((s) => ({
+    const bulkPayload = currentStudents.map((s) => {
+      const isObj = currentConfig.isObjective;
+      const internal = s.absent || isObj || !currentConfig.showInternal ? 0 : Math.round(Number(s.internal || 0));
+      const practical = s.absent || isObj || !currentConfig.showPractical ? 0 : Math.round(Number(s.practical || 0));
+      const theory = s.absent || isObj || !currentConfig.showTheory ? 0 : Math.round(Number(s.theory || 0));
+      const obtained = s.absent ? 0 : (isObj ? Math.round(Number(s.obtainedMarks || 0)) : (internal + practical + theory));
+      return {
         campusId: Number(campusId) || 1,
         board: resolvedBoardName,
         boardId: resolvedBoardId,
@@ -1354,26 +1766,65 @@ export default function FacultyMarks() {
         facultyId: staffId ? Number(staffId) : undefined,
         rollNo: String(s.rollNo || ""),
         studentName: s.name || "",
-        internalMarks: Number(s.internal || 0),
-        practicalMarks: 0,
-        theoryMarks: Number(s.theory || 0),
-        totalMarks: Number(s.totalScore || 0),
-        obtainedMarks: Number(s.totalScore || 0),
+        internalMarks: internal,
+        practicalMarks: practical,
+        theoryMarks: theory,
+        totalMarks: obtained,
+        obtainedMarks: obtained,
         passingMarks: currentConfig.passingMarks || 35,
-        isPass: Number(s.totalScore || 0) >= (currentConfig.passingMarks || 35),
+        isPass: !s.absent && obtained >= (currentConfig.passingMarks || 35),
         isAbsent: Boolean(s.absent),
         remarks: s.remarks || "",
-        status: "DRAFT",
+        status: targetStatusLabel,
         isActive: true,
-      }));
+      };
+    });
 
-      await apiClient.post("/api/v1/marks/bulk", { marks: bulkPayload }, {
-        headers: { ...(campusId ? { "X-Campus-Id": String(campusId) } : {}) },
-      }).catch(() => null);
+    return { draftPayload, bulkPayload, campusId, staffId, key };
+  };
 
+  // Save Draft handler - authorized faculty API
+  const handleSaveDraft = async () => {
+    if (!selectedExam || !selectedSubject || !selectedSection) return;
+    if (subjectInclusionError) {
+      notify(subjectInclusionError, "error");
+      return;
+    }
+    if (currentStudents.length === 0) {
+      notify("No eligible students to save marks for.", "error");
+      return;
+    }
+    if (!validateStudentsBeforeSave({ requireAll: false })) return;
+
+    setSavingMarks(true);
+    const authUser = getAuthUser();
+    const { draftPayload, staffId, key } = buildStudentMarkPayloads("DRAFT");
+    const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
+
+    const updatedEval = {
+      evaluationId: key,
+      section: selectedSectionCleanName,
+      sectionId: Number(selectedSection),
+      examId: selectedExam,
+      examinationId: Number(selectedExam),
+      examName: selectedExamName,
+      subjectId: selectedSubject,
+      subjectName: selectedSubjectName,
+      mode: currentConfig.isObjective ? "OBJECTIVE" : "REGULAR",
+      maxMarks: currentConfig.maxTotal,
+      internalMax: currentConfig.maxInternal,
+      practicalMax: currentConfig.maxPractical,
+      theoryMax: currentConfig.maxTheory,
+      faculty: context?.profile?.name || authUser?.fullName || "Faculty",
+      empId: staffId ? `EMP-${staffId}` : "",
+      status: "DRAFT",
+      adminRemarks: "Draft saved by faculty.",
+      rows: currentStudents,
+    };
+
+    try {
       await apiClient.put(`/api/v1/faculty/evaluations/${key}/marks`, draftPayload)
-        .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/marks`, draftPayload))
-        .catch(() => null);
+        .catch(() => apiClient.post(`/api/v1/faculty/evaluations/${key}/marks`, draftPayload));
 
       setEvaluationsLedger((prev) => ({
         ...prev,
@@ -1393,34 +1844,19 @@ export default function FacultyMarks() {
   // Submit Subject handler - authorized faculty API
   const handleSubmitSubject = async () => {
     if (!selectedExam || !selectedSubject || !selectedSection) return;
+    if (subjectInclusionError) {
+      notify(subjectInclusionError, "error");
+      return;
+    }
     if (currentStudents.length === 0) {
       notify("No eligible students to submit marks for.", "error");
       return;
     }
-
-    for (const s of currentStudents) {
-      if (s.absent) continue;
-      const internal = Number(s.internal || 0);
-      const theory = Number(s.theory || 0);
-      if (internal < 0 || theory < 0) {
-        notify(`Marks cannot be negative for student ${s.name}.`, "error");
-        return;
-      }
-      if (s.theory === "" || s.theory === null || isNaN(theory)) {
-        notify(`Please enter theory marks for ${s.name} before submitting.`, "error");
-        return;
-      }
-      if (s.remarks && s.remarks.length > 250) {
-        notify(`Remarks cannot exceed 250 characters for student ${s.name}.`, "error");
-        return;
-      }
-    }
+    if (!validateStudentsBeforeSave({ requireAll: true })) return;
 
     setSavingMarks(true);
     const authUser = getAuthUser();
-    const staffId = context?.profile?.staffId || context?.profileData?.staffId || authUser?.staffId || authUser?.id;
-    const campusId = context?.profile?.campusId || authUser?.campusId || academicCtx.selectedCampus || 1;
-    const key = `${selectedSubject}_${selectedSection}_${selectedExam}`;
+    const { draftPayload, bulkPayload, campusId, staffId, key } = buildStudentMarkPayloads("SUBMITTED");
     const legacyKey = `${selectedSection}_${selectedExam}_${selectedSubject}`;
     const wasRejected = evaluationStatus === "REJECTED";
 
@@ -1433,6 +1869,11 @@ export default function FacultyMarks() {
       examName: selectedExamName,
       subjectId: selectedSubject,
       subjectName: selectedSubjectName,
+      mode: currentConfig.isObjective ? "OBJECTIVE" : "REGULAR",
+      maxMarks: currentConfig.maxTotal,
+      internalMax: currentConfig.maxInternal,
+      practicalMax: currentConfig.maxPractical,
+      theoryMax: currentConfig.maxTheory,
       faculty: context?.profile?.name || authUser?.fullName || "Faculty",
       empId: staffId ? `EMP-${staffId}` : "",
       status: "SUBMITTED",
@@ -1441,55 +1882,6 @@ export default function FacultyMarks() {
     };
 
     try {
-      const draftPayload = {
-        evaluationId: key,
-        students: currentStudents.map((s) => ({
-          studentId: Number(s.studentId),
-          internalMarks: Number(s.internal || 0),
-          theoryMarks: Number(s.theory || 0),
-          practicalMarks: 0,
-          totalMarks: Number(s.totalScore || 0),
-          isAbsent: Boolean(s.absent),
-          remarks: s.remarks || "",
-        })),
-      };
-
-      const resolvedBoardId = extractId(selectedBoard) ? Number(extractId(selectedBoard)) : (Number(timetableInfo.boardId) || 1);
-      const resolvedBoardName = timetableInfo.boardName || "BIEAP";
-      const resolvedYearId = extractId(selectedYear) ? Number(extractId(selectedYear)) : (Number(timetableInfo.academicYearId) || 1);
-      const resolvedLevelId = selectedLevel ? Number(selectedLevel) : 1;
-      const resolvedLevelName = "Intermediate";
-      const resolvedGroupId = selectedGroup ? Number(selectedGroup) : 1;
-
-      const bulkPayload = currentStudents.map((s) => ({
-        campusId: Number(campusId) || 1,
-        board: resolvedBoardName,
-        boardId: resolvedBoardId,
-        academicYearId: resolvedYearId,
-        academicLevel: resolvedLevelName,
-        academicLevelId: resolvedLevelId,
-        groupId: resolvedGroupId,
-        programId: selectedProgram ? Number(selectedProgram) : undefined,
-        sectionId: Number(selectedSection) || 1,
-        examinationId: Number(selectedExam),
-        subjectId: Number(selectedSubject),
-        studentId: Number(s.studentId),
-        facultyId: staffId ? Number(staffId) : undefined,
-        rollNo: String(s.rollNo || ""),
-        studentName: s.name || "",
-        internalMarks: Number(s.internal || 0),
-        practicalMarks: 0,
-        theoryMarks: Number(s.theory || 0),
-        totalMarks: Number(s.totalScore || 0),
-        obtainedMarks: Number(s.totalScore || 0),
-        passingMarks: currentConfig.passingMarks || 35,
-        isPass: Number(s.totalScore || 0) >= (currentConfig.passingMarks || 35),
-        isAbsent: Boolean(s.absent),
-        remarks: s.remarks || "",
-        status: "SUBMITTED",
-        isActive: true,
-      }));
-
       await apiClient.post("/api/v1/marks/bulk", { marks: bulkPayload }, {
         headers: { ...(campusId ? { "X-Campus-Id": String(campusId) } : {}) },
       });
@@ -1541,9 +1933,239 @@ export default function FacultyMarks() {
   };
 
   // Open Results Modal from Report Tab
-  const handleViewResults = (ev) => {
+  const handleViewResults = async (ev) => {
     setViewResultsEval(ev);
     setResultsModalPage(1);
+    const evalId = ev.evaluationId || `${ev.subjectId}_${ev.sectionId}_${ev.examId}`;
+    if (!evalId) return;
+
+    setResultsModalLoading(true);
+    try {
+      const authUser = getAuthUser();
+      const effectiveCampusId = context?.profile?.campusId || context?.profileData?.campusId || authUser?.campusId || academicCtx.selectedCampus || 1;
+      const keyPrimary = ev.evaluationId || `${ev.subjectId}_${ev.sectionId}_${ev.examId}`;
+      const keyLegacy = `${ev.sectionId}_${ev.examId}_${ev.subjectId}`;
+
+      // Authoritative evaluation endpoints (try official evaluation object FIRST to get exact submitted students)
+      const endpointsToTry = [
+        `/api/v1/evaluations/${keyPrimary}`,
+        `/api/v1/faculty/evaluations/${keyPrimary}`,
+        `/api/v1/evaluations/${keyLegacy}`,
+        `/api/v1/faculty/evaluations/${keyLegacy}`,
+        `/api/v1/faculty/evaluations/${keyPrimary}/students`,
+        `/api/v1/evaluations/${keyPrimary}/students`,
+      ];
+      /* OLD_CLOSE
+
+
+
+      ];
+      OLD_CLOSE_END */
+      let resData = null;
+      for (const url of endpointsToTry) {
+        try {
+          const res = await apiClient.get(url, {
+            params: { campusId: effectiveCampusId },
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+          });
+          const payload = res?.data?.data !== undefined ? res.data.data : res?.data;
+          if (payload && (Array.isArray(payload.students) || Array.isArray(payload.marksList) || Array.isArray(payload))) {
+            resData = payload;
+            break;
+          }
+        } catch {
+          // try next endpoint
+        }
+      }
+
+      // If direct GET did not find students, search via /api/v1/evaluations/search
+      if (!resData || !(resData.students?.length || resData.marksList?.length)) {
+        try {
+          const searchPayload = {
+            campusId: Number(effectiveCampusId) || 1,
+            sectionId: Number(ev.sectionId),
+            examinationId: Number(ev.examId || ev.examinationId),
+            subjectId: Number(ev.subjectId),
+          };
+          const searchRes = await apiClient.post("/api/v1/evaluations/search", searchPayload, {
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+            skipGlobalLoader: true,
+          }).catch(() => null);
+          const evalList = searchRes?.data?.data || searchRes?.data || [];
+          if (Array.isArray(evalList) && evalList.length > 0) {
+            const matched = evalList.find((item) => {
+              if (item.evaluationId && String(item.evaluationId).trim() === String(keyPrimary).trim()) return true;
+              return String(item.subjectId) === String(ev.subjectId) && String(item.sectionId) === String(ev.sectionId);
+            }) || evalList[0];
+            if (matched && (Array.isArray(matched.students) || Array.isArray(matched.marksList))) {
+              resData = matched;
+            }
+          }
+        } catch {}
+      }
+
+      if (!resData) {
+        try {
+          const examId = ev.examId || ev.examinationId;
+          const marksRes = await apiClient.get(`/api/v1/marks/exam/${examId}`, {
+            params: { campusId: effectiveCampusId },
+            headers: { ...(effectiveCampusId ? { "X-Campus-Id": String(effectiveCampusId) } : {}) },
+          });
+          const raw = marksRes?.data?.data || marksRes?.data || [];
+          const list = Array.isArray(raw) ? raw : (raw?.items || []);
+          const filtered = list.filter((m) => String(m.subjectId) === String(ev.subjectId) && (!ev.sectionId || String(m.sectionId) === String(ev.sectionId)));
+          if (filtered.length) {
+            resData = { students: filtered };
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      let rawStudents = Array.isArray(resData)
+        ? resData
+        : (resData?.students || resData?.marksList || resData?.rows || []);
+
+      // If resData didn't have students, check ev.rows or evaluationsLedger
+      if (!rawStudents.length && (ev.rows?.length || evaluationsLedger[keyPrimary]?.rows?.length || evaluationsLedger[keyLegacy]?.rows?.length)) {
+        rawStudents = ev.rows?.length
+          ? ev.rows
+          : (evaluationsLedger[keyPrimary]?.rows || evaluationsLedger[keyLegacy]?.rows || []);
+      }
+
+      // Filter strictly to submitted section students:
+      // 1. Exclude any records belonging to a different section if sectionId is present
+      if (ev.sectionId && rawStudents.some((s) => s.sectionId && String(s.sectionId) !== String(ev.sectionId))) {
+        rawStudents = rawStudents.filter((s) => !s.sectionId || String(s.sectionId) === String(ev.sectionId));
+      }
+
+      // 2. Filter out extraneous unsubmitted students who have no markId and no submission marks
+      // Submitted students have markId > 0, "Faculty Submission" remarks, isSubmitted flag, or evaluated marks/absent
+      if (rawStudents.length > 0) {
+        const submittedOnly = rawStudents.filter((s) => {
+          const hasMarkId = s.markId != null && Number(s.markId) > 0;
+          const hasSubRemarks = s.remarks && String(s.remarks).toLowerCase().includes("submission");
+          const isSubStatus = s.isSubmitted === true || ["SUBMITTED", "APPROVED", "VERIFIED", "PUBLISHED"].includes(String(s.status || s.statusCode || "").toUpperCase());
+          const isAbsent = Boolean(s.isAbsent ?? s.absent);
+          const hasMarks = (s.totalMarks != null && Number(s.totalMarks) > 0) ||
+                           (s.total != null && Number(s.total) > 0) ||
+                           (s.theory != null && Number(s.theory) > 0) ||
+                           (s.theoryMarks != null && Number(s.theoryMarks) > 0) ||
+                           (s.obtainedMarks != null && Number(s.obtainedMarks) > 0);
+
+          return hasMarkId || hasSubRemarks || isSubStatus || isAbsent || hasMarks;
+        });
+
+        if (submittedOnly.length > 0 && submittedOnly.length < rawStudents.length) {
+          rawStudents = submittedOnly;
+        }
+      }
+
+      // 3. If resData has explicit totalStudents (e.g. 25 in the official response) and rawStudents is still longer
+      const expectedTotal = Number(resData?.totalStudents || ev.totalStudents || 0);
+      if (expectedTotal > 0 && rawStudents.length > expectedTotal) {
+        rawStudents.sort((a, b) => {
+          const aSub = (a.markId ? 2 : 0) + (String(a.remarks || "").toLowerCase().includes("submission") ? 1 : 0);
+          const bSub = (b.markId ? 2 : 0) + (String(b.remarks || "").toLowerCase().includes("submission") ? 1 : 0);
+          return bSub - aSub;
+        });
+        rawStudents = rawStudents.slice(0, expectedTotal);
+      }
+
+      // 4. Stable sort by Roll No then Name matching Marks Entry roster
+      rawStudents.sort((a, b) => {
+        const rollA = String(a.rollNo || a.admissionNo || "");
+        const rollB = String(b.rollNo || b.admissionNo || "");
+        if (rollA && rollB) {
+          const cmp = rollA.localeCompare(rollB, undefined, { numeric: true });
+          if (cmp !== 0) return cmp;
+        }
+        return String(a.studentName || a.name || "").localeCompare(String(b.studentName || b.name || ""));
+      });
+
+      const matchedExamObj = examinationsList.find((ex) => String(ex.examinationId || ex.id || ex.examId) === String(ev.examId || ev.examinationId));
+      const resolvedModalMode = String(resData?.mode || ev.mode || (isObjectiveExam(matchedExamObj) ? "OBJECTIVE" : "")).trim().toUpperCase();
+      const modalIsObjective = resolvedModalMode === "OBJECTIVE";
+
+      if (rawStudents.length > 0) {
+        const configuredMax = Number(
+          (resData?.subjectMaxMarks && Number(resData.subjectMaxMarks) > 0 ? resData.subjectMaxMarks : null) ||
+          (resData?.maxMarks && Number(resData.maxMarks) > 0 ? resData.maxMarks : null) ||
+          (ev.maxMarks && Number(ev.maxMarks) > 0 ? ev.maxMarks : null) ||
+          (currentConfig?.maxTotal && Number(currentConfig.maxTotal) > 0 ? currentConfig.maxTotal : null) ||
+          100
+        );
+        const mappedRows = rawStudents.map((s, idx) => {
+          const isAbsent = Boolean(s.isAbsent ?? s.absent);
+          const internal = modalIsObjective ? 0 : (s.internal !== undefined && s.internal !== null ? s.internal : (s.internalMarks ?? 0));
+          const practical = modalIsObjective ? 0 : (s.practical !== undefined && s.practical !== null ? s.practical : (s.practicalMarks ?? 0));
+          const theory = modalIsObjective ? 0 : (s.theory !== undefined && s.theory !== null ? s.theory : (s.theoryMarks ?? 0));
+          const totalVal = s.obtainedMarks !== undefined && s.obtainedMarks !== null
+            ? s.obtainedMarks
+            : (s.total !== undefined && s.total !== null ? s.total : (s.totalMarks !== undefined && s.totalMarks !== null ? s.totalMarks : 0));
+          const numTotal = Number(totalVal) || 0;
+          const studentMax = Number(s.maxMarks || 0);
+          const maxM = studentMax > 0 ? studentMax : configuredMax;
+          let pct = "—";
+          if (!isAbsent) {
+            if (s.percentage !== null && s.percentage !== undefined && s.percentage !== "") {
+              const parsedPct = parseFloat(String(s.percentage));
+              pct = !isNaN(parsedPct) ? `${Math.min(100, Math.max(0, parsedPct)).toFixed(2)}%` : String(s.percentage);
+            } else {
+              const calcPct = maxM > 0 ? Math.min(100, Math.max(0, (numTotal / maxM) * 100)) : 0;
+              pct = `${calcPct.toFixed(2)}%`;
+            }
+          }
+
+          return {
+            studentId: s.studentId || idx,
+            rollNo: s.rollNo || s.admissionNo || "—",
+            name: s.studentName || s.name || "Student",
+            studentName: s.studentName || s.name || "Student",
+            admissionNo: s.admissionNo || "",
+            internal: isAbsent ? "—" : internal,
+            practical: isAbsent ? "—" : practical,
+            theory: isAbsent ? "—" : theory,
+            total: isAbsent ? "—" : totalVal,
+            totalScore: isAbsent ? "—" : totalVal,
+            obtainedMarks: isAbsent ? "—" : totalVal,
+            percentage: isAbsent ? "—" : pct,
+            absent: isAbsent,
+            isAbsent,
+            remarks: s.remarks || "",
+          };
+        });
+
+        const hasPracticalMarks = !modalIsObjective && (
+          Number(resData?.practicalMax || ev.practicalMax || 0) > 0 ||
+          Boolean(resData?.isPractical || resData?.isPracticalApplicable) ||
+          mappedRows.some((r) => !r.absent && Number(r.practical || 0) > 0)
+        );
+        const hasInternalMarks = !modalIsObjective && (
+          Number(resData?.internalMax || ev.internalMax || 0) > 0 ||
+          mappedRows.some((r) => !r.absent && Number(r.internal || 0) > 0) ||
+          (!hasPracticalMarks && mappedRows.some((r) => !r.absent && Number(r.internal || 0) >= 0))
+        );
+
+        setViewResultsEval((prev) => ({
+          ...(prev || ev),
+          ...(typeof resData === "object" ? resData : {}),
+          rows: mappedRows,
+          isObjective: modalIsObjective,
+          showPractical: hasPracticalMarks,
+          showInternal: hasInternalMarks,
+          totalStudents: mappedRows.length,
+          subjectName: resData?.subjectName || ev.subjectName,
+          examName: resData?.examinationName || ev.examName,
+          section: resData?.sectionName || ev.section,
+          status: resData?.status || resData?.statusCode || ev.status,
+        }));
+      }
+    } catch (e) {
+      console.warn("Could not fetch evaluation students for modal:", e);
+    } finally {
+      setResultsModalLoading(false);
+    }
   };
 
   // Bulk Import File Handler
@@ -1574,11 +2196,13 @@ export default function FacultyMarks() {
       }
       const header = lines[0].toLowerCase().split(",").map((h) => h.trim());
       const rollIdx = header.findIndex((h) => h.includes("roll"));
-      const theoryIdx = header.findIndex((h) => h.includes("theory") || h.includes("marks"));
+      const obtainedIdx = header.findIndex((h) => h.includes("obtained") || h.includes("objective") || h === "marks");
+      const theoryIdx = header.findIndex((h) => h.includes("theory") || (!h.includes("obtained") && !h.includes("internal") && !h.includes("practical") && h.includes("marks")));
       const internalIdx = header.findIndex((h) => h.includes("internal"));
+      const practicalIdx = header.findIndex((h) => h.includes("practical"));
 
-      if (theoryIdx === -1 && rollIdx === -1) {
-        notify("Spreadsheet must contain headers for 'Roll No' and 'Marks'.", "error");
+      if (rollIdx === -1 && obtainedIdx === -1 && theoryIdx === -1 && internalIdx === -1 && practicalIdx === -1) {
+        notify("Spreadsheet must contain valid headers ('Roll No' and Marks column).", "error");
         return;
       }
 
@@ -1589,19 +2213,38 @@ export default function FacultyMarks() {
             const cols = lines[i].split(",").map((c) => c.trim());
             const fileRoll = rollIdx !== -1 ? cols[rollIdx] : "";
             if (fileRoll && String(student.rollNo).toLowerCase() === fileRoll.toLowerCase()) {
-              const fileTheory = theoryIdx !== -1 ? Number(cols[theoryIdx]) : student.theory;
-              const fileInternal = internalIdx !== -1 ? Number(cols[internalIdx]) : student.internal;
               importedCount++;
-              const theory = isNaN(fileTheory) ? 0 : Math.min(Math.max(0, fileTheory), currentConfig.maxTheory || 100);
-              const internal = isNaN(fileInternal) ? 0 : Math.min(Math.max(0, fileInternal), currentConfig.maxInternal || 20);
-              const total = student.absent ? 0 : internal + theory;
               const max = currentConfig.maxTotal || 100;
+              if (currentConfig.isObjective) {
+                const rawSrc = obtainedIdx !== -1 ? cols[obtainedIdx] : (theoryIdx !== -1 ? cols[theoryIdx] : "");
+                const num = Number(rawSrc);
+                const obtained = isNaN(num) ? 0 : Math.min(Math.max(0, num), max);
+                const total = student.absent ? 0 : obtained;
+                return {
+                  ...student,
+                  internal: 0,
+                  practical: 0,
+                  theory: 0,
+                  obtainedMarks: student.absent ? "" : obtained,
+                  totalScore: total,
+                  percentage: student.absent ? "0.00%" : `${((total / (max || 1)) * 100).toFixed(2)}%`,
+                };
+              }
+              const fileInternal = internalIdx !== -1 && currentConfig.showInternal ? Number(cols[internalIdx]) : Number(student.internal || 0);
+              const filePractical = practicalIdx !== -1 && currentConfig.showPractical ? Number(cols[practicalIdx]) : Number(student.practical || 0);
+              const fileTheory = theoryIdx !== -1 && currentConfig.showTheory ? Number(cols[theoryIdx]) : Number(student.theory || 0);
+              const internal = !currentConfig.showInternal || isNaN(fileInternal) ? 0 : Math.min(Math.max(0, fileInternal), currentConfig.maxInternal || 0);
+              const practical = !currentConfig.showPractical || isNaN(filePractical) ? 0 : Math.min(Math.max(0, filePractical), currentConfig.maxPractical || 0);
+              const theory = !currentConfig.showTheory || isNaN(fileTheory) ? 0 : Math.min(Math.max(0, fileTheory), currentConfig.maxTheory || 0);
+              const total = student.absent ? 0 : (internal + practical + theory);
               return {
                 ...student,
-                theory,
-                internal,
+                internal: currentConfig.showInternal ? internal : 0,
+                practical: currentConfig.showPractical ? practical : 0,
+                theory: currentConfig.showTheory ? theory : 0,
+                obtainedMarks: total,
                 totalScore: total,
-                percentage: student.absent ? "0.00%" : `${((total / max) * 100).toFixed(2)}%`,
+                percentage: student.absent ? "0.00%" : `${((total / (max || 1)) * 100).toFixed(2)}%`,
               };
             }
           }
@@ -1808,7 +2451,7 @@ export default function FacultyMarks() {
                   placeholder="Select Academic Level"
                   options={[{ id: "", name: "Select Academic Level" }, ...timetableLevels]}
                   onChange={(e) => {
-                    setSelectedLevel(e.target.value);
+                    setSelectedLevel(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setSelectedGroup("");
                     setSelectedProgram("");
                     setSelectedSection("");
@@ -1825,7 +2468,7 @@ export default function FacultyMarks() {
                   placeholder="Select Group"
                   options={[{ id: "", name: "Select Group" }, ...timetableGroups]}
                   onChange={(e) => {
-                    setSelectedGroup(e.target.value);
+                    setSelectedGroup(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setSelectedProgram("");
                     setSelectedSection("");
                     setContextApplied(false);
@@ -1841,7 +2484,7 @@ export default function FacultyMarks() {
                   placeholder="Select Program"
                   options={[{ id: "", name: "Select Program" }, ...timetablePrograms]}
                   onChange={(e) => {
-                    setSelectedProgram(e.target.value);
+                    setSelectedProgram(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setSelectedSection("");
                     setContextApplied(false);
                   }}
@@ -1856,7 +2499,7 @@ export default function FacultyMarks() {
                   placeholder="Select Section"
                   options={[{ id: "", name: "Select Section" }, ...timetableSections]}
                   onChange={(e) => {
-                    setSelectedSection(e.target.value);
+                    setSelectedSection(e.target.value); setSelectedExam(""); setSelectedSubject(""); setCurrentStudents([]); setSubjectInclusionError(null);
                     setContextApplied(false);
                   }}
                 />
@@ -1886,7 +2529,7 @@ export default function FacultyMarks() {
                       placeholder="Select Examination"
                       options={[
                         { id: "", name: "Select Examination" },
-                        ...examinationsList.map((ex) => ({
+                        ...filteredExaminationsList.map((ex) => ({
                           id: ex.examinationId || ex.id || ex.examId,
                           name: `${ex.examName || ex.name} (${ex.examCode || ex.code || ex.examinationId || "EXAM"})`,
                         })),
@@ -1902,6 +2545,7 @@ export default function FacultyMarks() {
                           handleExamOrSubjectChange(newExam, autoSubj);
                         } else if (!newExam) {
                           setCurrentStudents([]);
+        setSubjectInclusionError(null);
                         }
                       }}
                     />
@@ -2029,32 +2673,46 @@ export default function FacultyMarks() {
                     </div>
                   </div>
 
+                  {/* Accessible Polite Live Region for Marks Validation */}
+                  <div className="cms-sr-only" aria-live="polite" role="status">
+                    {liveAnnouncement}
+                  </div>
+
                   {/* Student Table */}
-                  <div className="cms-table-wrap">
-                    <table className="cms-table">
+                  <div className="cms-table-wrap" style={{ width: "100%", overflowX: "auto" }}>
+                    <table className="cms-table" style={{ width: "100%", tableLayout: "auto" }}>
                       <thead>
                         <tr>
                           <th className="cms-cell-center" style={{ width: 90 }}>ROLL NO</th>
-                          <th>STUDENT</th>
+                          <th style={{ width: "27%", minWidth: 140 }}>STUDENT</th>
                           {currentConfig.isObjective ? (
-                            <th className="cms-cell-center" style={{ width: 180 }}>
-                              OBJECTIVE MARKS / {currentConfig.maxTotal || 100}
+                            <th className="cms-cell-center" style={{ width: 190 }}>
+                              OBTAINED MARKS / {currentConfig.maxTotal}
                             </th>
                           ) : (
                             <>
-                              <th className="cms-cell-center" style={{ width: 140 }}>
-                                INTERNAL / {currentConfig.maxInternal || 20}
-                              </th>
-                              <th className="cms-cell-center" style={{ width: 140 }}>
-                                THEORY / {currentConfig.maxTheory || 80}
-                              </th>
+                              {currentConfig.showInternal && (
+                                <th className="cms-cell-center" style={{ width: 140 }}>
+                                  INTERNAL / {currentConfig.maxInternal}
+                                </th>
+                              )}
+                              {currentConfig.showPractical && (
+                                <th className="cms-cell-center" style={{ width: 140 }}>
+                                  PRACTICAL / {currentConfig.maxPractical}
+                                </th>
+                              )}
+                              {currentConfig.showTheory && (
+                                <th className="cms-cell-center" style={{ width: 140 }}>
+                                  THEORY / {currentConfig.maxTheory}
+                                </th>
+                              )}
                               <th className="cms-cell-center" style={{ width: 120 }}>
-                                TOTAL / {currentConfig.maxTotal || 100}
+                                TOTAL / {currentConfig.maxTotal}
                               </th>
                             </>
                           )}
                           <th className="cms-cell-center" style={{ width: 110 }}>PERCENTAGE</th>
-                          <th className="cms-cell-center" style={{ width: 80 }}>ABSENT</th>
+                          <th className="cms-cell-center" style={{ width: "12%", minWidth: 65 }}>ABSENT</th>
                           <th style={{ width: 160 }}>REMARKS</th>
                         </tr>
                       </thead>
@@ -2071,40 +2729,141 @@ export default function FacultyMarks() {
                               </td>
                               {currentConfig.isObjective ? (
                                 <td className="cms-cell-center">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max={currentConfig.maxTotal || 100}
-                                    className="cms-cell-input cms-num-input"
-                                    value={s.totalScore}
-                                    disabled={s.absent || isLocked}
-                                    onChange={(e) => handleStudentMarkChange(s.studentId, "obtainedMarks", e.target.value)}
-                                  />
+                                  {(() => {
+                                    const errKey = `${s.studentId}_obtainedMarks`;
+                                    const errMsg = fieldErrors[errKey];
+                                    const errId = `err-${s.studentId}-obtained`;
+                                    return (
+                                      <div className="cms-mark-input-cell">
+                                        <input
+                                          ref={(el) => { inputRefs.current[errKey] = el; }}
+                                          type="number"
+                                          inputMode="numeric"
+                                          min="0"
+                                          max={currentConfig.maxTotal}
+                                          placeholder={`0–${currentConfig.maxTotal}`}
+                                          aria-label={`${s.name} Obtained Marks (Max ${currentConfig.maxTotal})`}
+                                          aria-invalid={errMsg ? "true" : "false"}
+                                          aria-describedby={errMsg ? errId : undefined}
+                                          className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                          value={s.absent ? "" : (s.obtainedMarks ?? "")}
+                                          disabled={s.absent || isLocked}
+                                          onChange={(e) => handleStudentMarkChange(s.studentId, "obtainedMarks", e.target.value)}
+                                          onBlur={(e) => handleStudentMarkBlur(s.studentId, "obtainedMarks", e.target.value)}
+                                        />
+                                        {errMsg && (
+                                          <div id={errId} className="cms-field-error-text">
+                                            {errMsg}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                 </td>
                               ) : (
                                 <>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={currentConfig.maxInternal || 20}
-                                      className="cms-cell-input cms-num-input"
-                                      value={s.internal}
-                                      disabled={s.absent || isLocked}
-                                      onChange={(e) => handleStudentMarkChange(s.studentId, "internal", e.target.value)}
-                                    />
-                                  </td>
-                                  <td className="cms-cell-center">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max={currentConfig.maxTheory || 80}
-                                      className="cms-cell-input cms-num-input"
-                                      value={s.theory}
-                                      disabled={s.absent || isLocked}
-                                      onChange={(e) => handleStudentMarkChange(s.studentId, "theory", e.target.value)}
-                                    />
-                                  </td>
+                                  {currentConfig.showInternal && (
+                                    <td className="cms-cell-center">
+                                      {(() => {
+                                        const errKey = `${s.studentId}_internal`;
+                                        const errMsg = fieldErrors[errKey];
+                                        const errId = `err-${s.studentId}-internal`;
+                                        return (
+                                          <div className="cms-mark-input-cell">
+                                            <input
+                                              ref={(el) => { inputRefs.current[errKey] = el; }}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max={currentConfig.maxInternal}
+                                              placeholder={`0–${currentConfig.maxInternal}`}
+                                              aria-label={`${s.name} Internal Marks (Max ${currentConfig.maxInternal})`}
+                                              aria-invalid={errMsg ? "true" : "false"}
+                                              aria-describedby={errMsg ? errId : undefined}
+                                              className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                              value={s.absent ? "" : (s.internal ?? "")}
+                                              disabled={s.absent || isLocked}
+                                              onChange={(e) => handleStudentMarkChange(s.studentId, "internal", e.target.value)}
+                                              onBlur={(e) => handleStudentMarkBlur(s.studentId, "internal", e.target.value)}
+                                            />
+                                            {errMsg && (
+                                              <div id={errId} className="cms-field-error-text">
+                                                {errMsg}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  )}
+                                  {currentConfig.showPractical && (
+                                    <td className="cms-cell-center">
+                                      {(() => {
+                                        const errKey = `${s.studentId}_practical`;
+                                        const errMsg = fieldErrors[errKey];
+                                        const errId = `err-${s.studentId}-practical`;
+                                        return (
+                                          <div className="cms-mark-input-cell">
+                                            <input
+                                              ref={(el) => { inputRefs.current[errKey] = el; }}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max={currentConfig.maxPractical}
+                                              placeholder={`0–${currentConfig.maxPractical}`}
+                                              aria-label={`${s.name} Practical Marks (Max ${currentConfig.maxPractical})`}
+                                              aria-invalid={errMsg ? "true" : "false"}
+                                              aria-describedby={errMsg ? errId : undefined}
+                                              className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                              value={s.absent ? "" : (s.practical ?? "")}
+                                              disabled={s.absent || isLocked}
+                                              onChange={(e) => handleStudentMarkChange(s.studentId, "practical", e.target.value)}
+                                              onBlur={(e) => handleStudentMarkBlur(s.studentId, "practical", e.target.value)}
+                                            />
+                                            {errMsg && (
+                                              <div id={errId} className="cms-field-error-text">
+                                                {errMsg}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  )}
+                                  {currentConfig.showTheory && (
+                                    <td className="cms-cell-center">
+                                      {(() => {
+                                        const errKey = `${s.studentId}_theory`;
+                                        const errMsg = fieldErrors[errKey];
+                                        const errId = `err-${s.studentId}-theory`;
+                                        return (
+                                          <div className="cms-mark-input-cell">
+                                            <input
+                                              ref={(el) => { inputRefs.current[errKey] = el; }}
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              max={currentConfig.maxTheory}
+                                              placeholder={`0–${currentConfig.maxTheory}`}
+                                              aria-label={`${s.name} Theory Marks (Max ${currentConfig.maxTheory})`}
+                                              aria-invalid={errMsg ? "true" : "false"}
+                                              aria-describedby={errMsg ? errId : undefined}
+                                              className={`cms-cell-input cms-num-input ${errMsg ? "cms-input-error" : ""}`}
+                                              value={s.absent ? "" : (s.theory ?? "")}
+                                              disabled={s.absent || isLocked}
+                                              onChange={(e) => handleStudentMarkChange(s.studentId, "theory", e.target.value)}
+                                              onBlur={(e) => handleStudentMarkBlur(s.studentId, "theory", e.target.value)}
+                                            />
+                                            {errMsg && (
+                                              <div id={errId} className="cms-field-error-text">
+                                                {errMsg}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  )}
                                   <td className="cms-cell-center" style={{ fontWeight: 700 }}>
                                     {s.absent ? "—" : s.totalScore}
                                   </td>
@@ -2415,9 +3174,24 @@ export default function FacultyMarks() {
       {/* BULK IMPORT MODAL                                        */}
       {/* ======================================================== */}
       {showBulkModal && (
-        <div className="sp-modal-backdrop" onClick={() => setShowBulkModal(false)}>
-          <div className="sp-modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #E6E7DE)", paddingBottom: 12 }}>
+        <div className="sp-modal-backdrop cms-overlay" onClick={() => setShowBulkModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(13, 27, 51, 0.55)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px", zIndex: 10000 }}>
+          <div
+            className="sp-modal cms-modal sm"
+            style={{
+              width: "min(520px, calc(100vw - 32px))",
+              maxWidth: "520px",
+              background: "var(--cms-surface, #ffffff)",
+              color: "var(--cms-text, #10203c)",
+              borderRadius: "16px",
+              border: "1px solid var(--cms-border, #e4e8f0)",
+              boxShadow: "var(--cms-shadow-lg, 0 20px 50px rgba(16, 32, 60, 0.18))",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sp-modal-header cms-modal-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #e4e8f0)", padding: "16px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <div>
                 <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>Bulk Import Marks</h3>
                 <p className="sp-modal-subtitle" style={{ margin: "2px 0 0 0", fontSize: 12.5 }}>
@@ -2434,7 +3208,7 @@ export default function FacultyMarks() {
               </button>
             </div>
 
-            <div className="sp-modal-body" style={{ padding: "16px 0" }}>
+            <div className="sp-modal-body cms-modal-body" style={{ padding: "16px 22px", background: "var(--cms-surface, #ffffff)", maxHeight: "calc(85vh - 120px)", overflowY: "auto" }}>
               <div
                 style={{
                   border: "2px dashed var(--cms-border, #E6E7DE)",
@@ -2464,7 +3238,7 @@ export default function FacultyMarks() {
               />
             </div>
 
-            <div className="sp-modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid var(--cms-border, #E6E7DE)", paddingTop: 12 }}>
+            <div className="sp-modal-footer cms-modal-foot" style={{ display: "flex", justifyContent: "flex-end", gap: 10, borderTop: "1px solid var(--cms-border, #e4e8f0)", padding: "14px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"
@@ -2493,9 +3267,24 @@ export default function FacultyMarks() {
       {/* VIEW RESULTS MODAL                                       */}
       {/* ======================================================== */}
       {viewResultsEval && (
-        <div className="sp-modal-backdrop" onClick={() => setViewResultsEval(null)}>
-          <div className="sp-modal" style={{ maxWidth: 680 }} onClick={(e) => e.stopPropagation()}>
-            <div className="sp-modal-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #E6E7DE)", paddingBottom: 12 }}>
+        <div className="sp-modal-backdrop cms-overlay" onClick={() => setViewResultsEval(null)} style={{ position: "fixed", inset: 0, background: "rgba(13, 27, 51, 0.55)", backdropFilter: "blur(2px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "24px 16px", zIndex: 10000 }}>
+          <div
+            className="sp-modal cms-modal"
+            style={{
+              width: "min(920px, calc(100vw - 32px))",
+              maxWidth: "920px",
+              background: "var(--cms-surface, #ffffff)",
+              color: "var(--cms-text, #10203c)",
+              borderRadius: "16px",
+              border: "1px solid var(--cms-border, #e4e8f0)",
+              boxShadow: "var(--cms-shadow-lg, 0 20px 50px rgba(16, 32, 60, 0.18))",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sp-modal-header cms-modal-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--cms-border, #e4e8f0)", padding: "16px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <div>
                 <h3 className="sp-modal-title" style={{ margin: 0, fontSize: 16 }}>
                   {viewResultsEval.subjectName} — Results Inspection
@@ -2514,29 +3303,52 @@ export default function FacultyMarks() {
               </button>
             </div>
 
-            <div className="sp-modal-body" style={{ padding: "16px 0" }}>
-              <div className="cms-table-wrap">
-                <table className="cms-table">
+            <div className="sp-modal-body cms-modal-body" style={{ padding: "16px 22px", background: "var(--cms-surface, #ffffff)", maxHeight: "calc(85vh - 120px)", overflowY: "auto" }}>
+              <div className="cms-table-wrap" style={{ width: "100%", overflowX: "auto" }}>
+                <table className="cms-table" style={{ width: "100%", tableLayout: "auto" }}>
                   <thead>
                     <tr>
-                      <th className="cms-cell-center" style={{ width: 80 }}>ROLL NO</th>
-                      <th>STUDENT</th>
-                      <th className="cms-cell-center" style={{ width: 90 }}>INTERNAL</th>
-                      <th className="cms-cell-center" style={{ width: 90 }}>THEORY</th>
-                      <th className="cms-cell-center" style={{ width: 90 }}>TOTAL</th>
-                      <th className="cms-cell-center" style={{ width: 100 }}>PERCENTAGE</th>
-                      <th className="cms-cell-center" style={{ width: 80 }}>ABSENT</th>
+                      <th className="cms-cell-center" style={{ width: "13%", minWidth: 70 }}>ROLL NO</th>
+                      <th style={{ width: "27%", minWidth: 140 }}>STUDENT</th>
+                      {viewResultsEval.isObjective ? (
+                        <th className="cms-cell-center" style={{ width: "18%", minWidth: 110 }}>OBTAINED MARKS</th>
+                      ) : (
+                        <>
+                          {viewResultsEval.showInternal !== false && (
+                            <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>INTERNAL</th>
+                          )}
+                          {viewResultsEval.showPractical && (
+                            <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>PRACTICAL</th>
+                          )}
+                          <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>THEORY</th>
+                          <th className="cms-cell-center" style={{ width: "12%", minWidth: 70 }}>TOTAL</th>
+                        </>
+                      )}
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 80 }}>PERCENTAGE</th>
+                      <th className="cms-cell-center" style={{ width: "12%", minWidth: 65 }}>ABSENT</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(() => {
+                      const colCount = viewResultsEval.isObjective
+                        ? 5
+                        : 5 + (viewResultsEval.showInternal !== false ? 1 : 0) + (viewResultsEval.showPractical ? 1 : 0) + 1;
+                      if (resultsModalLoading) {
+                        return (
+                          <tr>
+                            <td colSpan={colCount} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
+                              Loading student scores...
+                            </td>
+                          </tr>
+                        );
+                      }
                       const rows = viewResultsEval.rows || [];
                       const start = (resultsModalPage - 1) * resultsPageSize;
                       const pagedRows = rows.slice(start, start + resultsPageSize);
                       if (pagedRows.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={7} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
+                            <td colSpan={colCount} style={{ textAlign: "center", padding: "20px 0", color: "var(--cms-muted)" }}>
                               No student scores recorded for this evaluation.
                             </td>
                           </tr>
@@ -2545,10 +3357,23 @@ export default function FacultyMarks() {
                       return pagedRows.map((r, idx) => (
                         <tr key={r.studentId || idx}>
                           <td className="cms-cell-center" style={{ fontWeight: 600 }}>{r.rollNo}</td>
-                          <td style={{ fontWeight: 600 }}>{r.name}</td>
-                          <td className="cms-cell-center">{r.absent ? "—" : r.internal}</td>
-                          <td className="cms-cell-center">{r.absent ? "—" : r.theory}</td>
-                          <td className="cms-cell-center" style={{ fontWeight: 700 }}>{r.absent ? "—" : r.totalScore}</td>
+                          <td style={{ fontWeight: 600 }}>{r.studentName || r.name}</td>
+                          {viewResultsEval.isObjective ? (
+                            <td className="cms-cell-center" style={{ fontWeight: 700 }}>
+                              {r.absent ? "—" : (r.obtainedMarks ?? r.totalScore ?? r.totalMarks ?? r.total ?? "—")}
+                            </td>
+                          ) : (
+                            <>
+                              {viewResultsEval.showInternal !== false && (
+                                <td className="cms-cell-center">{r.absent ? "—" : r.internal}</td>
+                              )}
+                              {viewResultsEval.showPractical && (
+                                <td className="cms-cell-center">{r.absent ? "—" : r.practical}</td>
+                              )}
+                              <td className="cms-cell-center">{r.absent ? "—" : r.theory}</td>
+                              <td className="cms-cell-center" style={{ fontWeight: 700 }}>{r.absent ? "—" : (r.totalScore ?? r.totalMarks ?? r.total ?? r.obtainedMarks ?? "—")}</td>
+                            </>
+                          )}
                           <td className="cms-cell-center">{r.absent ? "—" : r.percentage}</td>
                           <td className="cms-cell-center">{r.absent ? "Yes" : "No"}</td>
                         </tr>
@@ -2591,7 +3416,7 @@ export default function FacultyMarks() {
               )}
             </div>
 
-            <div className="sp-modal-footer" style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--cms-border, #E6E7DE)", paddingTop: 12 }}>
+            <div className="sp-modal-footer cms-modal-foot" style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid var(--cms-border, #e4e8f0)", padding: "14px 22px", background: "var(--cms-surface, #ffffff)" }}>
               <button
                 type="button"
                 className="cms-btn cms-btn-ghost"

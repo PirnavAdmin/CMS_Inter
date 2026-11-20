@@ -123,7 +123,8 @@ namespace CollegeManagement.API.Tests
                 { "BankDetailsJson", "ALTER TABLE `Staff` ADD COLUMN `BankDetailsJson` LONGTEXT NULL;" },
                 { "EmergencyContactJson", "ALTER TABLE `Staff` ADD COLUMN `EmergencyContactJson` LONGTEXT NULL;" },
                 { "DepartmentSpecificJson", "ALTER TABLE `Staff` ADD COLUMN `DepartmentSpecificJson` LONGTEXT NULL;" },
-                { "CustomFieldsJson", "ALTER TABLE `Staff` ADD COLUMN `CustomFieldsJson` LONGTEXT NULL;" }
+                { "CustomFieldsJson", "ALTER TABLE `Staff` ADD COLUMN `CustomFieldsJson` LONGTEXT NULL;" },
+                { "OfferLetterPath", "ALTER TABLE `Staff` ADD COLUMN `OfferLetterPath` VARCHAR(500) NULL;" }
             };
 
             foreach (var col in requiredCols)

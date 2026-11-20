@@ -190,15 +190,7 @@ export const nonTeachingService = {
     return getStored("attendance_logs", []);
   },
 
-  getAttendanceSummary: () => {
-    return {
-      attendanceRate: 0,
-      workingDays: 0,
-      presentDays: 0,
-      approvedLeaves: 0,
-      absentDays: 0,
-    };
-  },
+  getAttendanceSummary: () => null,
 
   recordPunch: (action) => {
     const now = new Date();
@@ -271,24 +263,25 @@ export const nonTeachingService = {
   },
 
   fetchAttendanceSummary: async () => {
-    try {
-      const res = await apiClient.get("/api/v1/staff-attendance/my-history?period=month");
-      const summary = res?.data?.data?.summary || res?.data?.Data?.Summary || res?.data?.Summary;
-      if (summary) {
-        const mapped = {
-          attendanceRate: Number(summary.attendanceRate ?? summary.AttendanceRate ?? 95.2),
-          workingDays: Number(summary.workingDays ?? summary.WorkingDays ?? 22),
-          presentDays: Number(summary.presentDays ?? summary.PresentDays ?? 20),
-          approvedLeaves: Number(summary.approvedLeaves ?? summary.ApprovedLeaves ?? 2),
-          absentDays: Number(summary.absentDays ?? summary.AbsentDays ?? 0),
-        };
-        setStored("attendance_summary", mapped);
-        return mapped;
-      }
-    } catch {
-      /* fallback */
-    }
-    return nonTeachingService.getAttendanceSummary();
+    const res = await apiClient.get("/api/v1/staff-attendance/my-history?period=month");
+    const payload = res?.data?.data || res?.data?.Data || res?.data;
+    const metrics = payload?.metrics || payload?.Metrics || payload?.summary || payload?.Summary;
+    if (!metrics) return null;
+    const workingDays = parseInt(String(metrics.workingDays ?? metrics.WorkingDays ?? "0"), 10) || 0;
+    const presentDays = parseInt(String(metrics.presentDays ?? metrics.PresentDays ?? "0"), 10) || 0;
+    const approvedLeaves = parseInt(String(metrics.leaves ?? metrics.Leaves ?? metrics.approvedLeaves ?? metrics.ApprovedLeaves ?? "0"), 10) || 0;
+    const absentDays = parseInt(String(metrics.absentDays ?? metrics.AbsentDays ?? "0"), 10) || 0;
+    const rawPct = metrics.attendancePercentage ?? metrics.AttendancePercentage ?? metrics.attendanceRate ?? metrics.AttendanceRate;
+    const attendanceRate = rawPct != null && Number.isFinite(Number(rawPct))
+      ? Math.round(Number(rawPct) * 10) / 10
+      : (workingDays > 0 ? Math.round((presentDays / workingDays) * 1000) / 10 : 0);
+    return {
+      attendanceRate,
+      workingDays,
+      presentDays,
+      approvedLeaves,
+      absentDays,
+    };
   },
 
   // Tasks (Connected to /api/v1/staff-tasks)

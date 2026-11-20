@@ -18,6 +18,11 @@ namespace CollegeManagement.API.Enums
         /// <summary>
         /// Leave request has been rejected.
         /// </summary>
-        Rejected = 3
+        Rejected = 3,
+
+        /// <summary>
+        /// Leave request has been cancelled by the applicant.
+        /// </summary>
+        Cancelled = 3
     }
 }

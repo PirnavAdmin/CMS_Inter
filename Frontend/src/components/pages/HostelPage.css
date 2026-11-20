@@ -4,6 +4,19 @@
    Strict CSS Custom Property (--cms-*) Variables & Flat Button Aesthetics
    ========================================================================== */
 
+:root {
+  --cms-hostel-heading-color: #0f172a;
+  --cms-hostel-label-color: #1e293b;
+  --cms-hostel-kpi-label-color: #334155;
+}
+
+[data-theme="dark"],
+:root[data-theme="dark"] {
+  --cms-hostel-heading-color: #f8fafc;
+  --cms-hostel-label-color: #f1f5f9;
+  --cms-hostel-kpi-label-color: #cbd5e1;
+}
+
 .cms-hostel-page,
 .cms-hostel-stack {
   display: grid;
@@ -353,9 +366,9 @@
 
 .cms-hostel-table thead th {
   background: var(--cms-table-header) !important;
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #334155) !important;
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 10px 14px;
@@ -565,8 +578,8 @@
 
 .cms-hostel-form-field label {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--cms-text);
+  font-weight: 700;
+  color: var(--cms-hostel-label-color, #1e293b);
 }
 
 .cms-hostel-input,
@@ -650,7 +663,8 @@ button,
 
 [data-theme="dark"] .cms-hostel-table thead th {
   background: var(--cms-table-header) !important;
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #cbd5e1) !important;
+  font-weight: 750;
 }
 
 [data-theme="dark"] .cms-hostel-table tbody tr:hover {
@@ -807,8 +821,8 @@ button,
 
 .cms-sharing-cell label {
   font-size: 11px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-label-color, #1e293b);
   white-space: nowrap;
 }
 
@@ -1160,8 +1174,8 @@ button,
 
 .cms-modal label,
 .cms-hostel-modal-lg label {
-  color: var(--cms-text) !important;
-  font-weight: 600 !important;
+  color: var(--cms-hostel-label-color, #1e293b) !important;
+  font-weight: 700 !important;
   font-size: 12.5px !important;
 }
 
@@ -1225,8 +1239,8 @@ button,
 .cms-hostel-compact-table th {
   padding: 10px 14px;
   font-size: 11px;
-  font-weight: 700;
-  color: var(--cms-muted);
+  font-weight: 750;
+  color: var(--cms-hostel-kpi-label-color, #334155);
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -1267,8 +1281,8 @@ button,
 .cms-alloc-title-group h2 {
   margin: 0;
   font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--cms-text);
+  font-weight: 850;
+  color: var(--cms-hostel-heading-color, #0f172a);
   letter-spacing: -0.02em;
 }
 
@@ -1368,8 +1382,8 @@ button,
 .cms-att-title-group h2 {
   margin: 0;
   font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--cms-text);
+  font-weight: 850;
+  color: var(--cms-hostel-heading-color, #0f172a);
   letter-spacing: -0.02em;
 }
 
@@ -1510,9 +1524,9 @@ button,
 .cms-att-filter-lbl-compact {
   display: block;
   font-size: 10.5px;
-  font-weight: 800;
+  font-weight: 850;
   letter-spacing: 0.04em;
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #334155);
   margin-bottom: 4px;
   text-transform: uppercase;
 }
@@ -1688,8 +1702,8 @@ button,
   align-items: center;
   gap: 10px;
   font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--cms-text);
+  font-weight: 850;
+  color: var(--cms-hostel-heading-color, #0f172a);
   margin: 0;
   letter-spacing: -0.02em;
 }
@@ -1802,9 +1816,9 @@ button,
 
 .cms-dash-kpi-label {
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 850;
   letter-spacing: 0.05em;
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #334155);
   text-transform: uppercase;
 }
 
@@ -1846,8 +1860,8 @@ button,
 
 .cms-dash-quick-label {
   font-size: 12px;
-  font-weight: 800;
-  color: var(--cms-text);
+  font-weight: 850;
+  color: var(--cms-hostel-label-color, #1e293b);
   margin-right: 4px;
   white-space: nowrap;
 }
@@ -1889,8 +1903,8 @@ button,
   align-items: center;
   margin-bottom: 8px;
   font-size: 12px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
 }
 
 .cms-dash-progress-track {
@@ -1988,8 +2002,8 @@ button,
   align-items: center;
   gap: 7px;
   font-size: 12.5px;
-  font-weight: 800;
-  color: var(--cms-text);
+  font-weight: 850;
+  color: var(--cms-hostel-heading-color, #0f172a);
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
@@ -2080,8 +2094,8 @@ button,
 .cms-alloc-modal-label {
   display: block;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--cms-text);
+  font-weight: 700;
+  color: var(--cms-hostel-label-color, #1e293b);
   margin-bottom: 4px;
 }
 
@@ -2271,8 +2285,8 @@ input[type="number"] {
 .cms-hostel-filter-empty-title {
   margin: 0 0 6px;
   font-size: 16px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
 }
 
 .cms-hostel-filter-empty-desc {
@@ -2300,8 +2314,8 @@ input[type="number"] {
 
 .cms-outpass-title-group h2 {
   font-size: 16px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
   margin: 0;
 }
 
@@ -2697,9 +2711,9 @@ input[type="number"] {
 .cms-transfer-th {
   padding: 10px 12px;
   background: var(--cms-table-header);
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #334155);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--cms-border);
@@ -2842,8 +2856,8 @@ input[type="number"] {
 
 .cms-report-title-group h2 {
   font-size: 20px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
   margin: 0;
 }
 
@@ -2950,8 +2964,8 @@ input[type="number"] {
 
 .cms-report-label {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--cms-text);
+  font-weight: 700;
+  color: var(--cms-hostel-label-color, #1e293b);
   margin-bottom: 6px;
 }
 
@@ -3040,8 +3054,8 @@ input[type="number"] {
 
 .cms-report-table-title {
   font-size: 16px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
   margin: 0;
 }
 
@@ -3067,9 +3081,9 @@ input[type="number"] {
 .cms-report-th {
   padding: 11px 16px;
   background: var(--cms-table-header);
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #334155);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 750;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   border-bottom: 1px solid var(--cms-border);
@@ -3118,8 +3132,8 @@ input[type="number"] {
 
 .cms-block-modal-field label {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--cms-text);
+  font-weight: 700;
+  color: var(--cms-hostel-label-color, #1e293b);
   display: flex;
   align-items: center;
   gap: 3px;
@@ -3198,10 +3212,10 @@ input[type="number"] {
 
 .cms-custom-cat-header {
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 850;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--cms-muted);
+  color: var(--cms-hostel-kpi-label-color, #334155);
   margin-bottom: 8px;
 }
 
@@ -3250,8 +3264,8 @@ input[type="number"] {
 
 .cms-custom-cat-num-field label {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--cms-muted);
+  font-weight: 700;
+  color: var(--cms-hostel-label-color, #1e293b);
   white-space: nowrap;
 }
 
@@ -3369,8 +3383,8 @@ input[type="number"] {
 
 .cms-overview-floor-heading {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--cms-text);
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
   margin-bottom: 2px;
 }
 
@@ -3405,7 +3419,8 @@ input[type="number"] {
 }
 
 .cms-overview-floor-title strong {
-  font-weight: 700;
+  font-weight: 750;
+  color: var(--cms-hostel-heading-color, #0f172a);
 }
 
 .cms-overview-floor-title span {
@@ -3458,10 +3473,14 @@ input[type="number"] {
 
 .cms-overview-kpi-label {
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 850;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #94a3b8;
+  color: var(--cms-hostel-kpi-label-color, #334155);
+}
+
+.cms-overview-kpi-card .cms-overview-kpi-label {
+  color: #e2e8f0;
 }
 
 .cms-overview-kpi-val {
@@ -3507,8 +3526,8 @@ input[type="number"] {
 
 .cms-overview-field label {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--cms-text);
+  font-weight: 700;
+  color: var(--cms-hostel-label-color, #1e293b);
   display: flex;
   align-items: center;
   gap: 3px;
@@ -3572,8 +3591,8 @@ input[type="number"] {
 
 .cms-report-page-size-label {
   font-size: 12.5px;
-  color: var(--cms-muted);
-  font-weight: 500;
+  color: var(--cms-hostel-kpi-label-color, #334155);
+  font-weight: 650;
   white-space: nowrap;
 }
 
@@ -4075,8 +4094,8 @@ input[type="number"] {
 
 .cms-rev-kpi-label {
   font-size: 11px;
-  font-weight: 700;
-  color: var(--cms-muted);
+  font-weight: 800;
+  color: var(--cms-hostel-kpi-label-color, #334155);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }

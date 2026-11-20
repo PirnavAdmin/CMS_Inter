@@ -26,7 +26,9 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
                 DateTime? requestDate = null,
-                string? search = null)
+                string? search = null,
+                int? allocationId = null,
+                int? campusId = null)
         {
             var records = await _repository.GetAllAsync(
                 studentId,
@@ -34,7 +36,9 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 approvalStatus,
                 feeSettlementStatus,
                 requestDate,
-                search);
+                search,
+                allocationId,
+                campusId);
 
             return records.Select(MapToResponseDto);
         }
@@ -167,6 +171,20 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
             var requestId =
                 await _repository.CreateAsync(request);
+
+            if (dto.AutoApprove || (dto.ApprovalStatus != null && dto.ApprovalStatus.Equals("Approved", StringComparison.OrdinalIgnoreCase)))
+            {
+                var completeResult = await CompleteAsync(requestId);
+                if (completeResult.Success && completeResult.Data != null)
+                {
+                    return (
+                        true,
+                        requestType == "Transfer"
+                            ? "Hostel transfer approved and completed successfully."
+                            : "Hostel bed vacated and released successfully.",
+                        completeResult.Data);
+                }
+            }
 
             var created =
                 await _repository.GetByIdAsync(requestId);
@@ -504,26 +522,28 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
             if (!existing.ApprovalStatus.Equals(
                     "Approved",
+                    StringComparison.OrdinalIgnoreCase)
+                &&
+                !existing.ApprovalStatus.Equals(
+                    "Pending",
+                    StringComparison.OrdinalIgnoreCase)
+                &&
+                !existing.ApprovalStatus.Equals(
+                    "Completed",
                     StringComparison.OrdinalIgnoreCase))
             {
                 return (
                     false,
-                    "Request must be approved before completion.",
+                    "Only pending or approved transfer/vacate requests can be completed.",
                     null);
             }
 
-            if (!existing.FeeSettlementStatus.Equals(
-                    "Settled",
-                    StringComparison.OrdinalIgnoreCase)
-                &&
-                !existing.FeeSettlementStatus.Equals(
-                    "NotApplicable",
-                    StringComparison.OrdinalIgnoreCase))
+            if (existing.FeeSettlementStatus.Equals("Pending", StringComparison.OrdinalIgnoreCase))
             {
-                return (
-                    false,
-                    "Fee settlement must be Settled or NotApplicable before completion.",
-                    null);
+                var targetSettlement = existing.RequestType.Equals("Transfer", StringComparison.OrdinalIgnoreCase)
+                    ? "NotApplicable"
+                    : "Settled";
+                await _repository.UpdateSettlementAsync(requestId, targetSettlement, existing.RefundAmount, existing.AdditionalChargeAmount, "Auto-settled on completion");
             }
 
             if (existing.RequestType.Equals(

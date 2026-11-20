@@ -115,7 +115,7 @@
 .cms-independent-tab-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 8px;
   margin-top: 4px;
   margin-bottom: 4px;
@@ -291,6 +291,8 @@
   border-radius: var(--cms-radius);
   box-shadow: var(--cms-shadow);
   overflow: visible !important;
+
+
 }
 
 .cms-card-filter {
@@ -298,6 +300,8 @@
   z-index: 100;
   padding: 18px 20px;
   overflow: visible !important;
+
+
 }
 
 .cms-section-heading {
@@ -329,6 +333,8 @@
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 12px;
   overflow: visible !important;
+
+
 }
 
 .cms-field-group {
@@ -339,6 +345,8 @@
   min-width: 0;
   max-width: 100%;
   overflow: visible !important;
+
+
 }
 
 .cms-field-label {
@@ -356,6 +364,8 @@
   min-width: 0;
   max-width: 100%;
   overflow: visible !important;
+
+
   opacity: 1 !important;
 }
 
@@ -589,7 +599,7 @@
 }
 
 .cms-entry-select-compact .cms-custom-select-combobox {
-  height: 34px;
+  height: 32px;
 }
 
 /* ---------- Context Summary Box (Ref Screenshots 1-5) ---------- */
@@ -620,7 +630,7 @@
 /* ---------- Selects in Entry Tab (Ref Screenshot 5) ---------- */
 .cms-entry-selects {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 12px;
   flex: 1 1 480px;
   min-width: 0;
@@ -651,7 +661,7 @@
 /* ---------- Workspace & Toolbar Layout ---------- */
 .cms-workspace-actions {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   row-gap: 8px;
@@ -802,6 +812,8 @@
 .cms-main-card {
   padding: 18px 20px;
   overflow: visible !important;
+
+
 }
 
 .cms-table-toolbar {
@@ -814,7 +826,10 @@
 }
 
 /* ---------- Evaluation Table Toolbar & Inner Sub-Tabs ---------- */
-.cms-eval-table-toolbar {
+.cms-eval-table-toolbar { overflow: visible !important; justify-content: flex-start !important; gap: 8px !important;
+  overflow: visible !important;
+
+
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -823,7 +838,7 @@
   flex-wrap: nowrap;
 }
 
-.cms-eval-toolbar-left {
+.cms-eval-toolbar-left { display: flex !important; align-items: center !important; gap: 8px !important; flex: 0 0 auto !important; width: auto !important; margin: 0 !important; } .cms-eval-toolbar-left-legacy {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -834,20 +849,24 @@
 .cms-subtab-pill-group {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   background: var(--cms-surface-subtle, #f5f6f0);
   border: 1.5px solid color-mix(in srgb, var(--cms-primary, #6f8400) 28%, transparent);
-
   border-radius: 8px;
-  padding: 3px;
+  padding: 2px;
+  height: 32px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .cms-subtab-pill-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 14px;
-  font-size: 0.8rem;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 11px;
+  font-size: 0.78rem;
   font-weight: 600;
   border-radius: 6px;
   border: 1px solid transparent;
@@ -856,12 +875,12 @@
   cursor: pointer;
   transition: all 0.18s ease;
   white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .cms-subtab-pill-btn:hover:not(.active) {
   color: var(--cms-text, #171a17);
   background: color-mix(in srgb, var(--cms-primary, #6f8400) 8%, transparent);
-
 }
 
 .cms-subtab-pill-btn.active {
@@ -869,6 +888,7 @@
   border: 1px solid var(--cms-primary, #6f8400);
   color: #ffffff;
   font-weight: 700;
+  line-height: 24px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
@@ -897,27 +917,35 @@
 }
 
 .cms-eval-search {
-  min-width: 240px;
-  max-width: 340px;
-  flex: 1;
+  margin-left: auto !important;
+  width: 160px;
+  min-width: 130px;
+  max-width: 180px;
+  flex: 0 1 170px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .cms-search-wrap {
   position: relative;
-  min-width: 240px;
-  flex: 1;
-  max-width: 320px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 32px;
+  display: flex;
+  align-items: center;
 }
 
 .cms-search-input {
   width: 100%;
-  height: 35px;
-  padding: 0 10px 0 10px;
-  border-radius: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
   border: 1px solid var(--cms-border, #e6e7de);
   background: var(--cms-surface, #ffffff);
   color: var(--cms-text, #171a17);
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   outline: none;
   box-sizing: border-box;
 }
@@ -1577,6 +1605,7 @@
 
   .cms-search-wrap,
   .cms-eval-search {
+  margin-left: auto !important;
     width: 100%;
     max-width: none;
     min-width: 0;
@@ -1960,48 +1989,224 @@
 }
 
 @media (max-width: 992px) {
-  .cms-eval-table-toolbar {
-    flex-wrap: wrap !important;
-    gap: 10px !important;
+  .cms-eval-table-toolbar { overflow: visible !important; justify-content: flex-start !important; gap: 8px !important;
+  overflow: visible !important;
+
+
+    display: flex !important;
+    flex-wrap: nowrap !important;
+  
+    align-items: center !important;
+    justify-content: flex-start !important;
   }
-  .cms-eval-toolbar-left {
+  .cms-eval-toolbar-left { display: flex !important; align-items: center !important; gap: 8px !important; flex: 0 0 auto !important; width: auto !important; margin: 0 !important; } .cms-eval-toolbar-left-legacy {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+  
+    align-items: center !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+  .cms-subtab-pill-group {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 2px !important;
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    padding: 2px !important;
+    flex-shrink: 0 !important;
+  }
+  .cms-subtab-pill-btn {
+    height: 26px !important;
+    line-height: 26px !important;
+    padding: 0 8px !important;
+    font-size: 0.73rem !important;
+  }
+  .cms-bulk-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+  .cms-bulk-actions .cms-btn,
+  .cms-btn {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    line-height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 0.73rem !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+  .cms-action-btn {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  .cms-eval-search {
+  margin-left: auto !important;
+    width: 135px !important;
+    min-width: 80px !important;
+    max-width: 135px !important;
+    flex: 0 1 135px !important;
+    flex-shrink: 0 !important;
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+  .cms-search-wrap {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    width: 100% !important;
+  }
+  .cms-search-input {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    font-size: 0.73rem !important;
+    padding: 0 8px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .cms-eval-table-toolbar { overflow: visible !important; justify-content: flex-start !important; gap: 8px !important;
+  overflow: visible !important;
+
+
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    overflow: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+  }
+  .cms-eval-table-toolbar::-webkit-scrollbar {
+    display: none !important;
+  }
+  .cms-eval-toolbar-left { display: flex !important; align-items: center !important; gap: 8px !important; flex: 0 0 auto !important; width: auto !important; margin: 0 !important; } .cms-eval-toolbar-left-legacy {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex: 0 0 auto !important;
+  }
+  .cms-subtab-pill-group {
+    display: inline-flex !important;
+    gap: 2px !important;
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    padding: 2px !important;
+    flex-shrink: 0 !important;
+  }
+  .cms-subtab-pill-btn {
+    height: 26px !important;
+    line-height: 26px !important;
+    padding: 0 8px !important;
+    font-size: 0.74rem !important;
+  }
+  .cms-bulk-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    flex-wrap: nowrap !important;
+    flex-shrink: 0 !important;
+  }
+  .cms-bulk-actions .cms-btn {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    line-height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 0.74rem !important;
+  }
+  .cms-eval-search {
+  margin-left: auto !important;
+    width: 120px !important;
+    min-width: 75px !important;
+    max-width: 130px !important;
+    flex: 0 1 115px !important;
+    flex-shrink: 0 !important;
+    height: 32px !important;
+    flex-shrink: 1 !important;
+  }
+  .cms-search-wrap {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    width: 100% !important;
+  }
+  .cms-search-input {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    font-size: 0.74rem !important;
+    padding: 0 8px !important;
+  }
+  .cms-modal-actions {
     flex-wrap: wrap !important;
-    gap: 8px !important;
+    gap: 6px !important;
+  }
+  .cms-modal-actions .cms-btn {
+    height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 0.72rem !important;
   }
 }
 
 @media (max-width: 640px) {
-  .cms-eval-table-toolbar {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    gap: 10px !important;
-  }
-  .cms-eval-toolbar-left {
-    flex-direction: column !important;
-    align-items: stretch !important;
-    width: 100% !important;
-    gap: 8px !important;
-  }
-  .cms-subtab-pill-group {
-    width: 100% !important;
+  .cms-eval-table-toolbar { overflow: visible !important; justify-content: flex-start !important; gap: 8px !important;
+  overflow: visible !important;
+
+
     display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+    overflow: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 2px !important;
   }
-  .cms-subtab-pill-btn {
-    flex: 1 !important;
-    text-align: center !important;
+  .cms-eval-toolbar-left { display: flex !important; align-items: center !important; gap: 8px !important; flex: 0 0 auto !important; width: auto !important; margin: 0 !important; } .cms-eval-toolbar-left-legacy {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 6px !important;
+    flex-shrink: 0 !important;
   }
   .cms-bulk-actions {
-    width: 100% !important;
-    display: flex !important;
-    justify-content: stretch !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    flex-shrink: 0 !important;
   }
   .cms-bulk-actions .cms-btn {
-    flex: 1 !important;
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    line-height: 30px !important;
+    padding: 0 8px !important;
+    font-size: 0.72rem !important;
+    flex-shrink: 0 !important;
   }
   .cms-eval-search {
+  margin-left: auto !important;
+    width: 110px !important;
+    min-width: 75px !important;
+    max-width: 120px !important;
+    flex: 0 1 105px !important;
+    flex-shrink: 0 !important;
+    height: 32px !important;
+    flex-shrink: 1 !important;
+  }
+  .cms-search-wrap {
+    height: 32px !important;
+    flex-shrink: 1 !important;
     width: 100% !important;
-    max-width: 100% !important;
-    min-width: 0 !important;
+  }
+  .cms-search-input {
+    height: 32px !important;
+    flex-shrink: 1 !important;
+    font-size: 0.72rem !important;
+    padding: 0 6px !important;
   }
 }
 

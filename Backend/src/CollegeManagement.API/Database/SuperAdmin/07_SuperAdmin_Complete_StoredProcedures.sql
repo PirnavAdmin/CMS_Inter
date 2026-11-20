@@ -95,7 +95,8 @@ BEGIN
         COALESCE(p.`PlanName`, 'Free') AS PlanName,
         COALESCE(p.`AccountLimit`, 25) AS AccountLimit,
         (SELECT COUNT(*) FROM `Users` u WHERE u.`CollegeId` = c.`CollegeId` AND u.`IsActive` = 1) AS ActiveUsersCount,
-        (SELECT COUNT(*) FROM `Campuses` camp WHERE camp.`CollegeId` = c.`CollegeId`) AS TotalCampuses
+        (SELECT COUNT(*) FROM `Campuses` camp WHERE camp.`CollegeId` = c.`CollegeId`) AS TotalCampuses,
+        (SELECT COUNT(*) FROM `Students` s JOIN `Campuses` camp ON s.`CampusId` = camp.`CampusId` WHERE camp.`CollegeId` = c.`CollegeId`) AS TotalStudents
     FROM `Colleges` c
     LEFT JOIN `CollegeSubscriptions` cs ON c.`CollegeId` = cs.`CollegeId`
     LEFT JOIN `SubscriptionPlans` p ON cs.`PlanId` = p.`PlanId`
@@ -106,7 +107,7 @@ BEGIN
            OR c.`CollegeName` LIKE CONCAT('%', p_SearchTerm, '%')
            OR c.`CollegeCode` LIKE CONCAT('%', p_SearchTerm, '%')
            OR c.`OfficialEmail` LIKE CONCAT('%', p_SearchTerm, '%'))
-    ORDER BY c.`CollegeId` DESC
+    ORDER BY c.`CollegeId` ASC
     LIMIT p_PageSize OFFSET v_Offset;
 END$$
 
@@ -134,6 +135,7 @@ BEGIN
         COALESCE(p.`AccountLimit`, 25) AS AccountLimit,
         (SELECT COUNT(*) FROM `Users` u WHERE u.`CollegeId` = c.`CollegeId` AND u.`IsActive` = 1) AS ActiveUsersCount,
         (SELECT COUNT(*) FROM `Campuses` camp WHERE camp.`CollegeId` = c.`CollegeId`) AS TotalCampuses,
+        (SELECT COUNT(*) FROM `Students` s JOIN `Campuses` camp ON s.`CampusId` = camp.`CampusId` WHERE camp.`CollegeId` = c.`CollegeId`) AS TotalStudents,
         (SELECT u.`Email` FROM `Users` u JOIN `Roles` r ON u.`RoleId` = r.`RoleId` WHERE u.`CollegeId` = c.`CollegeId` AND r.`RoleCode` = 'COLLEGE_ADMIN' LIMIT 1) AS AdminEmail,
         (SELECT u.`FullName` FROM `Users` u JOIN `Roles` r ON u.`RoleId` = r.`RoleId` WHERE u.`CollegeId` = c.`CollegeId` AND r.`RoleCode` = 'COLLEGE_ADMIN' LIMIT 1) AS AdminFullName
     FROM `Colleges` c

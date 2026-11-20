@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useSearchParams } from "react-router-dom";
 import TransportManagerDashboard from "./TransportManagerDashboard.jsx";
 import { TransportManagerProvider } from "./TransportManagerContext.jsx";
 import ErrorBoundary from "@/shared/components/ErrorBoundary.jsx";
+import ProtectedRoute from "@/routes/ProtectedRoute.jsx";
 
 import TransportManagerHome from "./pages/TransportManagerHome.jsx";
 import TransportManagerSetup from "./pages/TransportManagerSetup.jsx";
@@ -30,22 +31,22 @@ export function TransportManagerContent() {
         <Route path="/" element={<TransportManagerDashboard />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="overview" element={<TransportManagerHome />} />
-          <Route path="setup" element={<TransportManagerSetup />} />
-          <Route path="operations" element={<TransportManagerOperations />} />
-          <Route path="reports" element={<TransportManagerReports />} />
+          <Route path="setup" element={<ProtectedRoute requiredModule="transport-manager-setup"><TransportManagerSetup /></ProtectedRoute>} />
+          <Route path="operations" element={<ProtectedRoute requiredModule="transport-manager-operations"><TransportManagerOperations /></ProtectedRoute>} />
+          <Route path="reports" element={<ProtectedRoute requiredModule="reports-analytics"><TransportManagerReports /></ProtectedRoute>} />
 
           {/* Legacy route redirects to internal sub-tabs */}
-          <Route path="drivers" element={<TransportManagerLegacyRedirect path="setup" tab="drivers" />} />
-          <Route path="vehicles" element={<TransportManagerLegacyRedirect path="setup" tab="vehicles" />} />
-          <Route path="assignments" element={<TransportManagerLegacyRedirect path="operations" tab="vehicleAssignments" />} />
-          <Route path="maintenance" element={<TransportManagerLegacyRedirect path="operations" tab="maintenance" />} />
-          <Route path="my-attendance" element={<TransportManagerMyAttendance />} />
-          <Route path="payslips" element={<TransportManagerPayslips />} />
-          <Route path="reimbursements" element={<TransportManagerReimbursements />} />
-          <Route path="leave" element={<TransportManagerLeave />} />
-          <Route path="holidays" element={<TransportManagerHolidays />} />
-          <Route path="profile" element={<TransportManagerProfile />} />
-          <Route path="settings" element={<TransportManagerSettings />} />
+          <Route path="drivers" element={<ProtectedRoute requiredModule="transport-manager-setup"><TransportManagerLegacyRedirect path="setup" tab="drivers" /></ProtectedRoute>} />
+          <Route path="vehicles" element={<ProtectedRoute requiredModule="transport-manager-setup"><TransportManagerLegacyRedirect path="setup" tab="vehicles" /></ProtectedRoute>} />
+          <Route path="assignments" element={<ProtectedRoute requiredModule="transport-manager-operations"><TransportManagerLegacyRedirect path="operations" tab="vehicleAssignments" /></ProtectedRoute>} />
+          <Route path="maintenance" element={<ProtectedRoute requiredModule="transport-manager-operations"><TransportManagerLegacyRedirect path="operations" tab="maintenance" /></ProtectedRoute>} />
+          <Route path="my-attendance" element={<ProtectedRoute requiredModule="staff-attendance"><TransportManagerMyAttendance /></ProtectedRoute>} />
+          <Route path="payslips" element={<ProtectedRoute requiredModule="payroll"><TransportManagerPayslips /></ProtectedRoute>} />
+          <Route path="reimbursements" element={<ProtectedRoute requiredModule="reimbursement"><TransportManagerReimbursements /></ProtectedRoute>} />
+          <Route path="leave" element={<ProtectedRoute requiredModule="staff-leave-management"><TransportManagerLeave /></ProtectedRoute>} />
+          <Route path="holidays" element={<ProtectedRoute requiredModule="holiday-management"><TransportManagerHolidays /></ProtectedRoute>} />
+          <Route path="profile" element={<ProtectedRoute requiredModule="profile"><TransportManagerProfile /></ProtectedRoute>} />
+          <Route path="settings" element={<ProtectedRoute requiredModule="settings"><TransportManagerSettings /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="overview" replace />} />
         </Route>
       </Routes>

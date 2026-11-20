@@ -89,6 +89,15 @@ export const getAuthToken = () => {
     return token;
   }
 
+  const isWarden =
+    role.includes("warden") ||
+    token.startsWith("mock-warden-") ||
+    (typeof window !== "undefined" && window.location?.pathname?.startsWith("/warden"));
+
+  if (isWarden) {
+    return token;
+  }
+
   // Admin and ERP modules: automatically upgrade mock/demo tokens to live verified backend JWT only if token exists
   if (token.startsWith("mock-") || token.startsWith("demo-") || token.startsWith("exam-cell-")) {
     updateAuthToken(BACKEND_ADMIN_JWT);
@@ -172,7 +181,15 @@ export const clearAuthSession = () => {
     window.sessionStorage.removeItem("staff_profile_data");
     // Remove namespaced staff profiles but preserve user profile photos across logins/logouts
     Object.keys(window.localStorage || {}).forEach((k) => {
-      if (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) {
+      if (
+        (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) ||
+        k.startsWith("cms_campuses_data") ||
+        k.startsWith("cms_selected_campus_id") ||
+        k.startsWith("cms_cached_boards") ||
+        k.startsWith("cms_cached_academic_years") ||
+        k.startsWith("cms_selected_board") ||
+        k.startsWith("cms_selected_academic_year")
+      ) {
         window.localStorage.removeItem(k);
       }
     });
@@ -182,6 +199,9 @@ export const clearAuthSession = () => {
       }
     });
   } catch { /* Storage unavailable */ }
+  try {
+    window.dispatchEvent(new Event("cms-auth-logout"));
+  } catch { /* Event dispatch unavailable */ }
 };
 
 export const saveAuthSession = ({ token, user, role }, persistent) => {

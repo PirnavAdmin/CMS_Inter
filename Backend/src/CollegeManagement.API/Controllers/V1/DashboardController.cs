@@ -77,6 +77,11 @@ public class DashboardController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetFilterOptions(CancellationToken ct = default)
     {
+        var campusCheck = await ValidateAndResolveCampusAsync(null, ct);
+        if (campusCheck.Success && campusCheck.EffectiveCampusId == 999999999)
+        {
+            return Ok(new DashboardFilterOptionsResponseDto());
+        }
         var result = await _dashboardService.GetFilterOptionsAsync(ct);
         return Ok(result);
     }
@@ -100,7 +105,11 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
-        int resolvedCampusId = campusCheck.EffectiveCampusId ?? 1;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new PrincipalDashboardResponseDto());
+        }
+        int resolvedCampusId = campusCheck.EffectiveCampusId ?? 0;
 
         var result = await _dashboardService.GetPrincipalOverviewAsync(resolvedCampusId, academicYearId, boardId, ct);
         return Ok(result);
@@ -123,7 +132,11 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
-        int resolvedCampusId = campusCheck.EffectiveCampusId ?? 1;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new List<PrincipalNoticeDto>());
+        }
+        int resolvedCampusId = campusCheck.EffectiveCampusId ?? 0;
 
         var result = await _dashboardService.GetNoticesAsync(resolvedCampusId, audience, limit, ct);
         return Ok(result);
@@ -146,7 +159,9 @@ public class DashboardController : ControllerBase
 
         var campusCheck = await ValidateAndResolveCampusAsync(request.CampusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
-        request.CampusId = campusCheck.EffectiveCampusId ?? 1;
+        if (!campusCheck.EffectiveCampusId.HasValue || campusCheck.EffectiveCampusId.Value <= 0 || campusCheck.EffectiveCampusId.Value == 999999999)
+            return BadRequest(new { success = false, message = "Please configure an active campus before creating notices." });
+        request.CampusId = campusCheck.EffectiveCampusId.Value;
 
         string role = User.IsInRole("Principal") ? "Principal" : "Admin";
         int noticeId = await _dashboardService.CreateNoticeAsync(request, role, ct);
@@ -176,6 +191,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == 999999999)
+        {
+            return Ok(new DashboardSummaryResponseDto());
+        }
 
         var result = await _dashboardService.GetSummaryAsync(academicYearId, boardId, date, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -202,6 +221,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new StudentsOverviewResponseDto());
+        }
 
         var result = await _dashboardService.GetStudentsOverviewAsync(academicYearId, boardId, date, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -226,6 +249,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new List<StudentMonthlyTrendDto>());
+        }
 
         var result = await _dashboardService.GetAdmissionTrendAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -250,6 +277,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == 999999999)
+        {
+            return Ok(new GroupDistributionResponseDto());
+        }
 
         var result = await _dashboardService.GetGroupDistributionAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -277,6 +308,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new StudentsAttendanceTodayResponseDto());
+        }
 
         var result = await _dashboardService.GetStudentsAttendanceTodayAsync(academicYearId, boardId, viewBy, date, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -290,6 +325,7 @@ public class DashboardController : ControllerBase
     /// Retrieves today's staff attendance metrics filtered by staff type.
     /// </summary>
     [HttpGet("staff-attendance-today")]
+    [BypassPermission]
     [ProducesResponseType(typeof(StaffAttendanceTodayResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -302,6 +338,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == 999999999)
+        {
+            return Ok(new StaffAttendanceTodayResponseDto());
+        }
 
         var result = await _dashboardService.GetStaffAttendanceTodayAsync(boardId, staffType, date, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -327,6 +367,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new CertificateRequestsSummaryResponseDto());
+        }
 
         var result = await _dashboardService.GetCertificateRequestsAsync(academicYearId, boardId, date, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -351,6 +395,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new List<UpcomingExaminationItemDto>());
+        }
 
         var result = await _dashboardService.GetUpcomingExaminationsAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -377,6 +425,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new List<UpcomingHolidayItemDto>());
+        }
 
         var result = await _dashboardService.GetUpcomingHolidaysAsync(academicYearId, boardId, limit, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -401,6 +453,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new TodaysHighlightsResponseDto());
+        }
 
         var result = await _dashboardService.GetTodaysHighlightsAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -424,6 +480,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new WeeklyAttendanceResponseDto());
+        }
 
         var result = await _dashboardService.GetWeeklyAttendanceAsync(academicYearId, boardId, date, startDate, endDate, campusCheck.EffectiveCampusId, ct);
         return Ok(result);
@@ -442,6 +502,10 @@ public class DashboardController : ControllerBase
         {
             var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
             if (!campusCheck.Success) return campusCheck.ErrorResult!;
+            if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new List<RecentActivityItemDto>());
+            }
         }
 
         var result = await _dashboardService.GetRecentActivityAsync(limit, ct);
@@ -460,6 +524,10 @@ public class DashboardController : ControllerBase
     {
         var campusCheck = await ValidateAndResolveCampusAsync(campusId, ct);
         if (!campusCheck.Success) return campusCheck.ErrorResult!;
+        if (campusCheck.EffectiveCampusId == TenantIsolationActionFilter.NoCampusSentinel)
+        {
+            return Ok(new List<FacultyWorkloadItemDto>());
+        }
 
         var result = await _dashboardService.GetFacultyWorkloadAsync(academicYearId, boardId, campusCheck.EffectiveCampusId, ct);
         return Ok(result);

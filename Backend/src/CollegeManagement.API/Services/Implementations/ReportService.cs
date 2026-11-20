@@ -51,7 +51,7 @@ public class ReportService : IReportService
         catch (Exception ex)
         {
             _logger.LogError(ex, "ReportService error executing {OperationName}", opName);
-            return fallback();
+            throw; // Surface real DB/SP errors instead of returning synthetic zero fallback
         }
     }
 
@@ -64,7 +64,7 @@ public class ReportService : IReportService
         catch (Exception ex)
         {
             _logger.LogError(ex, "ReportService error executing {OperationName}", opName);
-            return Array.Empty<T>();
+            throw; // Surface real DB/SP errors instead of returning synthetic empty fallback
         }
     }
 
@@ -430,6 +430,12 @@ public class ReportService : IReportService
                 rows.Add(new[] { "8", "Total Student Strength", $"{d.StudentStrength}", "Students" });
                 rows.Add(new[] { "9", "Overall Pass Percentage", $"{d.PassPercentage:F1}%", "Academics" });
                 rows.Add(new[] { "10", "Toppers Identified", $"{d.ToppersIdentified}", "Academics" });
+                rows.Add(new[] { "11", "Staff Attendance Rate", $"{d.StaffAttendance:F2}%", "Staff" });
+                rows.Add(new[] { "12", "Attendance Eligible (>=75%)", $"{d.AttendanceEligibleCount}", "Compliance" });
+                rows.Add(new[] { "13", "Attendance Condonation (65-74.9%)", $"{d.AttendanceCondonationCount}", "Compliance" });
+                rows.Add(new[] { "14", "Attendance Detained (<65%)", $"{d.AttendanceDetainedCount}", "Compliance" });
+                rows.Add(new[] { "15", "Students With Fee Dues", $"{d.StudentsWithDuesCount}", "Finance Compliance" });
+                rows.Add(new[] { "16", "Students Fee Cleared", $"{d.StudentsClearedCount}", "Finance Compliance" });
                 break;
 
             case IReadOnlyList<AdmissionReportDto> adm:
@@ -532,8 +538,9 @@ public class ReportService : IReportService
 
             case IReadOnlyList<FacultyAttendanceReportDto> fa:
                 title = "Faculty & Staff Attendance Report";
-                headers = new[] { "S.No", "Faculty Name", "Department", "Present Days", "Absent", "Leave", "Attendance %" };
-                kpis.Add(("Total Faculty", $"{fa.Count}"));
+                headers = new[] { "S.No", "Faculty Name", "Department", "Designation", "Total Days", "Present", "Late", "Absent", "Leave", "Attendance %" };
+                kpis.Add(("Total Staff", $"{fa.Count}"));
+                kpis.Add(("Avg Attendance", fa.Count > 0 ? $"{Math.Round(fa.Average(x => x.AttendancePercentage), 1)}%" : "0%"));
                 int faIdx = 1;
                 foreach (var f in fa)
                 {
@@ -542,7 +549,10 @@ public class ReportService : IReportService
                         $"{faIdx++}",
                         f.FacultyName ?? "—",
                         f.DepartmentName ?? "Academics",
+                        f.Designation ?? "Staff",
+                        $"{f.TotalDays}",
                         $"{f.Present}",
+                        $"{f.Late}",
                         $"{f.Absent}",
                         $"{f.Leave}",
                         $"{f.AttendancePercentage:F1}%"
@@ -630,9 +640,9 @@ public class ReportService : IReportService
 
             case IReadOnlyList<ResultAnalysisReportDto> results:
                 title = "Examination Results Detailed Analysis Report";
-                headers = new[] { "S.No", "Roll No", "Student Name", "Exam Name", "Subject", "Total Marks", "Grade", "Result", "Date" };
-                var passCount = results.Count(x => x.ResultStatus == "Pass" || x.ResultStatus == "Passed");
-                var failCount = results.Count(x => x.ResultStatus == "Fail" || x.ResultStatus == "Failed");
+                headers = new[] { "S.No", "Roll No", "Student Name", "Exam Name", "Subject", "Marks Obtained", "Max Marks", "Percentage", "Grade", "Result", "Date" };
+                var passCount = results.Count(x => string.Equals(x.ResultStatus, "Pass", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "Passed", StringComparison.OrdinalIgnoreCase) || string.Equals(x.ResultStatus, "PROMOTED", StringComparison.OrdinalIgnoreCase));
+                var failCount = results.Count - passCount;
                 kpis.Add(("Total Results", $"{results.Count}"));
                 kpis.Add(("Passed", $"{passCount}"));
                 kpis.Add(("Failed", $"{failCount}"));
@@ -647,7 +657,9 @@ public class ReportService : IReportService
                         r.StudentName ?? "—",
                         r.ExamName ?? "—",
                         r.SubjectName ?? "—",
-                        $"{r.TotalMarks:F1}",
+                        $"{(r.MarksObtained > 0 || r.TotalMarks == 0 ? r.MarksObtained : r.TotalMarks):F1}",
+                        $"{(r.MaxMarks > 0 ? r.MaxMarks : 100m):F0}",
+                        $"{r.AveragePercentage:F1}%",
                         r.Grade ?? "—",
                         r.ResultStatus ?? "Pass",
                         r.PublishedDate?.ToString("dd-MM-yyyy") ?? "—"
@@ -724,6 +736,12 @@ public class ReportService : IReportService
             case IReadOnlyList<StudentPerformanceReportDto> sp:
                 title = "Student Academic Performance Report";
                 headers = new[] { "S.No", "Admission No", "Roll No", "Student Name", "Average %", "Passed", "Failed", "Attendance %", "Grade" };
+                kpis.Add(("Students Evaluated", $"{sp.Count}"));
+                if (sp.Count > 0)
+                {
+                    kpis.Add(("Avg Academic %", $"{Math.Round(sp.Average(x => x.AveragePercentage), 1)}%"));
+                    kpis.Add(("Avg Attendance %", $"{Math.Round(sp.Average(x => x.AttendancePercentage), 1)}%"));
+                }
                 int spIdx = 1;
                 foreach (var s in sp)
                 {
@@ -738,6 +756,65 @@ public class ReportService : IReportService
                         $"{s.FailedSubjects}",
                         $"{s.AttendancePercentage:F1}%",
                         s.Grade ?? "—"
+                    });
+                }
+                break;
+
+            case IReadOnlyList<SubjectWiseReportDto> subs:
+                title = "Subject-Wise Performance Analysis Report";
+                headers = new[] { "S.No", "Subject", "Evaluated Students", "Average Marks", "Pass Percentage %" };
+                kpis.Add(("Subjects Evaluated", $"{subs.Count}"));
+                if (subs.Count > 0)
+                    kpis.Add(("Avg Pass %", $"{Math.Round(subs.Average(x => x.PassPercentage), 1)}%"));
+                int subIdx = 1;
+                foreach (var sub in subs)
+                {
+                    rows.Add(new[]
+                    {
+                        $"{subIdx++}",
+                        sub.SubjectName ?? "—",
+                        $"{sub.Students}",
+                        $"{sub.AverageMarks:F2}",
+                        $"{sub.PassPercentage:F1}%"
+                    });
+                }
+                break;
+
+            case IReadOnlyList<GroupWiseReportDto> grps:
+                title = "Group-Wise Academic Analysis Report";
+                headers = new[] { "S.No", "Group", "Enrolled Students", "Average Percentage %", "Pass Percentage %" };
+                kpis.Add(("Active Groups", $"{grps.Count}"));
+                kpis.Add(("Total Students", $"{grps.Sum(x => x.StudentCount)}"));
+                int grpIdx = 1;
+                foreach (var g in grps)
+                {
+                    rows.Add(new[]
+                    {
+                        $"{grpIdx++}",
+                        g.GroupName ?? "—",
+                        $"{g.StudentCount}",
+                        $"{g.AveragePercentage:F1}%",
+                        $"{g.PassPercentage:F1}%"
+                    });
+                }
+                break;
+
+            case IReadOnlyList<SectionWiseReportDto> secs:
+                title = "Section-Wise Academic Analysis Report";
+                headers = new[] { "S.No", "Section", "Group", "Enrolled Students", "Average Percentage %", "Pass Percentage %" };
+                kpis.Add(("Active Sections", $"{secs.Count}"));
+                kpis.Add(("Total Students", $"{secs.Sum(x => x.StudentCount)}"));
+                int secIdx = 1;
+                foreach (var sc in secs)
+                {
+                    rows.Add(new[]
+                    {
+                        $"{secIdx++}",
+                        sc.SectionName ?? "—",
+                        sc.GroupName ?? "—",
+                        $"{sc.StudentCount}",
+                        $"{sc.AveragePercentage:F1}%",
+                        $"{sc.PassPercentage:F1}%"
                     });
                 }
                 break;

@@ -12,6 +12,7 @@ import managementIconsSprite from "@/assets/sidebar-3d/management-icons-sprite.p
 import generalSettingsIcon from "@/assets/sidebar-3d/general-settings.svg";
 import { Route as RouteIcon } from "lucide-react";
 import { useTransportManager } from "../TransportManagerContext.jsx";
+import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
 export const generatedSidebarIcons = {
   staffAttendance: { src: managementIconsSprite, position: "50% 0%" },
@@ -46,11 +47,13 @@ export const NAV_GROUPS = [
         to: "/transport-manager/overview",
         label: "Dashboard",
         icon: dashboardIcon,
+        moduleKey: "dashboard",
       },
       {
         to: "/transport-manager/profile",
         label: "My Profile",
         icon: staffIcon,
+        moduleKey: "profile",
       },
     ],
   },
@@ -61,16 +64,19 @@ export const NAV_GROUPS = [
         to: "/transport-manager/setup",
         label: "Setup",
         icon: RouteIcon,
+        moduleKey: "transport-manager-setup",
       },
       {
         to: "/transport-manager/operations",
         label: "Operations",
         icon: transportBusIcon,
+        moduleKey: "transport-manager-operations",
       },
       {
         to: "/transport-manager/reports",
         label: "Reports",
         icon: reportsAnalyticsIcon,
+        moduleKey: "reports-analytics",
       },
     ],
   },
@@ -81,26 +87,31 @@ export const NAV_GROUPS = [
         to: "/transport-manager/my-attendance",
         label: "My Attendance",
         icon: generatedSidebarIcons.staffAttendance,
+        moduleKey: "staff-attendance",
       },
       {
         to: "/transport-manager/leave",
         label: "Staff Leave",
         icon: generatedSidebarIcons.staffLeave,
+        moduleKey: "staff-leave-management",
       },
       {
         to: "/transport-manager/payslips",
         label: "Salary & Payslips",
         icon: generatedSidebarIcons.payroll,
+        moduleKey: "payroll",
       },
       {
         to: "/transport-manager/reimbursements",
         label: "Reimbursements",
         icon: reimbursementIcon,
+        moduleKey: "reimbursement",
       },
       {
         to: "/transport-manager/holidays",
         label: "Holidays",
         icon: holidayManagementIcon,
+        moduleKey: "holiday-management",
       },
     ],
   },
@@ -111,6 +122,7 @@ export const NAV_GROUPS = [
         to: "/transport-manager/settings",
         label: "Settings",
         icon: generalSettingsIcon,
+        moduleKey: "settings",
       },
     ],
   },
@@ -118,7 +130,17 @@ export const NAV_GROUPS = [
 
 export default function TransportManagerSidebar() {
   const { sidebarOpen, sidebarCollapsed, closeSidebar } = useTransportManager();
+  const { canView, loading, permissions } = useEffectivePermissions();
   const location = useLocation();
+
+  const visibleGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+      if (loading && (!Array.isArray(permissions) || permissions.length === 0)) return false;
+      return canView(item.moduleKey);
+    }),
+  })).filter((group) => group.items.length > 0);
 
   return (
     <>
@@ -135,7 +157,7 @@ export default function TransportManagerSidebar() {
 
         {/* Navigation List */}
         <nav className="cms-nav">
-          {NAV_GROUPS.map((group) => (
+          {visibleGroups.map((group) => (
             <div key={group.label} className="cms-nav-group-wrap">
               <div className="cms-nav-group">{group.label}</div>
               {group.items.map((item) => {

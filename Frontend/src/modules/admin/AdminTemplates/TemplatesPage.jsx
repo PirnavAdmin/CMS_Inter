@@ -852,6 +852,18 @@ export default function TemplatesPage() {
   // Handler: Duplicate template
   const handleDuplicateTemplate = useCallback(
     async (template) => {
+      try {
+        if (typeof template.id === "number" || (!isNaN(Number(template.id)) && !String(template.id).startsWith("certificate-") && !String(template.id).startsWith("custom-"))) {
+          const duplicated = await templateApi.duplicateTemplate(Number(template.id));
+          if (duplicated?.id) {
+            await fetchTemplates();
+            notify(`Duplicated template "${template.name}" successfully.`);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("API duplicate error, using client fallback:", err);
+      }
       const code = `COPY_${template.templateCode || template.id}_${Date.now()}`;
       const copy = {
         ...template,
@@ -902,6 +914,27 @@ export default function TemplatesPage() {
     [notify]
   );
 
+  // Handler: Set template as default for its certificate type / category
+  const handleSetDefaultTemplate = useCallback(
+    async (templateId) => {
+      try {
+        if (typeof templateId === "number" || !isNaN(Number(templateId))) {
+          await templateApi.setDefaultTemplate(Number(templateId));
+          await fetchTemplates();
+          notify("Template marked as default successfully.");
+          return;
+        }
+      } catch (err) {
+        console.warn("Set default error:", err);
+      }
+      setTemplates((prev) =>
+        prev.map((t) => (t.id === templateId ? { ...t, isDefault: true } : { ...t, isDefault: false }))
+      );
+      notify("Template marked as default.");
+    },
+    [fetchTemplates, notify]
+  );
+
   // Handler: Save / Publish template to API
   const handleSaveTemplate = useCallback(
     async (updated) => {
@@ -910,8 +943,11 @@ export default function TemplatesPage() {
           await templateApi.updateTemplate(updated.id, {
             title: updated.name,
             category: updated.category,
+            certificateType: updated.certificateType || updated.category,
             contentBody: updated.content,
             placeholders: updated.dynamicFields || updated.placeholders || [],
+            logoPath: updated.logoPath || null,
+            isDefault: Boolean(updated.isDefault),
             isActive: updated.status === "Active",
           });
         } else {
@@ -919,8 +955,11 @@ export default function TemplatesPage() {
             templateCode: updated.templateCode || updated.id,
             title: updated.name,
             category: updated.category,
+            certificateType: updated.certificateType || updated.category,
             contentBody: updated.content,
             placeholders: updated.dynamicFields || updated.placeholders || [],
+            logoPath: updated.logoPath || null,
+            isDefault: Boolean(updated.isDefault),
             isActive: updated.status === "Active",
           });
           if (res?.id) updated.id = res.id;
@@ -1251,6 +1290,7 @@ export default function TemplatesPage() {
                       onDownload={() => handleDownloadTemplate(item)}
                       onDuplicate={() => handleDuplicateTemplate(item)}
                       onResetDefault={() => handleResetToDefault(item.id)}
+                      onSetDefault={() => handleSetDefaultTemplate(item.id)}
                       onDelete={() => setDeleteConfirmId(item.id)}
                     />
                   ))
@@ -1389,6 +1429,9 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
             <div className="more-menu-dropdown" onMouseLeave={() => setShowMenu(false)}>
               <button type="button" onClick={() => { setShowMenu(false); onDuplicate(); }}>
                 <Copy size={13} /> Duplicate
+              </button>
+              <button type="button" onClick={() => { setShowMenu(false); onSetDefault && onSetDefault(); }}>
+                <CheckCircle2 size={13} /> Set as Default
               </button>
               {template.builtIn ? (
                 <>
@@ -1542,14 +1585,28 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
   // Demo interpolation toggle
   const [useDemoDataInPreview, setUseDemoDataInPreview] = useState(true);
 
-  // Handle Logo Upload
-  const handleImageUpload = (e) => {
+  const [logoPath, setLogoPath] = useState(template.logoPath || "");
+
+  // Handle Logo Upload with persistent server storage
+  const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (customLogoUrl) URL.revokeObjectURL(customLogoUrl);
+      try {
+        const uploadRes = await templateApi.uploadTemplateLogo(file);
+        if (uploadRes?.logoUrl || uploadRes?.logoPath) {
+          const pathOrUrl = uploadRes.logoUrl || uploadRes.logoPath;
+          setCustomLogoUrl(pathOrUrl);
+          setLogoPath(uploadRes.logoPath || uploadRes.logoUrl);
+          notify("Logo uploaded and saved to server storage successfully.");
+          return;
+        }
+      } catch (err) {
+        console.warn("Server logo upload fallback:", err);
+      }
+      if (customLogoUrl && customLogoUrl.startsWith("blob:")) URL.revokeObjectURL(customLogoUrl);
       const url = URL.createObjectURL(file);
       setCustomLogoUrl(url);
-      notify("Logo uploaded successfully.");
+      notify("Logo loaded for preview.");
     }
   };
 
@@ -1606,6 +1663,9 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
     onSave({
       ...template,
       name: templateName,
+      logoPath: logoPath || template.logoPath || null,
+      isDefault: Boolean(template.isDefault),
+      certificateType: template.certificateType || template.category,
       status: "Active",
       place: placeText,
       issueDate: issueDate,

@@ -294,7 +294,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
       );
     }
     return (
-      <NumberSeriesEditView availableGroups={availableGroups}
+      <NumberSeriesEditView availableGroups={availableGroups} activeCampusId={activeCampusId}
           forceSyncLocal={forceSyncLocal}
           series={activeSeries}
           saving={saving}
@@ -330,7 +330,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
     }
     return (
       <>
-        <NumberSeriesDetailView availableGroups={availableGroups}
+        <NumberSeriesDetailView availableGroups={availableGroups} activeCampusId={activeCampusId}
           series={activeSeries}
           onPreviewModal={(s) => setPreviewModalSeries(s)}
           toast={toast}
@@ -351,7 +351,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
 
   return (
     <>
-      <NumberSeriesDashboardView availableGroups={availableGroups}
+      <NumberSeriesDashboardView availableGroups={availableGroups} activeCampusId={activeCampusId}
           forceSyncLocal={forceSyncLocal}
           seriesList={seriesList}
           loading={loading}
@@ -433,11 +433,13 @@ function AddCustomSeriesModal({ onClose, onSave, campus, toast }) {
 // ======================================================================
 // 1. DASHBOARD VIEW (MAIN CARD GRID)
 // ======================================================================
-function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [] }) {
+function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLocal, toast, setToast, availableGroups = [], activeCampusId: propCampusId }) {
   const navigate = useNavigate();
   const [showAddModal, setShowAddModal] = useState(false);
   const [savingCustom, setSavingCustom] = useState(false);
   const { selectedCampus, selectedCampusId } = useCampusContext();
+  const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
+
 
   const handleCreateCustom = async (data) => {
     setShowAddModal(false); // Close instantly for snappy UI
@@ -613,7 +615,13 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                 <h3 className="ns-card-title">{series.name || series.seriesName}</h3>
 
                 <div className="ns-card-example-box">
-                  <span className="ns-card-example-lbl">Current / Next Example:</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span className="ns-card-example-lbl" style={{ margin: 0 }}>Last Issued:</span>
+                    <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#475569', background: 'rgba(0,0,0,0.05)', padding: '1px 6px', borderRadius: '4px' }}>
+                      {series.currentSequence > 0 ? `#${series.currentSequence}` : '0 (None)'}
+                    </span>
+                  </div>
+                  <span className="ns-card-example-lbl" style={{ marginTop: '4px', display: 'block' }}>Next to Allocate (Preview):</span>
                                       <div className="ns-card-example-val">
                       {loading ? (
                         <Skeleton style={{ height: '20px', width: '70%', borderRadius: '6px' }} />
@@ -659,8 +667,9 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
 // ======================================================================
 // 2. DETAIL VIEW (GENERATED IDS & CONFIGURATION HISTORY)
 // ======================================================================
-function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, availableGroups = [] }) {
-  const { selectedCampus } = useCampusContext();
+function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, availableGroups = [], activeCampusId: propCampusId }) {
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [pageSize, setPageSize] = useState(5);
@@ -1154,10 +1163,11 @@ function RenderTableRow({ seriesId, row, index }) {
 // ======================================================================
 // 3. EDIT VIEW (2-COLUMN CONFIGURATION FORM)
 // ======================================================================
-function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, setToast, availableGroups = [] }) {
+function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, setToast, availableGroups = [], activeCampusId: propCampusId }) {
   
   const navigate = useNavigate();
   const { selectedCampusId, selectedCampus } = useCampusContext();
+  const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
 
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
@@ -1530,8 +1540,9 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
 // ======================================================================
 // 4. PREVIEW NEXT NUMBER MODAL (NON-MUTATING & TEST GENERATE)
 // ======================================================================
-function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, availableGroups = [], activeCampusId }) {
-    const { selectedCampus } = useCampusContext();
+function PreviewNextModal({ series, onClose, onSequenceGenerated, setToast, availableGroups = [], activeCampusId: propCampusId }) {
+    const { selectedCampus, selectedCampusId } = useCampusContext();
+    const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
   const [copied, setCopied] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [liveGeneratedNumber, setLiveGeneratedNumber] = useState(null);

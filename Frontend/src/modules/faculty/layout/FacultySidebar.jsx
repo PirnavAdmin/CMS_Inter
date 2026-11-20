@@ -15,10 +15,12 @@ import reimbursementIcon from "@/assets/sidebar-3d/reimbursement.svg";
 import { useFaculty } from "../FacultyContext.jsx";
 import { useFacultyPermissions } from "../PermissionContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
+import { calculateStaffProfileCompletion, isStaffPortalUnlocked, getMissingMandatoryFields, MANDATORY_PROFILE_FIELDS } from "../profileCompletion.js";
 import { readCampusImages } from "@/modules/admin/AdminSettings/campusImages.js";
 import { campusContentDefaults } from "@/modules/admin/AdminSettings/campusContent.js";
 
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
+import { Skeleton } from "@/shared/components/Ui.jsx";
 import { CheckCircle2, Circle, Lock, Clock, ShieldCheck, UserCheck, Phone, Mail, Headphones } from "lucide-react";
 
 export const generatedSidebarIcons = {
@@ -81,17 +83,11 @@ export default function FacultySidebar() {
     Boolean(authUser?.staffId) ||
     Boolean(authUser?.employeeId) ||
     Boolean(profileData?.employeeId);
-  const compPct = Number(
-    authUser?.profileCompletionPercentage ||
-    profileData?.profileCompletion ||
-    profileData?.profileCompletionPercentage ||
-    0
+  const compPct = useMemo(() => calculateStaffProfileCompletion(profileData), [profileData]);
+  const isCompleted = isStaffPortalUnlocked(
+    profileStatus,
+    profileData?.isOnboarded === true || authUser?.isOnboarded === true
   );
-  const statusClean = String(profileStatus || "").toLowerCase();
-  const isCompleted =
-    statusClean === "completed" ||
-    statusClean === "approved" ||
-    (authUser?.isOnboarded === true && statusClean !== "pendinglink" && statusClean !== "inprogress" && statusClean !== "draft");
   const isPendingOnboarding = isFaculty && !isCompleted;
 
   const [supportContact, setSupportContact] = useState({
@@ -227,7 +223,10 @@ export default function FacultySidebar() {
 
             {/* Profile Completion Progress Card */}
             {(() => {
-              const comp = profileData?.profileCompletionPercentage || 41;
+              const comp = compPct;
+              const missing = getMissingMandatoryFields(profileData);
+              const isAllComplete = missing.length === 0;
+
               return (
                 <div style={{
                   background: "rgba(255, 255, 255, 0.7)",
@@ -241,7 +240,7 @@ export default function FacultySidebar() {
                     <span style={{
                       fontSize: "11px",
                       fontWeight: "800",
-                      color: comp >= 50 ? "var(--cms-primary, #355e3b)" : "#d97706"
+                      color: isAllComplete ? "var(--cms-primary, #355e3b)" : "#d97706"
                     }}>
                       {comp}%
                     </span>
@@ -250,13 +249,15 @@ export default function FacultySidebar() {
                     <div style={{
                       width: `${comp}%`,
                       height: "100%",
-                      background: comp >= 50 ? "var(--cms-primary, #355e3b)" : "#f59e0b",
+                      background: isAllComplete ? "var(--cms-primary, #355e3b)" : "#f59e0b",
                       borderRadius: "3px",
                       transition: "width 0.3s ease"
                     }} />
                   </div>
-                  <div style={{ fontSize: "10px", color: "#64748b", marginTop: "6px", lineHeight: "1.3" }}>
-                    {comp >= 50 ? "✓ 50% reached. Ready to review and submit." : "Min 50% required for submission & Offer Letter."}
+                  <div style={{ fontSize: "10px", color: isAllComplete ? "#166534" : "#64748b", marginTop: "6px", lineHeight: "1.3" }}>
+                    {isAllComplete
+                      ? "✓ All mandatory fields completed. Ready to submit."
+                      : `${missing.length} mandatory field(s) remaining for submission.`}
                   </div>
                 </div>
               );
@@ -379,9 +380,31 @@ export default function FacultySidebar() {
           </div>
         ) : (
           navGroups.map((grp) => {
-            const items = NAV_ITEMS.filter(
-              (n) => n.group === grp && (!permissionByModule[n.id] || permissions.includes(permissionByModule[n.id]))
+            const groupItems = NAV_ITEMS.filter((n) => n.group === grp);
+            const items = groupItems.filter(
+              (n) => !permissionByModule[n.id] || permissions.includes(permissionByModule[n.id])
             );
+            const isLoadingGroup =
+              !items.length &&
+              groupItems.length > 0 &&
+              (grp === "ACADEMICS" || grp === "HR & FINANCE") &&
+              Boolean(permissions?.isLoadingPermissions) &&
+              (!Array.isArray(permissions?.permissions) || permissions.permissions.length === 0);
+
+            if (isLoadingGroup) {
+              return (
+                <div key={grp} aria-hidden="true">
+                  <div className="cms-nav-group">{grp}</div>
+                  {groupItems.map((item) => (
+                    <div key={item.id} className="cms-nav-link" style={{ pointerEvents: "none" }}>
+                      <Skeleton style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0 }} />
+                      <Skeleton style={{ width: "68%", height: 13, borderRadius: 4 }} />
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+
             if (!items.length) return null;
             return (
               <div key={grp}>

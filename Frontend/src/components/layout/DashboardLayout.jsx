@@ -224,6 +224,17 @@ export const menu = [
     ],
   },
   {
+    section: "Enquiry Management",
+    items: [
+      {
+        to: "/dashboard/enquiry-management",
+        label: "Enquiry Management",
+        icon: settingsTemplatesIcon,
+        moduleKey: "enquiry-management",
+      },
+    ],
+  },
+  {
     section: "Administration",
     items: [
       {
@@ -269,20 +280,21 @@ export const wardenMenu = [
   {
     section: "Hostel Operations",
     items: [
-      { to: "/warden-dashboard/blocks", label: "Hostel Blocks", icon: hostelManagementIcon },
       { to: "/warden-dashboard/rooms", label: "Rooms & Beds", icon: sectionsIcon },
       { to: "/warden-dashboard/allocations", label: "Student Allocations", icon: allocateSectionIcon },
       { to: "/warden-dashboard/attendance", label: "Hostel Attendance", icon: attendanceIcon },
       { to: "/warden-dashboard/leave-requests", label: "Outpass & Leaves", icon: generatedSidebarIcons.staffLeave },
-      { to: "/warden-dashboard/transfers", label: "Transfers & Vacate", icon: promotionIcon },
+      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
+      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
     ],
   },
   {
-    section: "Residents & Reports",
+    section: "My Workspace",
     items: [
-      { to: "/warden-dashboard/students", label: "Resident Students", icon: studentsIcon },
-      { to: "/warden-dashboard/wardens", label: "Resident Wardens", icon: staffIcon },
-      { to: "/warden-dashboard/reports", label: "Hostel Reports", icon: reportsAnalyticsIcon },
+      { to: "/warden-dashboard/my-attendance", label: "My Attendance", icon: attendanceIcon },
+      { to: "/warden-dashboard/my-leaves", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave },
+      { to: "/warden-dashboard/holidays", label: "Holidays", icon: holidayManagementIcon },
+      { to: "/warden-dashboard/expenses", label: "Expenses & Reimbursements", icon: reimbursementIcon },
     ],
   },
 ];
@@ -512,12 +524,6 @@ function initials(name = "CMS Admin") {
   return name.split(" ").filter(Boolean).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 }
 
-// Module-level notifications cache to prevent duplicate backend requests on route navigation
-let cachedLiveNotifications = [];
-let lastNotifFetchTimestamp = 0;
-let lastNotifCampus = null;
-const NOTIF_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
-
 export default function DashboardLayout({
   title,
   subtitle,
@@ -562,8 +568,6 @@ export default function DashboardLayout({
   const [yearOpen, setYearOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [liveNotifications, setLiveNotifications] = useState([]);
-  const [hasViewedNotifications, setHasViewedNotifications] = useState(false);
   const actionsRef = useRef(null);
   const searchRef = useRef(null);
   const campusRef = useRef(null);
@@ -618,7 +622,7 @@ export default function DashboardLayout({
       if (!u) return;
       const isAdminUser = u.isAdmin || String(u.role || "").toLowerCase().includes("admin") || u.roleType === "admin";
       if (isAdminUser) {
-        apiClient.get("/api/Admin/1").then(res => {
+        apiClient.get("/api/Admin/profile").then(res => {
           if (!active) return;
           const dataObj = res.data?.data || res.data?.Data || res.data;
           const photo = dataObj?.photoPath || dataObj?.PhotoPath || dataObj?.photoUrl || dataObj?.PhotoUrl;
@@ -700,6 +704,7 @@ export default function DashboardLayout({
           ...group,
           items: (group.items || []).filter((item) => {
             if (!item.moduleKey || item.moduleKey === "dashboard") return true;
+            if (item.moduleKey === "enquiry-management" && (hasRole("ADMIN", user) || hasRole("PRINCIPAL", user))) return true;
             return can(item.moduleKey, ACTIONS.VIEW, user?.permissions, user, item.screenKey);
           }),
         }))
@@ -726,135 +731,7 @@ export default function DashboardLayout({
     return uniqueBreadcrumbLabels(provided.length ? provided : menuLabels, title);
   }, [breadcrumb, pageMenuItem, title]);
   const reimbursementCampusId = selectedCampus?.campusId ?? selectedCampus?.id;
-  const userRoleStr = String(user?.role || "").trim().toLowerCase();
-  const canReviewReimbursements = !isParent && ["admin", "super admin", "accountant", "principal"].includes(userRoleStr);
-  const canReviewCertificates = !isParent && ["admin", "super admin", "principal", "exam cell", "examination cell", "clerk", "staff"].includes(userRoleStr);
-  const fetchLiveNotifsRef = useRef(null);
-  useEffect(() => {
-    let disposed = false;
-    if (canReviewReimbursements || canReviewCertificates) {
-      const fetchLiveNotifications = async (force = false) => {
-        const now = Date.now();
-        if (
-          !force &&
-          lastNotifCampus === reimbursementCampusId &&
-          now - lastNotifFetchTimestamp < NOTIF_CACHE_TTL_MS
-        ) {
-          if (!disposed && cachedLiveNotifications.length > 0) {
-            setLiveNotifications(cachedLiveNotifications);
-          }
-          return;
-        }
 
-        const notifs = [];
-        try {
-          if (canReviewReimbursements) {
-            const fetchFn = reimbursementApi?.getAllReimbursements || reimbursementApi?.getReimbursements;
-            if (fetchFn) {
-              const res = await fetchFn({ status: "Pending", campusId: reimbursementCampusId || undefined });
-              if (!disposed) {
-                const payload = res?.data?.data ?? res?.data?.Data ?? res?.data;
-                const claims = Array.isArray(payload) ? payload : payload?.items ?? payload?.Items ?? [];
-                if (claims.length > 0) {
-                  notifs.push({
-                    id: "admin-notif-reimbursement",
-                    title: "New Staff Reimbursement Request",
-                    count: claims.length,
-                    to: "/dashboard/reimbursements",
-                    label: "reimbursements"
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Gracefully handle offline or pending notification counter without console noise
-        }
-
-        try {
-          if (canReviewCertificates) {
-            const certRes = await apiClient.get("/api/v1/certificates/workflow-stats", { skipGlobalLoader: true });
-            if (!disposed) {
-              const data = certRes?.data?.data ?? certRes?.data?.Data ?? certRes?.data ?? {};
-              const reqCount = Number(data.requestedCount ?? data.RequestedCount) || 0;
-              const isCurrentlyOnCertPage = window.location.pathname.startsWith("/dashboard/certificates");
-              if (reqCount > 0 && !isCurrentlyOnCertPage) {
-                notifs.push({
-                  id: "admin-notif-certificate",
-                  title: "Student Certificate Requests",
-                  count: reqCount,
-                  to: "/dashboard/certificates?tab=actions&status=Requested",
-                  label: "certificates"
-                });
-              }
-            }
-          }
-        } catch {
-          // Gracefully handle offline or pending notification counter without console noise
-        }
-
-        if (!disposed) {
-          cachedLiveNotifications = notifs;
-          lastNotifFetchTimestamp = Date.now();
-          lastNotifCampus = reimbursementCampusId;
-          setLiveNotifications(notifs);
-        }
-      };
-
-      fetchLiveNotifsRef.current = fetchLiveNotifications;
-      fetchLiveNotifications();
-
-      
-
-      // Listen for cross-tab notifications (e.g. from Faculty tab submitting a claim or student requesting certificate)
-      let channel = null;
-      try {
-        channel = new BroadcastChannel("cms_notifications");
-        channel.onmessage = (event) => {
-          if (
-            event.data?.type === "NEW_REIMBURSEMENT" ||
-            event.data?.type === "NEW_CERTIFICATE_REQUEST" ||
-            event.data?.type === "CERTIFICATE_STATUS_UPDATED" ||
-            event.data?.type === "REIMBURSEMENT_STATUS_UPDATED"
-          ) {
-            setHasViewedNotifications(false);
-            fetchLiveNotifications(true);
-          }
-        };
-      } catch {
-        // Fallback
-      }
-
-      // Listen for same-tab local events so badges update immediately upon action
-      const handleLocalAction = () => {
-        setHasViewedNotifications(false);
-        fetchLiveNotifications(true);
-      };
-      window.addEventListener("cms-reimbursements-updated", handleLocalAction);
-      window.addEventListener("cms-certificates-updated", handleLocalAction);
-
-      return () => {
-        disposed = true;
-        if (channel) channel.close();
-        
-        window.removeEventListener("cms-reimbursements-updated", handleLocalAction);
-        window.removeEventListener("cms-certificates-updated", handleLocalAction);
-      };
-    }
-    setLiveNotifications([]);
-  }, [canReviewReimbursements, canReviewCertificates, reimbursementCampusId]);
-
-  // SignalR Push Connection: Subscribed via singleton notificationHubService
-  useEffect(() => {
-    if (!canReviewReimbursements && !canReviewCertificates) return;
-
-    const unsubscribe = notificationHubService.subscribe(() => {
-      setHasViewedNotifications(false);
-      fetchLiveNotifsRef.current?.(true);
-    });
-
-    return unsubscribe;
-  }, [canReviewReimbursements, canReviewCertificates]);
 
   // Synchronize Campus Join dynamically without tearing down SignalR socket
   useEffect(() => {
@@ -863,28 +740,26 @@ export default function DashboardLayout({
     }
   }, [reimbursementCampusId]);
 
-  const currentNotifications = isParent ? PARENT_NOTIFICATIONS : liveNotifications;
-
   const rawEmail = user?.email;
   const profileEmail = Array.isArray(rawEmail) ? (rawEmail[0] || "Admin@CMS.com") : (rawEmail || "Admin@CMS.com");
   const profileName = user?.name && user.name !== user?.email ? user.name : (user?.fullName || (isWarden ? "Hostel Warden" : isExamCell ? "Exam Cell" : "CMS Admin"));
   const profileRole = isWarden ? (user?.designation || "Hostel Warden") : isExamCell ? (user?.designation || "Exam Cell") : (user?.designation || user?.role || "admin");
-  
-  const totalNotifCount = currentNotifications.reduce((total, item) => total + item.count, 0);
-  const pendingActionCount = hasViewedNotifications ? 0 : totalNotifCount;
 
   const [adminPhotoError, setAdminPhotoError] = useState(false);
   const activeAdminPhoto = useMemo(() => {
+    const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
     let savedAdminProfile = null;
-    try {
-      savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
-    } catch {}
+    if (!isTenantCollege) {
+      try {
+        savedAdminProfile = JSON.parse(localStorage.getItem("cms_admin_profile") || "null");
+      } catch {}
+    }
     const rawPhoto = (
       user?.photoUrl ||
       user?.photoPath ||
       user?.photo ||
-      savedAdminProfile?.photo ||
-      (typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
+      (!isTenantCollege ? savedAdminProfile?.photo : null) ||
+      (!isTenantCollege && typeof window !== "undefined" ? localStorage.getItem("cms_admin_photo") : null) ||
       null
     );
     if (!rawPhoto || typeof rawPhoto !== "string") return null;
@@ -949,14 +824,6 @@ export default function DashboardLayout({
   }, [pathname]);
   useEffect(() => {
     if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
-  }, [pathname]);
-  useEffect(() => {
-    if (pathname.startsWith("/dashboard/certificates")) {
-      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-certificate"));
-    }
-    if (pathname.startsWith("/dashboard/reimbursements")) {
-      setLiveNotifications((prev) => prev.filter((n) => n.id !== "admin-notif-reimbursement"));
-    }
   }, [pathname]);
 
   useEffect(() => {
@@ -1269,8 +1136,8 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Campus</span>
-                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code}>
-                      {selectedCampus?.name || selectedCampus?.code || "Main Campus"}
+                    <span className="cms-academic-btn-value" title={selectedCampus?.name || selectedCampus?.code || "No Campus"}>
+                      {selectedCampus?.name || selectedCampus?.code || "No Campus"}
                     </span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1339,9 +1206,9 @@ export default function DashboardLayout({
                       <span className="cms-academic-btn-label">Board</span>
                       <span
                         className="cms-academic-btn-value"
-                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       >
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "Board of Intermediate Education, Andhra Pradesh"}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || "No Board"}
                       </span>
                     </div>
                   </div>
@@ -1365,7 +1232,7 @@ export default function DashboardLayout({
                     <div className="cms-academic-btn-text">
                       <span className="cms-academic-btn-label">Board</span>
                       <span className="cms-academic-btn-value" title={selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code}>
-                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No active boards available")}
+                        {selectedBoard?.name || selectedBoard?.boardName || selectedBoard?.code || (boardsLoading ? "Loading boards..." : boardsError ? "Unable to load boards" : "No Board")}
                       </span>
                     </div>
                     <ChevronDown size={12} className="cms-academic-btn-arrow" />
@@ -1431,7 +1298,7 @@ export default function DashboardLayout({
                   </div>
                   <div className="cms-academic-btn-text">
                     <span className="cms-academic-btn-label">Academic Year</span>
-                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No active academic years")}</span>
+                    <span className="cms-academic-btn-value">{selectedAcademicYear?.name || selectedAcademicYear?.label || selectedAcademicYear?.code || (academicYearsLoading ? "Loading years..." : academicYearsError ? "Unable to load years" : "No Active Academic Year")}</span>
                   </div>
                   <ChevronDown size={12} className="cms-academic-btn-arrow" />
                 </button>

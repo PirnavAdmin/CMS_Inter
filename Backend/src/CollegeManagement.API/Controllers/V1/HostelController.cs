@@ -64,6 +64,16 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? status = null,
             [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel blocks retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelBlockService.GetAllAsync(search, status, campusId);
 
@@ -173,8 +183,19 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("room-types")]
         public async Task<IActionResult> GetAllRoomTypes(
             [FromQuery] string? search = null,
-            [FromQuery] string? status = null)
+            [FromQuery] string? status = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Room types retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _roomTypeConfigService.GetAllAsync(
                     search,
@@ -288,14 +309,26 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? hostelId = null,
             [FromQuery] int? roomTypeId = null,
             [FromQuery] string? status = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Rooms retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _roomMasterService.GetAllAsync(
                     hostelId,
                     roomTypeId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -408,15 +441,27 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? roomId = null,
             [FromQuery] string? bedStatus = null,
             [FromQuery] string? status = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Beds retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelBedService.GetAllAsync(
                     hostelId,
                     roomId,
                     bedStatus,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -529,14 +574,26 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? hostelId = null,
             [FromQuery] int? staffId = null,
             [FromQuery] string? status = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Warden assignments retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelWardenAssignmentService.GetAllAsync(
                     hostelId,
                     staffId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -645,22 +702,34 @@ namespace CollegeManagement.API.Controllers.V1
         // ==========================================
 
         [HttpGet("student-allocations")]
-        [Authorize(Roles = "Admin,Warden,Teacher,Student,Parent")]
+        [Authorize(Roles = "Super Admin,Admin,Principal,Warden,Hostel Warden,Teacher,Faculty,Student,Parent")]
         [ParentStudentAuthorization]
         public async Task<IActionResult> GetAllStudentAllocations(
             [FromQuery] int? hostelId = null,
             [FromQuery] int? roomId = null,
             [FromQuery] int? studentId = null,
             [FromQuery] string? status = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Student allocations retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelStudentAllocationService.GetAllAsync(
                     hostelId,
                     roomId,
                     studentId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -801,12 +870,23 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] DateTime? attendanceDate = null,
             [FromQuery] string? session = null,
             [FromQuery] string? attendanceStatus = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel attendance retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelAttendanceService.GetAllAsync(
                     hostelId, roomId, studentId, attendanceDate,
-                    session, attendanceStatus, search);
+                    session, attendanceStatus, search, campusId);
 
             return Ok(new
             {
@@ -946,8 +1026,19 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? approvalStatus = null,
             [FromQuery] DateTime? fromDate = null,
             [FromQuery] DateTime? toDate = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Outpass/Leave requests retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelOutpassLeaveService.GetAllAsync(
                     hostelId,
@@ -956,7 +1047,8 @@ namespace CollegeManagement.API.Controllers.V1
                     approvalStatus,
                     fromDate,
                     toDate,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1124,8 +1216,19 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? approvalStatus = null,
             [FromQuery] string? feeSettlementStatus = null,
             [FromQuery] DateTime? requestDate = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Transfer/Vacate requests retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelTransferVacateService.GetAllAsync(
                     studentId,
@@ -1133,7 +1236,9 @@ namespace CollegeManagement.API.Controllers.V1
                     approvalStatus,
                     feeSettlementStatus,
                     requestDate,
-                    search);
+                    search,
+                    allocationId: null,
+                    campusId: campusId);
 
             return Ok(new
             {
@@ -1312,10 +1417,32 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet("dashboard")]
         public async Task<IActionResult> GetHostelDashboard(
-            [FromQuery] int? hostelId = null)
+            [FromQuery] int? hostelId = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel dashboard retrieved successfully.",
+                    data = new HostelDashboardResponseDto
+                    {
+                        TotalHostels = 0,
+                        TotalRooms = 0,
+                        TotalBeds = 0,
+                        OccupiedBeds = 0,
+                        AvailableBeds = 0,
+                        ActiveStudents = 0,
+                        ActiveWardens = 0,
+                        OccupancyPercentage = 0,
+                        Blocks = new List<HostelBlockDashboardDto>()
+                    }
+                });
+            }
+
             var result =
-                await _hostelDashboardService.GetDashboardAsync(hostelId);
+                await _hostelDashboardService.GetDashboardAsync(hostelId, campusId);
 
             return Ok(new
             {
@@ -1332,10 +1459,21 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet("reports/occupancy")]
         public async Task<IActionResult> GetHostelOccupancyReport(
-            [FromQuery] int? hostelId = null)
+            [FromQuery] int? hostelId = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel occupancy report retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
-                await _hostelReportService.GetOccupancyReportAsync(hostelId);
+                await _hostelReportService.GetOccupancyReportAsync(hostelId, campusId);
 
             return Ok(new
             {
@@ -1349,13 +1487,25 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetHostelStudentReport(
             [FromQuery] int? hostelId = null,
             [FromQuery] string? status = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel student report retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelReportService.GetStudentReportAsync(
                     hostelId,
                     status,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1372,8 +1522,19 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] DateTime? toDate = null,
             [FromQuery] string? session = null,
             [FromQuery] string? attendanceStatus = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel attendance report retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelReportService.GetAttendanceReportAsync(
                     hostelId,
@@ -1381,7 +1542,8 @@ namespace CollegeManagement.API.Controllers.V1
                     toDate,
                     session,
                     attendanceStatus,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1398,8 +1560,19 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] DateTime? toDate = null,
             [FromQuery] string? requestType = null,
             [FromQuery] string? approvalStatus = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel outpass/leave report retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelReportService.GetOutpassLeaveReportAsync(
                     hostelId,
@@ -1407,7 +1580,8 @@ namespace CollegeManagement.API.Controllers.V1
                     toDate,
                     requestType,
                     approvalStatus,
-                    search);
+                    search,
+                    campusId);
 
             return Ok(new
             {
@@ -1425,8 +1599,19 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? requestType = null,
             [FromQuery] string? approvalStatus = null,
             [FromQuery] string? feeSettlementStatus = null,
-            [FromQuery] string? search = null)
+            [FromQuery] string? search = null,
+            [FromQuery] int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new
+                {
+                    success = true,
+                    message = "Hostel transfer/vacate report retrieved successfully.",
+                    data = Enumerable.Empty<object>()
+                });
+            }
+
             var result =
                 await _hostelReportService.GetTransferVacateReportAsync(
                     studentId,
@@ -1435,7 +1620,8 @@ namespace CollegeManagement.API.Controllers.V1
                     requestType,
                     approvalStatus,
                     feeSettlementStatus,
-                    search);
+                    search,
+                    campusId: campusId);
 
             return Ok(new
             {

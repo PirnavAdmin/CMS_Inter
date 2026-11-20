@@ -5,6 +5,12 @@ import {
   fetchThemePolicy,
   updateThemePolicy,
 } from "@/features/themePolicy.js";
+import {
+  fetchUserPreferences,
+  saveUserPreferences,
+  subscribeUserPreferences,
+  hasAuthenticatedUser,
+} from "@/services/userPreferencesService.js";
 
 const THEME_STORAGE_KEY = "pirnav-theme";
 const PALETTE_STORAGE_KEY = "pirnav-dashboard-palette";
@@ -61,7 +67,7 @@ export function isUserAdmin() {
     // 3. Fallback: Path-based detection for Admin Portal
     const pathname = window.location?.pathname || "";
     if (
-      pathname.startsWith("/dashboard/settings") ||
+      pathname.startsWith("/super-admin") || pathname.startsWith("/dashboard/settings") ||
       pathname === "/dashboard" ||
       (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/student"))
     ) {
@@ -162,8 +168,16 @@ export function applyCustomThemeTokens(hex) {
 }
 
 function readTheme() {
-  if (typeof document === "undefined") return "light";
-  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  if (typeof window !== "undefined") {
+    try {
+      const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+      if (saved === "dark" || saved === "light") return saved;
+    } catch {}
+  }
+  if (typeof document !== "undefined") {
+    return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  }
+  return "light";
 }
 
 function readCustomColor() {
@@ -176,15 +190,19 @@ function readCustomColor() {
 }
 
 function readPalette() {
-  if (typeof document === "undefined") return "purple";
-  const attr = document.documentElement.getAttribute("data-theme-palette");
-  if (VALID_PALETTES.includes(attr)) return attr;
-  try {
-    const saved = window.localStorage.getItem(PALETTE_STORAGE_KEY);
-    return VALID_PALETTES.includes(saved) ? saved : "purple";
-  } catch {
-    return "purple";
+  if (typeof window !== "undefined") {
+    try {
+      const saved =
+        window.localStorage.getItem(PALETTE_STORAGE_KEY) ||
+        window.localStorage.getItem("pirnav-palette");
+      if (VALID_PALETTES.includes(saved)) return saved;
+    } catch {}
   }
+  if (typeof document !== "undefined") {
+    const attr = document.documentElement.getAttribute("data-theme-palette");
+    if (VALID_PALETTES.includes(attr)) return attr;
+  }
+  return "purple";
 }
 
 function readEffectivePalette() {
@@ -205,11 +223,64 @@ function readEffectiveCustomColor() {
 
 export function applyEffectiveTheme() {
   if (typeof document === "undefined") return;
+  const t = readTheme();
+  document.documentElement.setAttribute("data-theme", t);
+  const themeColor = document.querySelector('meta[name="theme-color"]');
+  themeColor?.setAttribute("content", t === "dark" ? "#161916" : "#6F8400");
+
   const p = readEffectivePalette();
   document.documentElement.setAttribute("data-theme-palette", p);
   if (p === "custom") {
     applyCustomThemeTokens(readEffectiveCustomColor());
   }
+}
+
+export function applyUserPreferenceTheme(prefs) {
+  if (typeof document === "undefined" || !prefs) return;
+  const policy = getThemePolicySnapshot();
+  const isPolicyLocked = policy?.themeMode === "admin" && !isUserAdmin();
+
+  // If theme is not centrally locked by admin, apply user's preference
+  if (!isPolicyLocked) {
+    if (prefs.themeMode && (prefs.themeMode === "dark" || prefs.themeMode === "light")) {
+      document.documentElement.setAttribute("data-theme", prefs.themeMode);
+      const themeColor = document.querySelector('meta[name="theme-color"]');
+      themeColor?.setAttribute("content", prefs.themeMode === "dark" ? "#161916" : "#6F8400");
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, prefs.themeMode);
+      } catch {}
+    }
+
+    if (prefs.palette && VALID_PALETTES.includes(prefs.palette)) {
+      document.documentElement.setAttribute("data-theme-palette", prefs.palette);
+      try {
+        window.localStorage.setItem(PALETTE_STORAGE_KEY, prefs.palette);
+        window.localStorage.setItem("pirnav-palette", prefs.palette);
+      } catch {}
+
+      if (prefs.palette === "custom") {
+        const color = prefs.customColor || readCustomColor();
+        try {
+          window.localStorage.setItem(CUSTOM_COLOR_STORAGE_KEY, color);
+        } catch {}
+        applyCustomThemeTokens(color);
+      }
+    }
+  }
+
+  listeners.forEach((l) => l());
+}
+
+export async function syncUserTheme({ force = false } = {}) {
+  if (typeof window === "undefined" || !hasAuthenticatedUser()) return null;
+  try {
+    const prefs = await fetchUserPreferences({ force });
+    if (prefs) {
+      applyUserPreferenceTheme(prefs);
+      return prefs;
+    }
+  } catch {}
+  return null;
 }
 
 // Initial setup on script execution
@@ -233,6 +304,16 @@ subscribeThemePolicy(() => {
   listeners.forEach((l) => l());
 });
 
+// Subscribe to real-time / cross-browser user preference updates
+subscribeUserPreferences((prefs) => {
+  applyUserPreferenceTheme(prefs);
+});
+
+// Bootstrap user theme if token is present
+if (typeof window !== "undefined" && hasAuthenticatedUser()) {
+  syncUserTheme().catch(() => {});
+}
+
 export function setTheme(theme) {
   if (typeof document === "undefined") return;
   document.documentElement.setAttribute("data-theme", theme);
@@ -242,6 +323,15 @@ export function setTheme(theme) {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
   } catch {}
   listeners.forEach((l) => l());
+
+  // Cross-browser synchronization persistence
+  if (hasAuthenticatedUser()) {
+    saveUserPreferences({
+      themeMode: theme,
+      palette: readEffectivePalette(),
+      customColor: readEffectiveCustomColor(),
+    }).catch(() => {});
+  }
 }
 
 export function setPalette(palette) {
@@ -266,6 +356,15 @@ export function setPalette(palette) {
   }
 
   listeners.forEach((l) => l());
+
+  // Cross-browser synchronization persistence
+  if (hasAuthenticatedUser()) {
+    saveUserPreferences({
+      themeMode: readTheme(),
+      palette: p,
+      customColor: p === "custom" ? readEffectiveCustomColor() : null,
+    }).catch(() => {});
+  }
 }
 
 export function setCustomColor(color) {
@@ -292,28 +391,35 @@ export function setCustomColor(color) {
     setPalette("custom");
   } else {
     listeners.forEach((l) => l());
+    if (hasAuthenticatedUser()) {
+      saveUserPreferences({
+        themeMode: readTheme(),
+        palette: "custom",
+        customColor: color,
+      }).catch(() => {});
+    }
   }
 }
 
-function subscribe(cb) {
-  listeners.add(cb);
-  const handleStorage = (e) => {
+// Cross-tab synchronization via window storage events
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
     if (
       e.key === THEME_STORAGE_KEY ||
       e.key === PALETTE_STORAGE_KEY ||
       e.key === "pirnav-palette" ||
       e.key === CUSTOM_COLOR_STORAGE_KEY
     ) {
-      if (e.key === CUSTOM_COLOR_STORAGE_KEY && readEffectivePalette() === "custom") {
-        applyCustomThemeTokens(readEffectiveCustomColor());
-      }
-      cb();
+      applyEffectiveTheme();
+      listeners.forEach((l) => l());
     }
-  };
-  window.addEventListener("storage", handleStorage);
+  });
+}
+
+function subscribe(cb) {
+  listeners.add(cb);
   return () => {
     listeners.delete(cb);
-    window.removeEventListener("storage", handleStorage);
   };
 }
 
@@ -350,6 +456,7 @@ export function useTheme() {
     isThemeLocked,
     isAdmin,
     updateThemePolicy,
+    syncUserTheme,
   };
 }
 
