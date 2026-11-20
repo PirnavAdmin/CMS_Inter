@@ -79,7 +79,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
-            var collegeId = ResolveCollegeId();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var designations = await conn.QueryAsync<DesignationResponseDto>(
                 "sp_GetDesignations",
                 new
@@ -88,7 +88,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StaffType = normalizedStaffType,
                     p_DepartmentId = departmentId ?? 0,
                     p_CampusId = campusId,
-                    p_CollegeId = collegeId
+                    p_CollegeId = resolvedCollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -245,9 +245,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var summary = await conn.QueryFirstOrDefaultAsync<DesignationSummaryDto>(
                 "sp_GetDesignationSummary",
-                new { p_CampusId = campusId, p_CollegeId = collegeId },
+                new { p_CampusId = campusId, p_CollegeId = resolvedCollegeId },
                 commandType: CommandType.StoredProcedure);
 
             return summary ?? new DesignationSummaryDto();

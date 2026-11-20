@@ -79,7 +79,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
-            var collegeId = ResolveCollegeId();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var depts = await conn.QueryAsync<DepartmentResponseDto>(
                 "sp_GetDepartments",
                 new
@@ -87,7 +87,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StaffType = staffType ?? "",
                     p_IncludeInactive = includeInactive ? 1 : 0,
                     p_CampusId = campusId,
-                    p_CollegeId = collegeId
+                    p_CollegeId = resolvedCollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -195,9 +195,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var summary = await conn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(
                 "sp_GetDepartmentSummary",
-                new { p_CampusId = campusId, p_CollegeId = collegeId },
+                new { p_CampusId = campusId, p_CollegeId = resolvedCollegeId },
                 commandType: CommandType.StoredProcedure);
 
             return summary ?? new DepartmentSummaryDto();
