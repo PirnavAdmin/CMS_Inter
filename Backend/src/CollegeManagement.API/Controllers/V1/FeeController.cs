@@ -183,7 +183,18 @@ public class FeeController : ControllerBase
 
     /// <summary>List configured fee structures with configured fee types and total fee.</summary>
     [HttpGet("structures")]
-    public async Task<IActionResult> GetFeeStructures([FromQuery] int? campusId) => Ok(await _service.GetFeeStructuresAsync(campusId));
+    public async Task<IActionResult> GetFeeStructures(
+        [FromQuery] int? campusId,
+        [FromQuery] int? boardId = null,
+        [FromQuery] int? academicYearId = null)
+    {
+        var structures = await _service.GetFeeStructuresAsync(campusId);
+        if (boardId.HasValue && boardId.Value > 0)
+            structures = structures.Where(s => s.BoardId == boardId.Value);
+        if (academicYearId.HasValue && academicYearId.Value > 0)
+            structures = structures.Where(s => s.AcademicYearId == academicYearId.Value);
+        return Ok(structures);
+    }
 
     /// <summary>Get one fee structure and all configured fee types.</summary>
     [HttpGet("structures/{id:int}")]

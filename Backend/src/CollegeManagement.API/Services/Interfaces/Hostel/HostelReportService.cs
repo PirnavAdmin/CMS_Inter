@@ -40,6 +40,7 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
                 string? requestType = null,
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
-                string? search = null);
+                string? search = null,
+                int? campusId = null);
     }
 }

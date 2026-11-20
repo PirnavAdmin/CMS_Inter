@@ -1088,7 +1088,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         getAllTransportPages(apiClient, apiEndpoints.faculty.list, driverStaffParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.drivers, driverParams, signal),
         getAllTransportPages(apiClient, apiEndpoints.transport.attendants, {}, signal),
-        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, {}, signal),
+        getAllTransportPages(apiClient, apiEndpoints.transport.vehicleAssignments, campusParams, signal),
         apiClient.get(apiEndpoints.transport.trips, { signal }),
         apiClient.get(apiEndpoints.transport.gps, { signal }),
         getAllTransportPages(apiClient, apiEndpoints.transport.maintenance, {}, signal),

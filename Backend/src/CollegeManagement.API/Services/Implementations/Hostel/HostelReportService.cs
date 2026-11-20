@@ -83,7 +83,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 string? requestType = null,
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             return await _reportRepository
                 .GetTransferVacateReportAsync(
@@ -93,7 +94,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     requestType,
                     approvalStatus,
                     feeSettlementStatus,
-                    search);
+                    search,
+                    campusId);
         }
     }
 }

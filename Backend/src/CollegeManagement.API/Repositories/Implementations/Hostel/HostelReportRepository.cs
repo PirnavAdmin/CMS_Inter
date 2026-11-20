@@ -135,7 +135,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 string? requestType = null,
                 string? approvalStatus = null,
                 string? feeSettlementStatus = null,
-                string? search = null)
+                string? search = null,
+                int? campusId = null)
         {
             return await _dbConnection
                 .QueryAsync<HostelTransferVacateReportDto>(
@@ -143,29 +144,13 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     new
                     {
                         p_StudentId = studentId,
-                        p_FromDate =
-                            fromDate?.Date,
-                        p_ToDate =
-                            toDate?.Date,
-                        p_RequestType =
-                            string.IsNullOrWhiteSpace(
-                                requestType)
-                                ? null
-                                : requestType.Trim(),
-                        p_ApprovalStatus =
-                            string.IsNullOrWhiteSpace(
-                                approvalStatus)
-                                ? null
-                                : approvalStatus.Trim(),
-                        p_FeeSettlementStatus =
-                            string.IsNullOrWhiteSpace(
-                                feeSettlementStatus)
-                                ? null
-                                : feeSettlementStatus.Trim(),
-                        p_Search =
-                            string.IsNullOrWhiteSpace(search)
-                                ? null
-                                : search.Trim()
+                        p_FromDate = fromDate?.Date,
+                        p_ToDate = toDate?.Date,
+                        p_RequestType = string.IsNullOrWhiteSpace(requestType) ? null : requestType.Trim(),
+                        p_ApprovalStatus = string.IsNullOrWhiteSpace(approvalStatus) ? null : approvalStatus.Trim(),
+                        p_FeeSettlementStatus = string.IsNullOrWhiteSpace(feeSettlementStatus) ? null : feeSettlementStatus.Trim(),
+                        p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+                        p_CampusId = campusId
                     },
                     commandType: CommandType.StoredProcedure);
         }

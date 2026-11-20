@@ -1554,21 +1554,79 @@ namespace CollegeManagement.API.Controllers
             }
             else
             {
+                // Check if staff has an active assigned salary structure to show configured salary breakdown
+                SalaryStructureDto? assignedStructure = null;
+                string? empId = null;
+                string? staffName = null;
+
+                try
+                {
+                    if (_db != null)
+                    {
+                        var staffObj = await _db.Staffs.AsNoTracking().FirstOrDefaultAsync(s => s.Id == callerStaffId.Value);
+                        if (staffObj != null)
+                        {
+                            empId = staffObj.EmployeeId;
+                            staffName = $"{staffObj.FirstName} {staffObj.LastName}".Trim();
+                        }
+                    }
+
+                    var assignments = await _payrollService.GetSalaryAssignmentsAsync(callerStaffId.Value, "Active", null);
+                    var activeAssignment = assignments?.FirstOrDefault();
+                    if (activeAssignment != null && activeAssignment.SalaryStructureId > 0)
+                    {
+                        assignedStructure = await _payrollService.GetSalaryStructureByIdAsync(activeAssignment.SalaryStructureId);
+                    }
+                }
+                catch
+                {
+                    // Fall back gracefully
+                }
+
+                var basic = assignedStructure?.BasicPay ?? 0.00m;
+                var hra = assignedStructure?.HRA ?? 0.00m;
+                var da = assignedStructure?.DA ?? 0.00m;
+                var conv = assignedStructure?.ConveyanceAllowance ?? 0.00m;
+                var med = assignedStructure?.MedicalAllowance ?? 0.00m;
+                var otherAll = assignedStructure?.OtherAllowance ?? 0.00m;
+                var pf = assignedStructure?.PF ?? 0.00m;
+                var pt = assignedStructure?.ProfessionalTax ?? 0.00m;
+                var tds = assignedStructure?.TDS ?? 0.00m;
+                var esi = assignedStructure?.ESI ?? 0.00m;
+                var ins = assignedStructure?.InsuranceOtherDeduction ?? 0.00m;
+
+                var gross = basic + hra + da + conv + med + otherAll;
+                var ded = pf + pt + tds + esi + ins;
+                var net = gross - ded;
+
                 var summary = new MonthlyPayrollSummaryDto
                 {
                     PayrollMonth = targetMonth,
                     PayrollYear = targetYear,
                     TotalPayslips = 0,
                     TotalEmployees = 0,
-                    TotalGrossSalary = 0.00m,
-                    TotalDeductions = 0.00m,
+                    TotalGrossSalary = gross,
+                    TotalDeductions = ded,
                     TotalAdvanceDeductions = 0.00m,
-                    TotalNetSalary = 0.00m,
+                    TotalNetSalary = net,
                     PaidPayslips = 0,
                     PendingPayslips = 0,
                     OnHoldPayslips = 0,
                     StaffId = callerStaffId.Value,
-                    PayslipStatus = "None"
+                    EmployeeId = empId,
+                    StaffName = staffName,
+                    PayslipStatus = assignedStructure != null ? "Structure Assigned (Not Generated)" : "Not Generated",
+                    BasicPay = basic,
+                    Hra = hra,
+                    Da = da,
+                    ConveyanceAllowance = conv,
+                    MedicalAllowance = med,
+                    OtherAllowance = otherAll,
+                    Pf = pf,
+                    ProfessionalTax = pt,
+                    Tds = tds,
+                    Esi = esi,
+                    InsuranceOtherDeduction = ins
                 };
                 return Ok(summary);
             }
