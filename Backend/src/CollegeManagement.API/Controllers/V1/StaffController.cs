@@ -54,6 +54,43 @@ namespace CollegeManagement.API.Controllers.V1
             return User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
         }
 
+        private (int? CampusId, int? CollegeId) ResolveTenantScope(int? campusId = null, int? collegeId = null)
+        {
+            if (!campusId.HasValue || campusId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-Campus-Id", out var cHeader) && int.TryParse(cHeader, out int cId) && cId > 0)
+                {
+                    campusId = cId;
+                }
+                else
+                {
+                    var campusClaim = User.Claims.FirstOrDefault(c => c.Type == "CampusId" || c.Type == "campus_id" || c.Type == "campusId");
+                    if (campusClaim != null && int.TryParse(campusClaim.Value, out int claimCampusId) && claimCampusId > 0)
+                    {
+                        campusId = claimCampusId;
+                    }
+                }
+            }
+
+            if (!collegeId.HasValue || collegeId <= 0)
+            {
+                if (Request.Headers.TryGetValue("X-College-Id", out var colHeader) && int.TryParse(colHeader, out int colId) && colId > 0)
+                {
+                    collegeId = colId;
+                }
+                else
+                {
+                    var collegeClaim = User.Claims.FirstOrDefault(c => c.Type == "CollegeId" || c.Type == "college_id" || c.Type == "collegeId");
+                    if (collegeClaim != null && int.TryParse(collegeClaim.Value, out int claimCollegeId) && claimCollegeId > 0)
+                    {
+                        collegeId = claimCollegeId;
+                    }
+                }
+            }
+
+            return (campusId, collegeId);
+        }
+
         private int? GetCallerStaffId()
         {
             var staffClaim = User.Claims.FirstOrDefault(c => c.Type == "StaffId" || c.Type == "staff_id" || c.Type == "staffId")?.Value;
@@ -844,8 +881,11 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? type = null,
             [FromQuery] string? facultyType = null,
             [FromQuery] string? staff_type = null,
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? collegeId = null,
             CancellationToken ct = default)
         {
+            var (effectiveCampusId, effectiveCollegeId) = ResolveTenantScope(campusId, collegeId);
             var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType)
                 ? staffType
                 : (!string.IsNullOrWhiteSpace(type) ? type : (!string.IsNullOrWhiteSpace(facultyType) ? facultyType : staff_type));
@@ -868,7 +908,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
 
-            var depts = await _departmentRepository.GetDepartmentDtosAsync(queryStaffType, includeInactive: false);
+            var depts = await _departmentRepository.GetDepartmentDtosAsync(queryStaffType, includeInactive: false, campusId: effectiveCampusId, collegeId: effectiveCollegeId);
             var list = depts
                 .OrderBy(d => d.DepartmentName)
                 .Select(d => new { id = d.DepartmentId, name = d.DepartmentName, departmentName = d.DepartmentName, code = d.DepartmentCode, departmentCode = d.DepartmentCode, staffType = d.StaffType })
@@ -898,8 +938,11 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? staff_type = null,
             [FromQuery] int? departmentId = null,
             [FromQuery] string? department = null,
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? collegeId = null,
             CancellationToken ct = default)
         {
+            var (effectiveCampusId, effectiveCollegeId) = ResolveTenantScope(campusId, collegeId);
             var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType)
                 ? staffType
                 : (!string.IsNullOrWhiteSpace(type) ? type : (!string.IsNullOrWhiteSpace(facultyType) ? facultyType : staff_type));
@@ -910,7 +953,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if ((!deptIdToQuery.HasValue || deptIdToQuery <= 0) && !string.IsNullOrWhiteSpace(department))
                 {
                     var deptName = department.Trim().ToLower();
-                    var allDepts = await _departmentRepository.GetDepartmentDtosAsync(null, includeInactive: false);
+                    var allDepts = await _departmentRepository.GetDepartmentDtosAsync(null, includeInactive: false, campusId: effectiveCampusId, collegeId: effectiveCollegeId);
                     var matchedDept = allDepts.FirstOrDefault(dep => dep.DepartmentName.Equals(deptName, StringComparison.OrdinalIgnoreCase));
                     if (matchedDept != null)
                     {
@@ -936,7 +979,7 @@ namespace CollegeManagement.API.Controllers.V1
                     }
                 }
 
-                var dtos = await _designationRepository.GetAllDtosAsync(includeInactive: false, staffType: queryStaffType, departmentId: deptIdToQuery);
+                var dtos = await _designationRepository.GetAllDtosAsync(includeInactive: false, staffType: queryStaffType, departmentId: deptIdToQuery, campusId: effectiveCampusId, collegeId: effectiveCollegeId);
                 var list = dtos
                     .OrderBy(d => d.Name)
                     .Select(d => new { id = d.Id, name = d.Name, designationName = d.Name, code = d.Name.ToUpper(), designationCode = d.Name.ToUpper(), staffType = d.StaffType, departmentId = d.DepartmentId })

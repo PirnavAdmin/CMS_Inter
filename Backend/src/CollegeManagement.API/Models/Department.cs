@@ -38,4 +38,3 @@ namespace CollegeManagement.API.Models
         public virtual Campus? Campus { get; set; }
     }
 }
-

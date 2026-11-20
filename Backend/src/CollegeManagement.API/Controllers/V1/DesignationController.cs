@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -22,10 +23,32 @@ namespace CollegeManagement.API.Controllers.V1
     public class DesignationController : ControllerBase
     {
         private readonly IDesignationService _designationService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public DesignationController(IDesignationService designationService)
+        public DesignationController(IDesignationService designationService, IJwtTokenHelper jwtTokenHelper)
         {
             _designationService = designationService;
+            _jwtTokenHelper = jwtTokenHelper;
+        }
+
+        private int? ResolveCollegeId(int? queryCollegeId = null)
+        {
+            if (queryCollegeId.HasValue && queryCollegeId.Value > 0)
+            {
+                return queryCollegeId.Value;
+            }
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                return collegeId.Value;
+            }
+            return null;
         }
 
         /// <summary>
@@ -41,7 +64,8 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? type = null,
             [FromQuery] string? facultyType = null,
             [FromQuery] int? departmentId = null,
-            [FromQuery] int? campusId = null)
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? collegeId = null)
         {
             if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
             {
@@ -51,7 +75,8 @@ namespace CollegeManagement.API.Controllers.V1
             var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType) 
                 ? staffType 
                 : (!string.IsNullOrWhiteSpace(type) ? type : facultyType);
-            var result = await _designationService.GetAllAsync(includeInactive, effectiveStaffType, departmentId, campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId);
+            var result = await _designationService.GetAllAsync(includeInactive, effectiveStaffType, departmentId, campusId, effectiveCollegeId);
             return Ok(result);
         }
 
@@ -77,14 +102,15 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("summary")]
         [BypassPermission]
         [ProducesResponseType(typeof(DesignationSummaryDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> GetSummary([FromQuery] int? campusId = null)
+        public async Task<IActionResult> GetSummary([FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
             {
                 return Ok(new DesignationSummaryDto());
             }
 
-            var result = await _designationService.GetSummaryAsync(campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId);
+            var result = await _designationService.GetSummaryAsync(campusId, effectiveCollegeId);
             return Ok(result);
         }
 
@@ -96,9 +122,10 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(DesignationResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Create([FromBody] CreateDesignationDto dto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> Create([FromBody] CreateDesignationDto dto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
-            var result = await _designationService.CreateAsync(dto, campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
+            var result = await _designationService.CreateAsync(dto, campusId, effectiveCollegeId);
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
 
@@ -111,9 +138,10 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<IActionResult> Update(int id, [FromBody] UpdateDesignationDto dto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateDesignationDto dto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
-            var result = await _designationService.UpdateAsync(id, dto, campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
+            var result = await _designationService.UpdateAsync(id, dto, campusId, effectiveCollegeId);
             if (result == null) return NotFound(new { message = $"Designation with ID {id} not found." });
             return Ok(result);
         }
@@ -157,13 +185,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("import-excel")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ImportExcel([FromForm] DesignationImportExcelRequestDto dto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> ImportExcel([FromForm] DesignationImportExcelRequestDto dto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (dto.File == null || dto.File.Length == 0)
             {
                 return BadRequest(new { message = "Please provide a valid Excel file (.xlsx or .xls)." });
             }
-            var result = await _designationService.ImportDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType, dto.DefaultDepartmentId, campusId);
+            var result = await _designationService.ImportDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType, dto.DefaultDepartmentId, campusId, ResolveCollegeId(collegeId));
             return Ok(result);
         }
 
@@ -173,20 +201,20 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ImportDesignations([FromForm] DesignationImportExcelRequestDto? formDto, [FromBody] DesignationBulkImportRequestDto? jsonDto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> ImportDesignations([FromForm] DesignationImportExcelRequestDto? formDto, [FromBody] DesignationBulkImportRequestDto? jsonDto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (Request.HasFormContentType && Request.Form.Files.Count > 0)
             {
                 var file = Request.Form.Files[0];
                 var staffType = Request.Form["defaultStaffType"].FirstOrDefault() ?? Request.Form["staffType"].FirstOrDefault();
                 int? deptId = int.TryParse(Request.Form["defaultDepartmentId"].FirstOrDefault() ?? Request.Form["departmentId"].FirstOrDefault(), out int id) ? id : null;
-                var result = await _designationService.ImportDesignationsFromExcelAsync(file, staffType, deptId, campusId);
+                var result = await _designationService.ImportDesignationsFromExcelAsync(file, staffType, deptId, campusId, ResolveCollegeId(collegeId));
                 return Ok(result);
             }
 
             if (jsonDto != null && jsonDto.Designations != null && jsonDto.Designations.Any())
             {
-                var result = await _designationService.BulkImportDesignationsAsync(jsonDto.Designations, jsonDto.DefaultStaffType, campusId);
+                var result = await _designationService.BulkImportDesignationsAsync(jsonDto.Designations, jsonDto.DefaultStaffType, campusId, ResolveCollegeId(collegeId));
                 return Ok(result);
             }
 
@@ -200,13 +228,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("bulk")]
         [HttpPost("bulk-import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> BulkImport([FromBody] List<CreateDesignationDto> dtos, [FromQuery] string? staffType = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> BulkImport([FromBody] List<CreateDesignationDto> dtos, [FromQuery] string? staffType = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (dtos == null || !dtos.Any())
             {
                 return BadRequest(new { message = "Designation list cannot be empty." });
             }
-            var result = await _designationService.BulkImportDesignationsAsync(dtos, staffType, campusId);
+            var result = await _designationService.BulkImportDesignationsAsync(dtos, staffType, campusId, ResolveCollegeId(collegeId));
             return Ok(result);
         }
 
@@ -217,10 +245,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("export-template")]
         [HttpGet("template")]
         [BypassPermission]
-        public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> DownloadTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _designationService.GenerateDesignationTemplateExcelAsync(effectiveStaffType, campusId);
+            var (bytes, contentType, fileName) = await _designationService.GenerateDesignationTemplateExcelAsync(effectiveStaffType, campusId, ResolveCollegeId(collegeId));
             return File(bytes, contentType, fileName);
         }
 
@@ -235,10 +263,11 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? staffType = null,
             [FromQuery] string? type = null,
             [FromQuery] int? departmentId = null,
-            [FromQuery] int? campusId = null)
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? collegeId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _designationService.ExportDesignationsExcelAsync(effectiveStaffType, departmentId, campusId);
+            var (bytes, contentType, fileName) = await _designationService.ExportDesignationsExcelAsync(effectiveStaffType, departmentId, campusId, ResolveCollegeId(collegeId));
             return File(bytes, contentType, fileName);
         }
     }

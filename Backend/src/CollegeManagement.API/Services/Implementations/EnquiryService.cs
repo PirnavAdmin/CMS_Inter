@@ -26,12 +26,21 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<EnquiryDto> SubmitPublicEnquiryAsync(CreateEnquiryRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.FullName))
-                throw new ArgumentException("Full name is required.");
+            bool isAdmissions = string.Equals(request.EnquiryType, "Admissions", StringComparison.OrdinalIgnoreCase);
+            string nameError = isAdmissions ? "Please enter a valid student name." : "Please enter a valid name.";
+
+            if (string.IsNullOrWhiteSpace(request.FullName) || !System.Text.RegularExpressions.Regex.IsMatch(request.FullName.Trim(), @"^[a-zA-Z\s.'-]+$"))
+                throw new ArgumentException(nameError);
+            if (!string.IsNullOrWhiteSpace(request.GuardianName) &&
+                (!System.Text.RegularExpressions.Regex.IsMatch(request.GuardianName.Trim(), @"^[a-zA-Z\s.'-]+$") ||
+                 System.Text.RegularExpressions.Regex.IsMatch(request.GuardianName.Trim(), @"\d")))
+            {
+                throw new ArgumentException("Please enter a valid parent / guardian name.");
+            }
             if (string.IsNullOrWhiteSpace(request.Email))
                 throw new ArgumentException("Email is required.");
-            if (string.IsNullOrWhiteSpace(request.Mobile))
-                throw new ArgumentException("Mobile number is required.");
+            if (string.IsNullOrWhiteSpace(request.Mobile) || !System.Text.RegularExpressions.Regex.IsMatch(request.Mobile.Trim(), @"^(\+91[\-\s]?)?[0-9]{10}$"))
+                throw new ArgumentException("Please enter a valid 10-digit mobile number.");
             if (string.IsNullOrWhiteSpace(request.Message))
                 throw new ArgumentException("Message is required.");
 

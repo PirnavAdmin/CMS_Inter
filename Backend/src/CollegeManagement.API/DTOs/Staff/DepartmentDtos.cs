@@ -14,6 +14,10 @@ namespace CollegeManagement.API.DTOs.Staff
         public string StaffType { get; set; } = "Both";
         public string? Description { get; set; }
         public bool IsActive { get; set; } = true;
+
+        public int? CampusId { get; set; }
+
+        public int? CollegeId { get; set; }
         public string Status => IsActive ? "Active" : "Inactive";
         public int DesignationCount { get; set; }
         public int StaffCount { get; set; }
@@ -37,6 +41,10 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? Description { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        public int? CampusId { get; set; }
+
+        public int? CollegeId { get; set; }
     }
 
     public class UpdateDepartmentDto
@@ -55,6 +63,10 @@ namespace CollegeManagement.API.DTOs.Staff
         public string? Description { get; set; }
 
         public bool IsActive { get; set; } = true;
+
+        public int? CampusId { get; set; }
+
+        public int? CollegeId { get; set; }
     }
 
     public class DepartmentSummaryDto

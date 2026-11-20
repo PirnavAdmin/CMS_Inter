@@ -32,6 +32,7 @@ const ENQUIRY_TYPES = [
 
 const emptyValues = {
   fullName: "",
+  guardianName: "",
   email: "",
   mobile: "",
   enquiryType: "Admissions",
@@ -85,6 +86,62 @@ export function GetInTouchCard({
     };
   }, [contact.campusId]);
 
+  const validateField = (field, customValue) => {
+    const val = customValue !== undefined ? customValue : values[field];
+    let error = "";
+
+    if (field === "fullName") {
+      const trimmed = (val ?? "").trim();
+      const isAdmissions = values.enquiryType === "Admissions";
+      const nameError = isAdmissions ? "Please enter a valid student name." : "Please enter a valid name.";
+
+      if (!trimmed || trimmed.length < 2) {
+        error = nameError;
+      } else if (/\d/.test(trimmed) || !/^[a-zA-Z\s.'-]+$/.test(trimmed) || !/[a-zA-Z]/.test(trimmed)) {
+        error = nameError;
+      }
+    } else if (field === "guardianName") {
+      const trimmed = (val ?? "").trim();
+      const isAdmissions = values.enquiryType === "Admissions";
+      if (isAdmissions) {
+        if (!trimmed || trimmed.length < 2 || /\d/.test(trimmed) || !/^[a-zA-Z\s.'-]+$/.test(trimmed) || !/[a-zA-Z]/.test(trimmed)) {
+          error = "Please enter a valid parent / guardian name.";
+        }
+      } else if (trimmed) {
+        if (/\d/.test(trimmed) || !/^[a-zA-Z\s.'-]+$/.test(trimmed) || !/[a-zA-Z]/.test(trimmed)) {
+          error = "Please enter a valid parent / guardian name.";
+        }
+      }
+    } else if (field === "mobile") {
+      const trimmed = (val ?? "").trim();
+      const digits = trimmed.replace(/\D/g, "");
+      const isDirect10 = /^\d{10}$/.test(trimmed);
+      const is10WithIndiaCode = (digits.length === 12 && digits.startsWith("91")) || (digits.length === 10);
+      const hasValidChars = /^\+?[\d\s()-]+$/.test(trimmed);
+
+      if (!trimmed || !hasValidChars || (!isDirect10 && !is10WithIndiaCode) || digits.length < 10 || digits.length > 12) {
+        error = "Please enter a valid 10-digit mobile number.";
+      }
+    } else if (field === "email") {
+      const trimmed = (val ?? "").trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+        error = "Please enter a valid email address.";
+      }
+    } else if (field === "enquiryType") {
+      if (!val) {
+        error = "Please select an enquiry category.";
+      }
+    } else if (field === "message") {
+      const trimmed = (val ?? "").trim();
+      if (!trimmed || trimmed.length < 5) {
+        error = "Please write your message or enquiry.";
+      }
+    }
+
+    setErrors((current) => ({ ...current, [field]: error }));
+    return !error;
+  };
+
   const updateField = (field, value) => {
     setValues((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "" }));
@@ -93,16 +150,42 @@ export function GetInTouchCard({
 
   const validate = () => {
     const nextErrors = {};
-    if (!values.fullName.trim() || values.fullName.trim().length < 2) {
-      nextErrors.fullName = "Please enter your full name.";
+
+    // Validate Student / Full Name: reject numeric-only, numbers, or invalid characters
+    const trimmedName = values.fullName.trim();
+    const isAdmissions = values.enquiryType === "Admissions";
+    const nameError = isAdmissions ? "Please enter a valid student name." : "Please enter a valid name.";
+
+    if (!trimmedName || trimmedName.length < 2) {
+      nextErrors.fullName = nameError;
+    } else if (/\d/.test(trimmedName) || !/^[a-zA-Z\s.'-]+$/.test(trimmedName) || !/[a-zA-Z]/.test(trimmedName)) {
+      nextErrors.fullName = nameError;
     }
+
+    // Validate Parent / Guardian Name (required for Admissions enquiry)
+    if (isAdmissions) {
+      const trimmedGuardian = values.guardianName.trim();
+      if (!trimmedGuardian || trimmedGuardian.length < 2 || /\d/.test(trimmedGuardian) || !/^[a-zA-Z\s.'-]+$/.test(trimmedGuardian) || !/[a-zA-Z]/.test(trimmedGuardian)) {
+        nextErrors.guardianName = "Please enter a valid parent / guardian name.";
+      }
+    }
+
+    // Validate Email Address
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email.trim())) {
       nextErrors.email = "Please enter a valid email address.";
     }
-    const mobileDigits = values.mobile.replace(/\D/g, "");
-    if (!/^\+?[\d\s()-]+$/.test(values.mobile.trim()) || mobileDigits.length < 7 || mobileDigits.length > 15) {
-      nextErrors.mobile = "Please enter a valid mobile number (7–15 digits).";
+
+    // Validate Mobile Number: accept only valid 10-digit mobile numbers
+    const trimmedMobile = values.mobile.trim();
+    const digits = trimmedMobile.replace(/\D/g, "");
+    const isDirect10 = /^\d{10}$/.test(trimmedMobile);
+    const is10WithIndiaCode = (digits.length === 12 && digits.startsWith("91")) || (digits.length === 10);
+    const hasValidChars = /^\+?[\d\s()-]+$/.test(trimmedMobile);
+
+    if (!trimmedMobile || !hasValidChars || (!isDirect10 && !is10WithIndiaCode) || digits.length < 10 || digits.length > 12) {
+      nextErrors.mobile = "Please enter a valid 10-digit mobile number.";
     }
+
     if (!values.enquiryType) {
       nextErrors.enquiryType = "Please select an enquiry category.";
     }
@@ -116,7 +199,11 @@ export function GetInTouchCard({
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!validate()) {
-      dialogRef?.current?.querySelector("[aria-invalid='true']")?.focus();
+      setErrorMessage("Please correct the highlighted errors before submitting your enquiry.");
+      const firstInvalid =
+        dialogRef?.current?.querySelector("[aria-invalid='true']") ||
+        document.querySelector(".get-in-touch-form [aria-invalid='true']");
+      firstInvalid?.focus();
       return;
     }
 
@@ -125,14 +212,19 @@ export function GetInTouchCard({
     setSuccessMessage("");
 
     try {
+      const messageBody = values.guardianName?.trim()
+        ? `[Parent / Guardian: ${values.guardianName.trim()}]\n${values.message.trim()}`
+        : values.message.trim();
+
       await enquiryApi.submitEnquiry({
         campusId: contact.campusId ? Number(contact.campusId) : null,
         fullName: values.fullName.trim(),
+        guardianName: values.guardianName?.trim() || undefined,
         email: values.email.trim(),
         mobile: values.mobile.trim(),
         enquiryType: values.enquiryType,
         subject: values.subject.trim() || `${values.enquiryType} Enquiry`,
-        message: values.message.trim(),
+        message: messageBody,
       });
 
       setSuccessMessage(
@@ -140,6 +232,14 @@ export function GetInTouchCard({
       );
       setValues(emptyValues);
     } catch (err) {
+      if (err?.response?.data?.errors) {
+        const serverErrors = {};
+        for (const [key, val] of Object.entries(err.response.data.errors)) {
+          const fieldKey = key.charAt(0).toLowerCase() + key.slice(1);
+          serverErrors[fieldKey] = Array.isArray(val) ? val[0] : String(val);
+        }
+        setErrors((prev) => ({ ...prev, ...serverErrors }));
+      }
       setErrorMessage(
         err?.response?.data?.message ||
           `Unable to submit your enquiry at this time. Please call our reception directly at ${config.contactPhone}.`
@@ -238,8 +338,12 @@ export function GetInTouchCard({
             <Send size={22} />
           </span>
           <div>
-            <h3>Send Us a Message</h3>
-            <p>Fill in your details below and our front desk reception will get back to you promptly.</p>
+            <h3>{values.enquiryType === "Admissions" ? "Admission Enquiry" : "Send Us a Message"}</h3>
+            <p>
+              {values.enquiryType === "Admissions"
+                ? "Fill in the student details below and our admissions counseling team will get back to you promptly."
+                : "Fill in your details below and our front desk reception will get back to you promptly."}
+            </p>
           </div>
         </div>
 
@@ -260,20 +364,27 @@ export function GetInTouchCard({
 
           <div className="get-in-touch-control">
             <label htmlFor="get-touch-name">
-              Full Name <i aria-hidden="true">*</i>
+              {values.enquiryType === "Admissions" ? "Student Name" : "Full Name"} <i aria-hidden="true">*</i>
             </label>
             <div className="get-in-touch-field">
               <UserRound size={17} />
               <input
                 ref={fullNameRef}
                 id="get-touch-name"
-                name="fullName"
+                name={values.enquiryType === "Admissions" ? "studentName" : "fullName"}
                 autoComplete="name"
                 required
                 aria-required="true"
                 value={values.fullName}
-                onChange={(event) => updateField("fullName", event.target.value)}
-                placeholder="e.g. Ramesh Kumar"
+                onChange={(event) => {
+                  const nextVal = event.target.value;
+                  updateField("fullName", nextVal);
+                  if (errors.fullName || /\d/.test(nextVal)) {
+                    validateField("fullName", nextVal);
+                  }
+                }}
+                onBlur={() => validateField("fullName")}
+                placeholder={values.enquiryType === "Admissions" ? "e.g. Ramesh Kumar" : "e.g. Ramesh Kumar"}
                 aria-invalid={Boolean(errors.fullName)}
                 aria-describedby={errors.fullName ? "get-touch-name-error" : undefined}
                 disabled={submitting}
@@ -286,25 +397,65 @@ export function GetInTouchCard({
             </div>
           </div>
 
+          {values.enquiryType === "Admissions" ? (
+            <div className="get-in-touch-control">
+              <label htmlFor="get-touch-guardian">
+                Parent / Guardian Name <i aria-hidden="true">*</i>
+              </label>
+              <div className="get-in-touch-field">
+                <UserRound size={17} />
+                <input
+                  id="get-touch-guardian"
+                  name="guardianName"
+                  autoComplete="name"
+                  required
+                  aria-required="true"
+                  value={values.guardianName}
+                  onChange={(event) => {
+                    const nextVal = event.target.value;
+                    updateField("guardianName", nextVal);
+                    if (errors.guardianName || /\d/.test(nextVal)) {
+                      validateField("guardianName", nextVal);
+                    }
+                  }}
+                  onBlur={() => validateField("guardianName")}
+                  placeholder="e.g. Suresh Kumar"
+                  aria-invalid={Boolean(errors.guardianName)}
+                  aria-describedby={errors.guardianName ? "get-touch-guardian-error" : undefined}
+                  disabled={submitting}
+                />
+                {errors.guardianName ? (
+                  <small id="get-touch-guardian-error" className="get-in-touch-error">
+                    {errors.guardianName}
+                  </small>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="get-in-touch-control">
-            <label htmlFor="get-touch-mobile">
-              Mobile Number <i aria-hidden="true">*</i>
+            <label htmlFor={values.enquiryType === "Admissions" ? "get-touch-phone" : "get-touch-mobile"}>
+              {values.enquiryType === "Admissions" ? "Phone Number" : "Mobile Number"} <i aria-hidden="true">*</i>
             </label>
             <div className="get-in-touch-field">
               <Phone size={17} />
               <input
-                id="get-touch-mobile"
-                name="mobile"
-                type="tel"
-                inputMode="tel"
+                id={values.enquiryType === "Admissions" ? "get-touch-phone" : "get-touch-mobile"}
+                name={values.enquiryType === "Admissions" ? "phone" : "mobile"}
+                type="text"
                 autoComplete="tel"
                 required
                 aria-required="true"
                 value={values.mobile}
-                onChange={(event) =>
-                  updateField("mobile", event.target.value.replace(/[^\d+()\s-]/g, ""))
-                }
-                placeholder="e.g. +91 9876543210"
+                onChange={(event) => {
+                  const nextVal = event.target.value;
+                  updateField("mobile", nextVal);
+                  if (errors.mobile || /[a-zA-Z]/.test(nextVal)) {
+                    validateField("mobile", nextVal);
+                  }
+                }}
+                onBlur={() => validateField("mobile")}
+                placeholder="e.g. 9876543210"
                 aria-invalid={Boolean(errors.mobile)}
                 aria-describedby={errors.mobile ? "get-touch-mobile-error" : undefined}
                 disabled={submitting}
@@ -331,7 +482,14 @@ export function GetInTouchCard({
                 required
                 aria-required="true"
                 value={values.email}
-                onChange={(event) => updateField("email", event.target.value)}
+                onChange={(event) => {
+                  const nextVal = event.target.value;
+                  updateField("email", nextVal);
+                  if (errors.email) {
+                    validateField("email", nextVal);
+                  }
+                }}
+                onBlur={() => validateField("email")}
                 placeholder="e.g. ramesh@example.com"
                 aria-invalid={Boolean(errors.email)}
                 aria-describedby={errors.email ? "get-touch-email-error" : undefined}
@@ -423,12 +581,12 @@ export function GetInTouchCard({
             {submitting ? (
               <>
                 <Loader2 size={18} className="animate-spin" />
-                Submitting Enquiry...
+                {values.enquiryType === "Admissions" ? "Sending Enquiry..." : "Submitting Enquiry..."}
               </>
             ) : (
               <>
                 <Send size={18} />
-                Submit Enquiry
+                {values.enquiryType === "Admissions" ? "Send Enquiry" : "Submit Enquiry"}
               </>
             )}
           </button>
