@@ -46,17 +46,31 @@ namespace CollegeManagement.API.Controllers.V1
 
         private int? GetScopedCollegeId()
         {
-            if (User?.Identity?.IsAuthenticated != true) return null;
-            if (User.IsInRole("Super Admin") || string.Equals(_jwtTokenHelper.GetRole(User), "Super Admin", System.StringComparison.OrdinalIgnoreCase))
-                return null;
-            var collegeId = _jwtTokenHelper.GetCollegeId(User);
-            if (collegeId.HasValue && collegeId.Value > 0) return collegeId.Value;
-            var userId = _jwtTokenHelper.GetUserId(User);
-            if (userId.HasValue && userId.Value > 0)
+            if (User?.Identity?.IsAuthenticated == true)
             {
-                var conn = _db.Database.GetDbConnection();
-                if (conn.State != System.Data.ConnectionState.Open) conn.Open();
-                return Dapper.SqlMapper.QueryFirstOrDefault<int?>(conn, "SELECT CollegeId FROM Users WHERE UserId = @UserId;", new { UserId = userId.Value });
+                if (User.IsInRole("Super Admin") || string.Equals(_jwtTokenHelper.GetRole(User), "Super Admin", System.StringComparison.OrdinalIgnoreCase))
+                    return null;
+                var collegeId = _jwtTokenHelper.GetCollegeId(User);
+                if (collegeId.HasValue && collegeId.Value > 0) return collegeId.Value;
+                var userId = _jwtTokenHelper.GetUserId(User);
+                if (userId.HasValue && userId.Value > 0)
+                {
+                    var conn = _db.Database.GetDbConnection();
+                    if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+                    var dbColId = Dapper.SqlMapper.QueryFirstOrDefault<int?>(conn, "SELECT CollegeId FROM Users WHERE UserId = @UserId;", new { UserId = userId.Value });
+                    if (dbColId.HasValue && dbColId.Value > 0) return dbColId.Value;
+                }
+            }
+
+            if (Request.Headers.TryGetValue("X-College-Id", out var hCollegeId) &&
+                int.TryParse(hCollegeId, out var hId) && hId > 0)
+            {
+                return hId;
+            }
+            if (Request.Query.TryGetValue("collegeId", out var qCollegeId) &&
+                int.TryParse(qCollegeId, out var qId) && qId > 0)
+            {
+                return qId;
             }
             return null;
         }
