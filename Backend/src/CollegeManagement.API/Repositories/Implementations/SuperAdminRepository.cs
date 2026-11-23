@@ -618,16 +618,16 @@ namespace CollegeManagement.API.Repositories.Implementations
 
             return rows.Select(r => new PlatformPaymentDto
             {
-                PaymentId = (int)r.PaymentId,
-                Id = "PAY-" + ((int)r.PaymentId).ToString("D3"),
-                Invoice = (string)r.InvoiceNumber,
-                CollegeId = "COL-" + ((int)r.CollegeId).ToString("D3"),
-                CollegeName = (string)r.CollegeName,
-                Amount = (decimal)r.Amount,
-                Date = ((DateTime)r.PaymentDate).ToString("yyyy-MM-dd"),
-                Status = (string)r.Status,
-                PaymentMethod = (string)(r.PaymentMethod ?? "Bank Transfer"),
-                TransactionReference = (string?)r.TransactionReference
+                PaymentId = Convert.ToInt32(r.PaymentId),
+                Id = "PAY-" + Convert.ToInt32(r.PaymentId).ToString("D3"),
+                Invoice = r.InvoiceNumber != null ? Convert.ToString(r.InvoiceNumber) : ("INV-" + Convert.ToInt32(r.PaymentId).ToString("D5")),
+                CollegeId = "COL-" + Convert.ToInt32(r.CollegeId).ToString("D3"),
+                CollegeName = Convert.ToString(r.CollegeName ?? "Platform College"),
+                Amount = Convert.ToDecimal(r.Amount ?? 0),
+                Date = r.PaymentDate != null ? Convert.ToDateTime(r.PaymentDate).ToString("yyyy-MM-dd") : DateTime.UtcNow.ToString("yyyy-MM-dd"),
+                Status = Convert.ToString(r.Status ?? "Paid"),
+                PaymentMethod = Convert.ToString(r.PaymentMethod ?? "Bank Transfer"),
+                TransactionReference = r.TransactionReference != null ? Convert.ToString(r.TransactionReference) : null
             });
         }
 

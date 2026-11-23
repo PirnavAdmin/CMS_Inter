@@ -1408,27 +1408,11 @@ END$$
 DROP PROCEDURE IF EXISTS `sp_SuperAdmin_GetPaymentsAndInvoices`$$
 CREATE PROCEDURE `sp_SuperAdmin_GetPaymentsAndInvoices`()
 BEGIN
-    -- Invoices Ledger
-    SELECT 
-        inv.`InvoiceId`,
-        inv.`InvoiceNumber`,
-        inv.`CollegeId`,
-        c.`CollegeName`,
-        p.`PlanName`,
-        inv.`Amount`,
-        inv.`InvoiceDate`,
-        inv.`DueDate`,
-        inv.`Status`
-    FROM `PlatformInvoices` inv
-    JOIN `Colleges` c ON inv.`CollegeId` = c.`CollegeId`
-    JOIN `SubscriptionPlans` p ON inv.`PlanId` = p.`PlanId`
-    ORDER BY inv.`InvoiceId` DESC;
-
-    -- Payments Ledger
     SELECT 
         pay.`PaymentId`,
         pay.`PaymentIdentifier`,
-        pay.`InvoiceId`,
+        inv.`InvoiceId`,
+        COALESCE(inv.`InvoiceNumber`, CONCAT('INV-', LPAD(pay.`PaymentId`, 5, '0'))) AS `InvoiceNumber`,
         pay.`CollegeId`,
         c.`CollegeName`,
         pay.`Amount`,
@@ -1438,6 +1422,7 @@ BEGIN
         pay.`TransactionReference`
     FROM `PlatformPayments` pay
     JOIN `Colleges` c ON pay.`CollegeId` = c.`CollegeId`
+    LEFT JOIN `PlatformInvoices` inv ON pay.`InvoiceId` = inv.`InvoiceId`
     ORDER BY pay.`PaymentId` DESC;
 END$$
 
