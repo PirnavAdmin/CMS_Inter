@@ -407,6 +407,9 @@ namespace CollegeManagement.API.Repositories.Implementations
             return new CampusDto
             {
                 CampusId = campusId,
+                CollegeId = dict.ContainsKey("CollegeId") && dict["CollegeId"] != null && dict["CollegeId"] != DBNull.Value
+                    ? Convert.ToInt32(dict["CollegeId"])
+                    : null,
                 CampusName = dict["CampusName"]?.ToString() ?? string.Empty,
                 CampusCode = dict["CampusCode"]?.ToString() ?? string.Empty,
                 Address = dict.ContainsKey("Address") ? dict["Address"]?.ToString() : null,
