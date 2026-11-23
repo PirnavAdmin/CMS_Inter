@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using CollegeManagement.API.DTOs.Result;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -34,6 +35,7 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IResultService _resultService;
         private readonly ILogger<ResultController> _logger;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ResultController"/> class.
@@ -44,11 +46,13 @@ namespace CollegeManagement.API.Controllers.V1
         public ResultController(
             IResultService resultService,
             ILogger<ResultController> logger,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _resultService = resultService;
             _logger = logger;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int ResolveCampusId(int? explicitlyProvided = null)
@@ -111,6 +115,16 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var summaries = await _resultService.GenerateResultsAsync(request);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Results",
+                        Action = "Generated",
+                        CampusId = request.CampusId,
+                        EntityId = request.ExamId > 0 ? request.ExamId.ToString() : request.ExaminationId.ToString()
+                    });
+                }
                 return Ok(summaries);
             }
             catch (ValidationException ex)
@@ -188,6 +202,17 @@ namespace CollegeManagement.API.Controllers.V1
             var published = await _resultService.PublishSectionResultsAsync(effectiveSectionId, effectiveExamId, request?.PublishDate);
             if (published)
             {
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Results",
+                        Action = "GroupPublished",
+                        CampusId = request?.CampusId,
+                        EntityId = effectiveExamId.ToString()
+                    });
+                }
+
                 if (_notificationService != null)
                 {
                     try
@@ -202,6 +227,16 @@ namespace CollegeManagement.API.Controllers.V1
                             "/student/results");
                     }
                     catch { }
+                }
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Results",
+                        Action = "SectionPublished",
+                        EntityId = effectiveExamId.ToString()
+                    });
                 }
 
                 return Ok(new { success = true, message = "Section results published successfully." });

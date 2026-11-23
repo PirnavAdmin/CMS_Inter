@@ -634,9 +634,9 @@ public class FeeRepository : IFeeRepository
         {
             try
             {
-                int? studentCampusId = await c.QueryFirstOrDefaultAsync<int?>("SELECT CampusId FROM Students WHERE StudentId = @StudentId LIMIT 1", new { StudentId = request.StudentId });
-                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto();
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentCampusId ?? 1);
+                var studentInfo = await c.QueryFirstOrDefaultAsync<(int? CampusId, string? CampusCode)>(@"SELECT s.CampusId, c.CampusCode FROM Students s LEFT JOIN Campuses c ON s.CampusId = c.CampusId WHERE s.StudentId = @StudentId LIMIT 1", new { StudentId = request.StudentId });
+                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto { CampusCode = studentInfo.CampusCode };
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentInfo.CampusId ?? 1);
                 if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
                 {
                     finalReceiptNo = generatedDto.GeneratedNumber;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Users,
@@ -190,6 +191,10 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
   useEffect(() => {
     fetchSeries();
   }, [fetchSeries]);
+
+  useLiveModuleSync("NumberSeries", () => {
+    fetchSeries();
+  });
 
   const activeSeries = useMemo(() => {
     if (!activeId) return null;
@@ -1169,11 +1174,24 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
   const { selectedCampusId, selectedCampus } = useCampusContext();
   const activeCampusId = propCampusId ?? selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id;
 
+  const getCleanFormat = (raw) => {
+    if (!raw) return "";
+    let s = String(raw)
+      .replace(/-ADM-/g, "-{PREFIX}-")
+      .replace(/-FEE-/g, "-{PREFIX}-")
+      .replace(/-OL\//g, "-{PREFIX}/")
+      .replace(/-TRF\//g, "-{PREFIX}/");
+    if (s.includes("TCH{SEQ}") && !s.includes("{PREFIX}")) s = "{PREFIX}{SEQ}";
+    if (s.includes("NT{SEQ}") && !s.includes("{PREFIX}")) s = "{PREFIX}{SEQ}";
+    return s;
+  };
+
   const [formState, setFormState] = useState({
     prefix: series.prefix || "",
-    format: series.format || series.formatPattern || "",
+    format: getCleanFormat(series.format || series.formatPattern || ""),
     numberLength: series.numberLength || 4,
     startNumber: series.startNumber || 1,
+    currentSequence: Number(series.currentSequence ?? series.currentNumber ?? 0),
     description: series.description || "",
     status: series.isActive ? "Active" : "Inactive",
   });
@@ -1193,13 +1211,15 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
 
   const localLivePreviewVal = useMemo(() => {
     if (!liveValidation.valid) return null;
-    const nextSeqNum = Number(series.currentSequence || series.currentNumber || 0) + 1;
+    const cur = Number(formState.currentSequence ?? series.currentSequence ?? series.currentNumber ?? 0);
+    const start = Number(formState.startNumber || 1);
+    const nextSeqNum = cur < start ? start : cur + 1;
     const isRollNo = series.id === "student-roll-no" || series.id === "ROLL_NO" || series.seriesCode === "ROLL_NO";
     const customPreviewTokens = isRollNo 
-      ? { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
-      : { CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
+      ? { PREFIX: formState.prefix || "", CAMPUS: selectedCampus?.campusCode || "MC", GROUP: "[GRP]", PROGRAM: "[PRG]", BOARD: "[BRD]" }
+      : { PREFIX: formState.prefix || "", CAMPUS: selectedCampus?.campusCode || "MC", GROUP: availableGroups.length > 0 ? (availableGroups[0].groupCode || availableGroups[0].name) : "GROUP" };
     return buildNumberFromFormat(formState.format, nextSeqNum, formState.numberLength, customPreviewTokens);
-  }, [formState.format, formState.numberLength, series.currentSequence, series.currentNumber, liveValidation, series.id, series.seriesCode, selectedCampus, availableGroups]);
+  }, [formState.format, formState.numberLength, formState.prefix, formState.currentSequence, formState.startNumber, series.currentSequence, series.currentNumber, liveValidation, series.id, series.seriesCode, selectedCampus, availableGroups]);
 
   // Dynamic on-the-fly preview calculation for UI typing via GET /api/v1/settings/number-series/{seriesCode}/preview
   useEffect(() => {
@@ -1275,6 +1295,8 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
       formatPattern: formState.format,
       numberLength: Number(formState.numberLength),
       startNumber: Number(formState.startNumber),
+      currentSequence: Number(formState.currentSequence),
+      currentNumber: Number(formState.currentSequence),
       description: formState.description,
       status: formState.status,
       isActive: formState.status === "Active",
@@ -1402,20 +1424,43 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                       type="number"
                       min={1}
                       value={formState.startNumber}
-                      onChange={(e) => setFormState({ ...formState, startNumber: Number(e.target.value) })}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        setFormState(prev => ({
+                          ...prev,
+                          startNumber: val,
+                          currentSequence: prev.currentSequence < val ? val - 1 : prev.currentSequence
+                        }));
+                      }}
                     />
                   </div>
                 </div>
 
-                {/* ROW 4: DESCRIPTION */}
-                <div className="ns-field">
-                  <label>Description</label>
-                  <input
-                    type="text"
-                    value={formState.description}
-                    onChange={(e) => setFormState({ ...formState, description: e.target.value })}
-                    placeholder="Enter series description..."
-                  />
+                {/* ROW 4: CURRENT COUNT / SEQUENCE & DESCRIPTION */}
+                <div className="ns-field-row-2">
+                  <div className="ns-field">
+                    <label>Current Count / Sequence</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formState.currentSequence}
+                      onChange={(e) => setFormState({ ...formState, currentSequence: Number(e.target.value) })}
+                      placeholder="0"
+                    />
+                    <small style={{ color: 'var(--cms-text-secondary)', fontSize: '11px', marginTop: '4px', display: 'block' }}>
+                      Next generated number will start from {Math.max(Number(formState.currentSequence || 0) + 1, Number(formState.startNumber || 1))}.
+                    </small>
+                  </div>
+
+                  <div className="ns-field">
+                    <label>Description</label>
+                    <input
+                      type="text"
+                      value={formState.description}
+                      onChange={(e) => setFormState({ ...formState, description: e.target.value })}
+                      placeholder="Enter series description..."
+                    />
+                  </div>
                 </div>
 
                 {/* LIVE FORMAT PREVIEW CARD */}

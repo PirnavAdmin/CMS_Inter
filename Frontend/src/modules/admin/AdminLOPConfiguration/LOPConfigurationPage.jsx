@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -423,6 +424,10 @@ export default function LOPConfigurationPage() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
+
+  useLiveModuleSync(["LopConfiguration", "Payroll", "Attendance"], () => {
+    setRevision((v) => v + 1);
+  });
 
   const campusParam = selectedCampusId ? Number(selectedCampusId) : undefined;
 

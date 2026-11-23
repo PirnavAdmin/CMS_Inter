@@ -7,6 +7,7 @@ using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.DTOs.StaffAttendance.Responses;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
@@ -28,16 +29,19 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
         private readonly ILogger<StaffAttendanceController> _logger;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public StaffAttendanceController(
             IStaffAttendanceService service,
             CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
             INotificationService? notificationService = null,
-            ILogger<StaffAttendanceController>? logger = null)
+            ILogger<StaffAttendanceController>? logger = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
             _logger = logger ?? NullLogger<StaffAttendanceController>.Instance;
         }
 
@@ -90,6 +94,16 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _service.UpdateStaffAttendanceAsync(request, userId);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Attendance",
+                        Action = "StaffAttendanceUpdated",
+                        CampusId = request.CampusId,
+                        EntityId = request.FacultyId.ToString()
+                    });
+                }
                 return Ok(new { Status = true, Message = "Staff attendance updated successfully.", Data = true });
             }
             catch (InvalidOperationException ex)
@@ -411,6 +425,16 @@ namespace CollegeManagement.API.Controllers.V1
                     }
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Attendance",
+                        Action = "StaffPunchIn",
+                        EntityId = staffId.ToString()
+                    });
+                }
+
                 return Ok(new { Status = true, Message = "Checked in successfully.", Data = result });
             }
             catch (InvalidOperationException ex)
@@ -436,6 +460,15 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _service.PunchOutAsync(staffId, request, clientIp, userId);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Attendance",
+                        Action = "StaffPunchOut",
+                        EntityId = staffId.ToString()
+                    });
+                }
                 return Ok(new { Status = true, Message = "Punched out successfully.", Data = result });
             }
             catch (InvalidOperationException ex)
@@ -506,6 +539,17 @@ namespace CollegeManagement.API.Controllers.V1
                     {
                         _logger.LogError(ex, "Failed to dispatch regularization submission notification for request {RegularizationId}", regResult.RegularizationId);
                     }
+                }
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Attendance",
+                        Action = "RegularizationSubmitted",
+                        CampusId = regResult.CampusId ?? GetCurrentCampusId(),
+                        EntityId = regResult.RegularizationId.ToString()
+                    });
                 }
 
                 return Ok(new
@@ -607,6 +651,16 @@ namespace CollegeManagement.API.Controllers.V1
                     {
                         _logger.LogError(ex, "Failed to dispatch regularization review notification for request {RegularizationId}", id);
                     }
+                }
+
+                if (success && _realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Attendance",
+                        Action = "Reviewed",
+                        EntityId = id.ToString()
+                    });
                 }
 
                 return Ok(new { Status = true, Message = $"Regularization {request.Status.ToLowerInvariant()} successfully.", Data = success });

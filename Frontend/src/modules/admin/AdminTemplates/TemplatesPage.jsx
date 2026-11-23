@@ -1,6 +1,7 @@
 import apiClient from "@/api/axios.js";
 import templateApi from "@/api/templateApi.js";
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   FileText,
@@ -790,6 +791,10 @@ export default function TemplatesPage() {
   useEffect(() => {
     loadTemplatesFromApi();
   }, [loadTemplatesFromApi]);
+
+  useLiveModuleSync("Templates", () => {
+    loadTemplatesFromApi();
+  });
 
   // Active Main Tab: "certificates" | "upload"
   const [activeTab, setActiveTab] = useState(() => {

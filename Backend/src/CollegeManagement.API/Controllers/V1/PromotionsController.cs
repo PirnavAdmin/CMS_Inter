@@ -7,6 +7,7 @@ using Asp.Versioning;
 using CollegeManagement.API.DTOs.Promotion;
 using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -25,15 +26,18 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IPromotionService _service;
         private readonly IFeeService _feeService;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public PromotionsController(
             IPromotionService service,
             IFeeService feeService,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _feeService = feeService;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         private string GetCurrentUserName()
@@ -104,6 +108,15 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Promotions",
+                    Action = "Promoted"
+                });
+            }
+
             return Ok(result);
         }
 
@@ -142,6 +155,16 @@ namespace CollegeManagement.API.Controllers.V1
                         "/parent/dashboard");
                 }
                 catch { }
+            }
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Promotions",
+                    Action = "RolledBack",
+                    EntityId = result?.StudentId.ToString()
+                });
             }
 
             return Ok(result);

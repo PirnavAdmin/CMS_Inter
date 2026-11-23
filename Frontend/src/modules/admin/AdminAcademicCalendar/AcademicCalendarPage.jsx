@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -496,6 +497,12 @@ export default function AcademicCalendarPage() {
   const masters = useMemo(() => ({ ...masterLists, boards, years: academicYears }), [masterLists, boards, academicYears]);
   const masterName = (key, id) => (Array.isArray(id) ? id : [id]).map((value) => masters[key].find((row) => String(row.id) === String(value))?.name).filter(Boolean).join(', ');
   const [reload, setReload] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Calendar",
+    campusId: selectedCampusId,
+    onRefresh: () => setReload((value) => value + 1),
+  });
   const [rangeEvents, setRangeEvents] = useState([]);
   const [sidebarEvents, setSidebarEvents] = useState([]);
   const [metrics, setMetrics] = useState(null);

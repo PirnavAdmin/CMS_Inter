@@ -2,6 +2,7 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Enquiry;
+using CollegeManagement.API.DTOs.Realtime;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -18,11 +19,13 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IEnquiryService _enquiryService;
         private readonly ILogger<EnquiryController> _logger;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public EnquiryController(IEnquiryService enquiryService, ILogger<EnquiryController> logger)
+        public EnquiryController(IEnquiryService enquiryService, ILogger<EnquiryController> logger, IRealtimeEventService? realtimeEventService = null)
         {
             _enquiryService = enquiryService;
             _logger = logger;
+            _realtimeEventService = realtimeEventService;
         }
 
         /// <summary>
@@ -40,6 +43,16 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var created = await _enquiryService.SubmitPublicEnquiryAsync(request);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Enquiries",
+                        Action = "Created",
+                        CampusId = created?.CampusId,
+                        EntityId = created?.Id.ToString()
+                    });
+                }
                 return StatusCode(201, new { success = true, message = "Your enquiry has been received. Our team will contact you shortly.", data = created });
             }
             catch (Exception ex)
@@ -192,6 +205,17 @@ namespace CollegeManagement.API.Controllers.V1
                     return BadRequest(new { success = false, message = result.Message });
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Enquiries",
+                        Action = "Updated",
+                        CampusId = result.Enquiry?.CampusId,
+                        EntityId = id.ToString()
+                    });
+                }
+
                 return Ok(new
                 {
                     success = true,
@@ -273,6 +297,16 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!updated) return NotFound(new { success = false, message = "Enquiry not found or could not be updated." });
 
                 var refreshed = await _enquiryService.GetEnquiryByIdAsync(id);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Enquiries",
+                        Action = "Updated",
+                        CampusId = refreshed?.CampusId,
+                        EntityId = id.ToString()
+                    });
+                }
                 return Ok(new { success = true, message = "Enquiry status updated successfully.", data = refreshed });
             }
             catch (UnauthorizedAccessException ex)

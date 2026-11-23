@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link } from "react-router-dom";
 import { Clock, Plus, Pencil, Trash2, ShieldAlert, ArrowLeft, CheckCircle2 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -95,6 +96,10 @@ export default function AttendanceTimingConfigPage() {
   useEffect(() => {
     fetchConfigs();
   }, []);
+
+  useLiveModuleSync(["AttendanceTiming", "Attendance"], () => {
+    fetchConfigs();
+  });
 
   const applyPreset = (type) => {
     if (type === "teaching") {

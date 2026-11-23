@@ -129,18 +129,18 @@ namespace CollegeManagement.API.Helpers
         {
             return seriesCode.ToUpperInvariant() switch
             {
-                "TEACHING_STAFF_ID" or "EMPLOYEE_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
-                "NON_TEACHING_STAFF_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
-                "ADMISSION_NO" => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}" },
+                "TEACHING_STAFF_ID" or "EMPLOYEE_ID" => new List<string> { "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
+                "NON_TEACHING_STAFF_ID" => new List<string> { "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}" },
+                "ADMISSION_NO" => new List<string> { "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}" },
                 "ROLL_NO" => new List<string> { "{SEQ}", "{GROUP}", "{GROUP:1}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{BOARD}", "{BOARD:1}", "{AY}", "{PROGRAM}", "{PROGRAM:1}", "{LEVEL}" },
-                "STUDENT_ID" => new List<string> { "{SEQ}", "{YYYY}", "{YY}" },
+                "STUDENT_ID" => new List<string> { "{PREFIX}", "{SEQ}", "{YYYY}", "{YY}" },
                 "SECTION_NAME" => new List<string> { "{GROUP}", "{SECTION}", "{LEVEL}", "{BOARD}" },
-                "EXAM_CODE" => new List<string> { "{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}" },
-                "CERTIFICATE_NO" => new List<string> { "{CERT}", "{TYPE}", "{YEAR}", "{SEQ}", "{RANDOM}" },
-                "RECEIPT_NO" => new List<string> { "{PREFIX}", "{YYYYMMDD}", "{YYYY}", "{MM}", "{DD}", "{SEQ}" },
-                "OFFER_LETTER_NO" => new List<string> { "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}", "{DEPT}" },
-                "TRANSFER_ORDER_NO" => new List<string> { "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}" },
-                _ => new List<string> { "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{RANDOM}" }
+                "EXAM_CODE" => new List<string> { "{PREFIX}", "{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}" },
+                "CERTIFICATE_NO" => new List<string> { "{PREFIX}", "{CERT}", "{TYPE}", "{YEAR}", "{SEQ}", "{RANDOM}" },
+                "RECEIPT_NO" => new List<string> { "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{YYYYMMDD}", "{YYYY}", "{MM}", "{DD}", "{SEQ}" },
+                "OFFER_LETTER_NO" => new List<string> { "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}", "{DEPT}" },
+                "TRANSFER_ORDER_NO" => new List<string> { "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}" },
+                _ => new List<string> { "{PREFIX}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{RANDOM}" }
             };
         }
 

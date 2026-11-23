@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.LopConfiguration;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.LopConfiguration;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -25,10 +26,13 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly ILopConfigurationService _service;
         private readonly ILogger<LopConfigurationController> _logger;
 
-        public LopConfigurationController(ILopConfigurationService service, ILogger<LopConfigurationController> logger)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public LopConfigurationController(ILopConfigurationService service, ILogger<LopConfigurationController> logger, IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _logger = logger;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? GetCurrentUserId()
@@ -108,6 +112,10 @@ namespace CollegeManagement.API.Controllers.V1
 
                 var userId = GetCurrentUserId();
                 var saved = await _service.SavePolicyAsync(request, userId, ct);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("LopConfiguration", "PolicySaved", request.CampusId);
+                }
 
                 return Ok(new
                 {
@@ -190,6 +198,10 @@ namespace CollegeManagement.API.Controllers.V1
                 }
                 var userId = GetCurrentUserId();
                 var result = await _service.SyncMonthlyRecordsAsync(request, userId, ct);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("LopConfiguration", "RecordsSynced", request.CampusId);
+                }
                 return Ok(new
                 {
                     success = true,

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { 
@@ -138,6 +139,11 @@ export default function CampusConfigurationPage() {
   useEffect(() => {
     loadStats();
   }, [loadStats]);
+
+  useLiveModuleSync("Campus", () => {
+    fetchCampuses();
+    loadStats();
+  });
 
   // Filtered Campuses
   const filteredCampuses = useMemo(() => {

@@ -144,10 +144,177 @@ namespace CollegeManagement.API.Repositories.Implementations
                     SELECT @CampusName, @CampusCode, @CollegeId, @Address, 1, 1, UTC_TIMESTAMP()
                     WHERE NOT EXISTS (SELECT 1 FROM Campuses WHERE CollegeId = @CollegeId);",
                     new { CampusName = campusName, CampusCode = campusCode, CollegeId = newCollegeId, Address = campusAddress });
+
+                var campusId = await Connection.QueryFirstOrDefaultAsync<int?>(
+                    "SELECT CampusId FROM Campuses WHERE CollegeId = @CollegeId LIMIT 1;",
+                    new { CollegeId = newCollegeId });
+
+                var acronym = DeriveCollegeAcronym(request.Name, request.Code);
+                await SeedCollegeNumberSeriesAsync(newCollegeId, acronym, campusId);
             }
 
             return newCollegeId;
         }
+
+        public static string DeriveCollegeAcronym(string? collegeName, string? collegeCode)
+        {
+            if (!string.IsNullOrWhiteSpace(collegeCode))
+            {
+                var codePart = collegeCode.Trim().Split('-')[0].Trim().ToUpperInvariant();
+                if (codePart != "COL" && codePart.Length >= 2 && codePart.Length <= 8)
+                {
+                    return codePart;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(collegeName))
+            {
+                var words = collegeName.Trim()
+                    .Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(w => !string.Equals(w, "and", StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(w, "of", StringComparison.OrdinalIgnoreCase) &&
+                                !string.Equals(w, "the", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (words.Count >= 2)
+                {
+                    var acr = string.Concat(words.Select(w => char.ToUpperInvariant(w[0])));
+                    if (acr.Length >= 2) return acr.Substring(0, Math.Min(5, acr.Length));
+                }
+
+                var clean = new string(collegeName.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+                if (clean.Length >= 3) return clean.Substring(0, Math.Min(4, clean.Length));
+            }
+
+            return "COL";
+        }
+
+        public async Task SeedCollegeNumberSeriesAsync(int collegeId, string collegeAcronym, int? campusId = null)
+        {
+            var seriesList = new[]
+            {
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "TEACHING_STAFF_ID",
+                    SeriesName = "Teaching Staff ID",
+                    Prefix = $"{collegeAcronym}TCH",
+                    FormatPattern = "{PREFIX}{SEQ}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Configure ID series for Professors, Lecturers and Teaching staff.",
+                    CampusId = (int?)null,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "NON_TEACHING_STAFF_ID",
+                    SeriesName = "Non-Teaching Staff ID",
+                    Prefix = $"{collegeAcronym}NT",
+                    FormatPattern = "{PREFIX}{SEQ}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Configure ID series for Administrative, Technical and Support staff.",
+                    CampusId = (int?)null,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "ROLL_NO",
+                    SeriesName = "Roll Number",
+                    Prefix = "",
+                    FormatPattern = "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Sequence resets uniquely per Campus + Board + Academic Year + Group + Program.",
+                    CampusId = campusId,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "ADMISSION_NO",
+                    SeriesName = "Admission No.",
+                    Prefix = "ADM",
+                    FormatPattern = "{CAMPUS}-ADM-{YY}-{SEQ}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Configure admission number format for students.",
+                    CampusId = campusId,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "RECEIPT_NO",
+                    SeriesName = "Receipt No.",
+                    Prefix = "FEE",
+                    FormatPattern = "{CAMPUS}-FEE-{YYYYMMDD}-{SEQ}",
+                    NumberLength = 6,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Configure receipt number format for fee collections.",
+                    CampusId = campusId,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "OFFER_LETTER_NO",
+                    SeriesName = "Staff Offer Letter Number",
+                    Prefix = $"{collegeAcronym}-OL",
+                    FormatPattern = "{CAMPUS}-OL/{YEAR}/{SEQ}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Official serial numbering sequence for institutional faculty & staff offer letters.",
+                    CampusId = campusId,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "TRANSFER_ORDER_NO",
+                    SeriesName = "Staff Transfer Order Number",
+                    Prefix = "TRF",
+                    FormatPattern = "{CAMPUS}-TRF/{YEAR}/{SEQ}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Official serial numbering sequence for inter-campus faculty and staff transfer orders.",
+                    CampusId = campusId,
+                    IsActive = 1
+                },
+                new {
+                    CollegeId = collegeId,
+                    SeriesCode = "EXAM_CODE",
+                    SeriesName = "Exam Code",
+                    Prefix = "EXAM",
+                    FormatPattern = "{GROUP}-{TYPE}-{YEAR}",
+                    NumberLength = 4,
+                    StartNumber = 1,
+                    CurrentSequence = 0,
+                    Description = "Configure code format for examination schedules and assessments.",
+                    CampusId = campusId,
+                    IsActive = 1
+                }
+            };
+
+            foreach (var s in seriesList)
+            {
+                await Connection.ExecuteAsync(@"
+                    INSERT INTO `NumberSeriesConfigurations` 
+                    (`CollegeId`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, `CampusId`, `IsActive`, `CreatedAt`, `UpdatedAt`)
+                    SELECT @CollegeId, @SeriesCode, @SeriesName, @Prefix, @FormatPattern, @NumberLength, @StartNumber, @CurrentSequence, @Description, @CampusId, @IsActive, UTC_TIMESTAMP(), UTC_TIMESTAMP()
+                    FROM DUAL
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM `NumberSeriesConfigurations` 
+                        WHERE `CollegeId` = @CollegeId AND `SeriesCode` = @SeriesCode
+                    );", s);
+            }
+        }
+
+
+
 
         public async Task<bool> UpdateCollegeAsync(int collegeId, UpdateCollegeRequest request)
         {

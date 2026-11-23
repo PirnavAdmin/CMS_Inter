@@ -32,16 +32,20 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly AppDbContext _db;
         private readonly ILogger<CampusController> _logger;
 
+        private readonly IRealtimeEventService? _realtimeEventService;
+
         public CampusController(
             ICampusService campusService,
             IJwtTokenHelper jwtTokenHelper,
             AppDbContext db,
-            ILogger<CampusController> logger)
+            ILogger<CampusController> logger,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _campusService = campusService;
             _jwtTokenHelper = jwtTokenHelper;
             _db = db;
             _logger = logger;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? GetScopedCollegeId()
@@ -196,6 +200,10 @@ namespace CollegeManagement.API.Controllers.V1
                     "UPDATE Campuses SET CollegeId = @CollegeId WHERE CampusId = @CampusId;",
                     new { CollegeId = scopedCollegeId.Value, CampusId = created.CampusId });
             }
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Campus", "Created", created.CampusId);
+            }
             return CreatedAtAction(nameof(GetCampusById), new { id = created.CampusId }, created);
         }
 
@@ -219,6 +227,10 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(ModelState);
 
             var updated = await _campusService.UpdateCampusAsync(dto, cancellationToken);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Campus", "Updated", id);
+            }
             return Ok(updated);
         }
 
@@ -235,6 +247,10 @@ namespace CollegeManagement.API.Controllers.V1
             var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
             if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
             var success = await _campusService.DeleteCampusAsync(id, cancellationToken);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Campus", "Deleted", id);
+            }
             return Ok(new { success, message = "Campus branch deleted successfully." });
         }
 
@@ -250,6 +266,10 @@ namespace CollegeManagement.API.Controllers.V1
             var ownedIds = await GetOwnedCampusIdsAsync(GetScopedCollegeId(), cancellationToken);
             if (ownedIds != null && !ownedIds.Contains(id)) return Forbid();
             var success = await _campusService.ToggleCampusStatusAsync(id, cancellationToken);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Campus", "StatusToggled", id);
+            }
             return Ok(new { success, message = "Campus status toggled successfully." });
         }
     }

@@ -11,6 +11,7 @@ using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -34,19 +35,22 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IBoardRepository _boardRepository;
         private readonly IDepartmentRepository _departmentRepository;
         private readonly IDesignationRepository _designationRepository;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public StaffController(
             IStaffService staffService,
             IStaffRepository staffRepository,
             IBoardRepository boardRepository,
             IDepartmentRepository departmentRepository,
-            IDesignationRepository designationRepository)
+            IDesignationRepository designationRepository,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _staffService = staffService;
             _staffRepository = staffRepository;
             _boardRepository = boardRepository;
             _departmentRepository = departmentRepository;
             _designationRepository = designationRepository;
+            _realtimeEventService = realtimeEventService;
         }
 
         private bool IsAdminOrPrincipal()
@@ -452,6 +456,16 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _staffService.CreateStaffAsync(dto);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Staff",
+                    Action = "Created",
+                    CampusId = result?.CampusId ?? dto.CampusId,
+                    EntityId = result?.StaffId.ToString()
+                });
+            }
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
@@ -489,6 +503,16 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _staffService.UpdateStaffAsync(id, dto);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Staff",
+                    Action = "Updated",
+                    CampusId = result?.CampusId,
+                    EntityId = id.ToString()
+                });
+            }
             return Ok(result);
         }
 
@@ -503,6 +527,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (!IsAdminOrPrincipal()) return Forbid();
             await _staffService.DeleteStaffAsync(id);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Staff",
+                    Action = "Deleted",
+                    EntityId = id.ToString()
+                });
+            }
             return NoContent();
         }
 

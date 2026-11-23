@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -25,15 +26,32 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IAcademicCalendarService _calendarService;
         private readonly ILogger<AcademicCalendarController> _logger;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public AcademicCalendarController(
             IAcademicCalendarService calendarService,
             ILogger<AcademicCalendarController> logger,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _calendarService = calendarService;
             _logger = logger;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishCalendarChange(string action, int? campusId = null, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Calendar",
+                    Action = action,
+                    CampusId = campusId,
+                    EntityId = entityId
+                });
+            }
         }
 
         private bool IsTenantCollege()
@@ -305,6 +323,7 @@ namespace CollegeManagement.API.Controllers.V1
                 int? userId = GetCurrentUserId();
                 var result = await _calendarService.CreateEventAsync(dto, userId);
 
+                PublishCalendarChange("Created", dto.CampusId, result?.EventId.ToString());
                 return CreatedAtAction(nameof(GetEventById), new { id = result.EventId }, new
                 {
                     success = true,
@@ -355,6 +374,7 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                PublishCalendarChange("Updated", dto.CampusId, id.ToString());
                 return Ok(new
                 {
                     success = true,
@@ -393,6 +413,7 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                PublishCalendarChange("Published", entityId: id.ToString());
                 return Ok(new
                 {
                     success = true,
@@ -431,6 +452,7 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                PublishCalendarChange("Deleted", entityId: id.ToString());
                 return Ok(new
                 {
                     success = true,

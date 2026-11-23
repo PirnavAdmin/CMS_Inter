@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -444,6 +445,18 @@ function AcademicYearWorkspace() {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 400);
     return () => window.clearTimeout(timer);
   }, [query]);
+
+  useLiveModuleSync("AcademicYears", () => {
+    if (activeTab === "years" && !formOpen) {
+      fetchAcademicYears();
+    }
+  });
+
+  useLiveModuleSync("Boards", () => {
+    if (activeTab === "boards" && !formOpen && !detailsOpen) {
+      fetchBoards();
+    }
+  });
 
   const fetchAcademicYears = useCallback(async (pageOverride = page) => {
     const sequence = ++requestSequence.current;

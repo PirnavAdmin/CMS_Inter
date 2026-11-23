@@ -53,6 +53,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { isWardenRole } from "@/routes/ProtectedRoute.jsx";
 import * as hostelApi from "@/api/hostelApi.js";
 import "./HostelPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 // ── Tab Configurations (4 Major Tabs with Subtabs matching Transport Reference) ──
 const majorTabs = [
@@ -1172,6 +1173,14 @@ export default function HostelPage() {
   useEffect(() => {
     fetchHostelData();
   }, [fetchHostelData]);
+
+  useLiveModuleSync({
+    moduleName: "Hostel",
+    campusId: curCampusId,
+    onRefresh: () => {
+      fetchHostelData();
+    }
+  });
 
   // Helper to refresh a specific entity list after mutation
   const refreshBlocks = useCallback(async () => {

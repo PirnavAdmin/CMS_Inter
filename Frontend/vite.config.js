@@ -1015,7 +1015,7 @@ function examCellShieldPlugin(apiBaseUrl) {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = (env.VITE_API_BASE_URL || "https://sterile-retorted-tightness.ngrok-free.dev").trim().replace(/\/+$/, "");
+  const apiBaseUrl = (env.VITE_API_BASE_URL || " https://armoire-vastly-sworn.ngrok-free.dev").trim().replace(/\/+$/, "");
   const isHttpsApi = apiBaseUrl.startsWith("https://");
 
   return {

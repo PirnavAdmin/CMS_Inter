@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useSearchParams } from "react-router-dom";
 import { ArrowLeft, BookOpen, ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -360,6 +361,10 @@ function SubjectManagementContent({ storageKey, navbarBoardId, navbarAcademicYea
     loadContextSubjects();
     return () => { contextRequestSequence.current += 1; };
   }, [loadContextSubjects]);
+
+  useLiveModuleSync("Subjects", () => {
+    loadContextSubjects();
+  });
   useEffect(() => {
     if (!addOpen || !navbarBoardId) return undefined;
     const timer = window.setTimeout(async () => {

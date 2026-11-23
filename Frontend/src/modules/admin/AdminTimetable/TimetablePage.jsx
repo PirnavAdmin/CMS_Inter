@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -3171,12 +3172,20 @@ export default function TimetablePage({ screen = "latest" }) {
     return context;
   }, [location.state, searchParams]);
   const { selectedCampusId } = useCampusContext();
+  const [syncKey, setSyncKey] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Timetable",
+    campusId: selectedCampusId,
+    onRefresh: () => setSyncKey((k) => k + 1),
+  });
+
   const [toast, setToast] = useState({ message: "", type: "success" });
   const notify = useCallback((message, type = "success") => setToast({ message, type }), []);
   // A timetable view keeps several dependent lookups (rooms, periods,
   // sections and subjects). Remount it when the global campus changes so no
   // lookup or generated timetable state is retained from the previous campus.
-  const campusViewKey = `campus-${selectedCampusId || "none"}`;
+  const campusViewKey = `campus-${selectedCampusId || "none"}-sync-${syncKey}`;
   const view =
     screen === "latest" ? (
       <MainTimetable key={campusViewKey} notify={notify} />

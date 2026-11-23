@@ -26,9 +26,12 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ITemplateService _templateService;
 
-        public SettingsTemplatesController(ITemplateService templateService)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public SettingsTemplatesController(ITemplateService templateService, IRealtimeEventService? realtimeEventService = null)
         {
             _templateService = templateService;
+            _realtimeEventService = realtimeEventService;
         }
 
         /// <summary>
@@ -116,6 +119,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _templateService.CreateTemplateAsync(dto, campusId, ct);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Templates", "Created", campusId, result.Id.ToString());
+                }
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
             }
             catch (ValidationException ex)
@@ -147,6 +154,11 @@ namespace CollegeManagement.API.Controllers.V1
                 var result = await _templateService.UpdateTemplateAsync(id, dto, campusId, ct);
                 if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Templates", "Updated", campusId, id.ToString());
+                }
+
                 return Ok(result);
             }
             catch (ValidationException ex)
@@ -174,6 +186,11 @@ namespace CollegeManagement.API.Controllers.V1
             var success = await _templateService.DeleteTemplateAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Templates", "Deleted", campusId, id.ToString());
+            }
+
             return NoContent();
         }
 
@@ -191,6 +208,11 @@ namespace CollegeManagement.API.Controllers.V1
 
             var success = await _templateService.ToggleTemplateActiveAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Templates", "StatusToggled", campusId, id.ToString());
+            }
 
             return Ok(new { success = true, message = "Template active status toggled successfully." });
         }
@@ -210,6 +232,11 @@ namespace CollegeManagement.API.Controllers.V1
             var result = await _templateService.DuplicateTemplateAsync(id, campusId, ct);
             if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Templates", "Duplicated", campusId, result.Id.ToString());
+            }
+
             return Ok(result);
         }
 
@@ -228,6 +255,11 @@ namespace CollegeManagement.API.Controllers.V1
 
             var success = await _templateService.SetDefaultTemplateAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Templates", "DefaultSet", campusId, id.ToString());
+            }
 
             return Ok(new { success = true, message = "Template set as default successfully." });
         }

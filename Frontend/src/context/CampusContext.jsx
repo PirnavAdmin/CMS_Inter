@@ -3,6 +3,7 @@ import * as campusApi from "../api/campusApi.js";
 import { getAuthToken, getAuthUser, saveAuthSession } from "../modules/auth/authStorage.js";
 import apiClient from "../api/axios.js";
 import { apiEndpoints } from "../api/apiEndpoints.js";
+import notificationHubService from "../services/notificationHubService.js";
 
 const CampusContext = createContext(null);
 
@@ -176,6 +177,13 @@ export function CampusProvider({ children }) {
       }
     } catch (e) {
       console.warn("Failed to persist selected campus id", e);
+    }
+  }, [selectedCampusId]);
+
+  // Keep Notification Hub synchronized with active campus selection
+  useEffect(() => {
+    if (selectedCampusId) {
+      notificationHubService.joinCampus(Number(selectedCampusId));
     }
   }, [selectedCampusId]);
 

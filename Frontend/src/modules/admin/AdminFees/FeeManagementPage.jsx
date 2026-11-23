@@ -58,6 +58,7 @@ import {
 } from "@/data/feeManagementData.js";
 import "./FeeManagementPage.css";
 import { PaymentSettingsLink } from "../AdminSettings/PaymentGatewayConfigPage.jsx";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
 const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport Fees", "Scholarships", "Fine"];
@@ -5171,6 +5172,21 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       window.removeEventListener("focus", refreshOnFocus);
     };
   }, [collecting, ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
+
+  useLiveModuleSync({
+    moduleName: "Fees",
+    campusId: selectedCampusValue,
+    onRefresh: () => {
+      feeDetailCacheRef.current.clear();
+      setSelectedDetail(null);
+      setSelectedDetailVersion((current) => current + 1);
+      if (tab === "Overview") loadOverviewData();
+      else if (tab === "Fee Setup") loadFeeApiData();
+      else if (tab === "Student Fee Ledger") {
+        loadFeeAccounts(ledgerTab === "Fee Collection" ? "collection" : "ledger");
+      }
+    }
+  });
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;

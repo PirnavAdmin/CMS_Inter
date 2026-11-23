@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -1009,6 +1010,10 @@ export default function DepartmentManagementPage() {
       }
     }
   }, [selectedCampus?.id, selectedCampus?.campusId, selectedBoard?.id, selectedBoard?.boardId]);
+
+  useLiveModuleSync(["Departments", "Designations"], () => {
+    fetchMasterData(false);
+  });
 
   // Fetch initial data on mount or when navbar campus/board selection changes
   useEffect(() => {

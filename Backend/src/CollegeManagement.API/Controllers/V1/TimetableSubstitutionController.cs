@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Threading.Tasks;
 using Asp.Versioning;
@@ -21,13 +22,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ITimetableSubstitutionService _substitutionService;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public TimetableSubstitutionController(
             ITimetableSubstitutionService substitutionService,
-            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper)
+            CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _substitutionService = substitutionService;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int GetCurrentUserId()
@@ -55,6 +59,17 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var userId = GetCurrentUserId();
             var result = await _substitutionService.CancelSubstitutionAsync(id, request ?? new CancelSubstitutionRequestDto(), userId);
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Timetable",
+                    Action = "SubstitutionCancelled",
+                    EntityId = id.ToString()
+                });
+            }
+
             return Ok(new { Status = true, Message = "Timetable substitution cancelled successfully.", Data = result });
         }
 

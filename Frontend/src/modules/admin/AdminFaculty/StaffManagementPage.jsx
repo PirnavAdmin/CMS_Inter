@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams, Navigate } from "react-router-dom";
 import { generateNextNumber, incrementSeriesSequence } from "@/data/numberSeriesData.js";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 import {
   ArrowLeft,
   ArrowRightLeft,
@@ -3904,6 +3905,12 @@ function StaffList({ records = [], setRecords, forced }) {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(5);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Staff",
+    campusId: selectedCampus?.campusId ?? selectedCampus?.id,
+    onRefresh: () => setRefreshKey((k) => k + 1)
+  });
   const [toast, setToast] = useState(null);
   const [remove, setRemove] = useState(null);
   const [listTransferTarget, setListTransferTarget] = useState(null);

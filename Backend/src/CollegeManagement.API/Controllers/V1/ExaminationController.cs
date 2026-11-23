@@ -4,6 +4,7 @@ using CollegeManagement.API.DTOs.Examination.Requests;
 using CollegeManagement.API.DTOs.Examination.Responses;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -32,17 +33,20 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IExaminationExportService _exportService;
         private readonly ILogger<ExaminationController> _logger;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public ExaminationController(
             IExaminationService examinationService,
             IExaminationExportService exportService,
             ILogger<ExaminationController> logger,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _examinationService = examinationService;
             _exportService = exportService;
             _logger = logger;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int ResolveCampusId(int? explicitlyProvided = null)
@@ -150,6 +154,17 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            if (_realtimeEventService != null && result != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "ExaminationCreated",
+                    CampusId = result.CampusId,
+                    EntityId = result.ExaminationId.ToString()
+                });
+            }
+
             return CreatedAtAction(
                 nameof(GetExaminationById),
                 new
@@ -240,6 +255,15 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Finalizing schedule for examination ID: {Id}", examinationId);
             var result = await _examinationService.FinalizeScheduleAsync(examinationId, request);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "ScheduleFinalized",
+                    EntityId = examinationId.ToString()
+                });
+            }
             return Ok(result);
         }
 
@@ -257,6 +281,16 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Updating examination ID: {Id}", examinationId);
             var result = await _examinationService.UpdateExaminationAsync(examinationId, request);
             if (result == null) return NotFound(new { message = "Examination not found." });
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "ExaminationUpdated",
+                    CampusId = result.CampusId,
+                    EntityId = examinationId.ToString()
+                });
+            }
             return Ok(result);
         }
 

@@ -29,6 +29,7 @@ import { getApiErrorMessage } from "@/api/apiClient.js";
 import { getAuthUser, getAuthItem } from "@/modules/auth/authStorage.js";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import notificationHubService from "@/services/notificationHubService.js";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 import "./EnquiriesListView.css";
 
 const STATUS_OPTIONS = ["All", "New", "In Progress", "Contacted", "Resolved"];
@@ -202,7 +203,13 @@ export default function EnquiriesListView({ portalType = "admin" }) {
     }
   }, [urlEnquiryId, items]);
 
-  // Real-time synchronization via SignalR, BroadcastChannel, CustomEvents, and periodic polling
+  // Live automatic event-driven synchronization with zero periodic polling
+  useLiveModuleSync({
+    moduleName: "Enquiries",
+    onRefresh: () => loadData(),
+  });
+
+  // Local tab and navigation event handlers
   useEffect(() => {
     let channel;
     try {
@@ -226,7 +233,7 @@ export default function EnquiriesListView({ portalType = "admin" }) {
     };
     window.addEventListener("cms-notification-navigate", handleNotificationNavigate);
 
-    // Live SignalR alert subscription: automatically load newest enquiry when broadcast arrives
+    // Live SignalR alert subscription for notification bell arrivals
     const unsubHub = notificationHubService.subscribe((payload) => {
       const typeLower = String(payload?.type || "").toLowerCase();
       const titleLower = String(payload?.title || "").toLowerCase();
@@ -235,19 +242,11 @@ export default function EnquiriesListView({ portalType = "admin" }) {
       }
     });
 
-    // Auto-refresh every 15 seconds when active
-    const pollTimer = setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        loadData();
-      }
-    }, 15000);
-
     return () => {
       if (channel) channel.close();
       window.removeEventListener("cms-enquiry-updated", handleCustomUpdate);
       window.removeEventListener("cms-notification-navigate", handleNotificationNavigate);
       unsubHub?.();
-      clearInterval(pollTimer);
     };
   }, [loadData]);
 

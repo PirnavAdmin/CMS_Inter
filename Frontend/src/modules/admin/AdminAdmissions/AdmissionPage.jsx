@@ -32,6 +32,7 @@ import { appendReferralFields, mapAdmissionReferral } from "./admissionReferral.
 import { Field, Modal, Skeleton, SkeletonButton, SkeletonInput, SkeletonRow, SkeletonTable, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 import {
   DEFAULT_INSTALLMENT_COUNT,
   INSTALLMENT_COUNTS,
@@ -3847,6 +3848,14 @@ export default function AdmissionPage() {
     setPage(1);
     refreshAdmissions();
   }, [refreshAdmissions, selectedContextBoardValue, selectedContextYearValue]);
+
+  // Live automatic event-driven synchronization with zero periodic polling
+  useLiveModuleSync({
+    moduleName: "Admissions",
+    onRefresh: () => {
+      refreshAdmissions({ reportError: false });
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;

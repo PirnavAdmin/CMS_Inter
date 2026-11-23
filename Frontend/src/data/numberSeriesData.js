@@ -1,29 +1,63 @@
-const NUMBER_SERIES_STORAGE_KEY = "pirnav_number_series_settings_v4";
+import { getAuthUser } from "../modules/auth/authStorage.js";
 
-export const FIXED_NUMBER_SERIES = [
-  {
-    id: "teaching-staff-id",
-    key: "teaching-staff-id",
-    name: "Teaching Staff ID",
-    category: "Staff Management",
-    prefix: "PCTCH",
-    format: "PCTCH{SEQ}",
-    numberLength: 4,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "PCTCH0001",
-    description: "Configure ID series for Professors, Lecturers and Teaching staff.",
-    status: "Active",
-    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
-    sampleFormats: [
-      { format: "PCTCH{SEQ}", example: "PCTCH0001" },
-      { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
-      { format: "FAC-{DEPT}-{SEQ}", example: "FAC-MATH-0001" },
-    ],
-  },
-  {
-    id: "roll-no",
+export function getCollegeAcronym() {
+  try {
+    const u = getAuthUser();
+    if (u?.collegeCode) {
+      const codePart = String(u.collegeCode).split("-")[0].toUpperCase().trim();
+      if (codePart && codePart !== "COL") return codePart;
+    }
+    if (u?.collegeName) {
+      const words = String(u.collegeName).trim().split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        return words.map(w => w[0]).join("").toUpperCase().slice(0, 5);
+      }
+      return String(u.collegeName).replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase();
+    }
+    if (u?.collegeId && Number(u.collegeId) > 1) {
+      return `COL${u.collegeId}`;
+    }
+  } catch {}
+  return "PC";
+}
+
+export function getNumberSeriesStorageKey() {
+  try {
+    const u = getAuthUser();
+    const cid = u?.collegeId ? `_c${u.collegeId}` : "";
+    const cpid = u?.campusId ? `_cp${u.campusId}` : "";
+    return `cms_number_series_settings_v5${cid}${cpid}`;
+  } catch {
+    return "cms_number_series_settings_v5";
+  }
+}
+
+export function getFixedNumberSeries() {
+  const acr = getCollegeAcronym();
+  return [
+    {
+      id: "teaching-staff-id",
+      key: "teaching-staff-id",
+      name: "Teaching Staff ID",
+      category: "Staff Management",
+      prefix: `${acr}TCH`,
+      format: "{PREFIX}{SEQ}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: `${acr}TCH0001`,
+      description: "Configure ID series for Professors, Lecturers and Teaching staff.",
+      status: "Active",
+      allowedTokens: ["{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
+      sampleFormats: [
+        { format: `${acr}TCH{SEQ}`, example: `${acr}TCH0001` },
+        { format: "TCH-{YYYY}-{SEQ}", example: "TCH-2026-0001" },
+        { format: "FAC-{DEPT}-{SEQ}", example: "FAC-MATH-0001" },
+      ],
+    },
+    {
+      id: "roll-no",
       key: "roll-no",
       seriesCode: "ROLL_NO",
       name: "Roll Number",
@@ -37,145 +71,157 @@ export const FIXED_NUMBER_SERIES = [
       currentSequence: 0,
       isActive: true,
       allowedTokens: ["{SEQ}", "{GROUP}", "{GROUP:1}", "{SECTION}", "{YYYY}", "{YY}", "{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{BOARD}", "{BOARD:1}", "{PROGRAM}", "{PROGRAM:1}", "{AY}", "{LEVEL}"],
-    sampleFormats: [
-      { format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}", example: "26MUB1M0001" },
-      { format: "ROLL-{AY}-{GROUP}-{SEQ}", example: "ROLL-2026-MPC-0001" },
-      { format: "{CAMPUS}-{GROUP}-{SEQ}", example: "MC-MPC-0001" },
-    ],
-  },
-  {
-    id: "non-teaching-staff-id",
-    key: "non-teaching-staff-id",
-    name: "Non-Teaching Staff ID",
-    category: "Staff Management",
-    prefix: "PCNT",
-    format: "PCNT{SEQ}",
-    numberLength: 4,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "PCNT0001",
-    description: "Configure ID series for Administrative, Technical and Support staff.",
-    status: "Active",
-    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
-    sampleFormats: [
-      { format: "PCNT{SEQ}", example: "PCNT0001" },
-      { format: "NT-{YYYY}-{SEQ}", example: "NT-2026-0001" },
-      { format: "ADM-{DEPT}-{SEQ}", example: "ADM-OFFICE-0001" },
-    ],
-  },
-  {
-    id: "admission-no",
-    key: "admission-no",
-    name: "Admission No.",
-    category: "Student Admissions",
-    prefix: "ADM",
-    format: "ADM-{SEQ}",
-    numberLength: 2,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "ADM-01",
-    description: "Configure admission number format for students.",
-    status: "Active",
-    allowedTokens: ["{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}"],
-    sampleFormats: [
-      { format: "ADM-{SEQ}", example: "ADM-01" },
-      { format: "ADM-{AY}-{SEQ}", example: "ADM-2026-0001" },
-      { format: "ADM-{BOARD}-{SEQ}", example: "ADM-BIEAP-0001" },
-    ],
-  },
-  {
-    id: "exam-code",
-    key: "exam-code",
-    name: "Exam Code",
-    category: "Examinations",
-    prefix: "EXAM",
-    format: "{GROUP}-{TYPE}-{YEAR}",
-    numberLength: 4,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "MPC-FINAL-2025",
-    description: "Configure code format for examination schedules and assessments.",
-    status: "Active",
-    allowedTokens: ["{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}"],
-    sampleFormats: [
-      { format: "{GROUP}-{TYPE}-{YEAR}", example: "MPC-FINAL-2025" },
-      { format: "EXAM-{YEAR}-{SEQ}", example: "EXAM-2026-0001" },
-    ],
-  },
-  {
-    id: "offer-letter-no",
-    key: "offer-letter-no",
-    seriesCode: "OFFER_LETTER_NO",
-    name: "Staff Offer Letter Number",
-    category: "Staff Management",
-    prefix: "PC-OL",
-    format: "{CAMPUS}-OL/{YEAR}/{SEQ}",
-    numberLength: 4,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "PC-OL/2026/0001",
-    description: "Official serial numbering sequence for institutional faculty & staff offer letters.",
-    status: "Active",
-    allowedTokens: ["{CAMPUS}", "{YEAR}", "{YYYY}", "{SEQ}", "{DEPT}"],
-    sampleFormats: [
-      { format: "{CAMPUS}-OL/{YEAR}/{SEQ}", example: "PC-OL/2026/0001" },
-      { format: "OL-{CAMPUS}-{YEAR}-{SEQ}", example: "OL-PC-2026-0001" },
-    ],
-  },
-  {
-    id: "staff-transfer-no",
-    key: "staff-transfer-no",
-    seriesCode: "TRANSFER_ORDER_NO",
-    name: "Staff Transfer Order Number",
-    category: "Staff Management",
-    prefix: "TRF",
-    format: "{CAMPUS}-TRF/{YEAR}/{SEQ}",
-    numberLength: 4,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "PC-TRF/2026/0001",
-    description: "Official serial numbering sequence for inter-campus faculty and staff transfer orders.",
-    status: "Active",
-    allowedTokens: ["{CAMPUS}", "{YEAR}", "{YYYY}", "{SEQ}"],
-    sampleFormats: [
-      { format: "{CAMPUS}-TRF/{YEAR}/{SEQ}", example: "PC-TRF/2026/0001" },
-      { format: "TRF-{CAMPUS}-{YEAR}-{SEQ}", example: "TRF-PC-2026-0001" },
-    ],
-  },
+      sampleFormats: [
+        { format: "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}", example: "26MUB1M0001" },
+        { format: "ROLL-{AY}-{GROUP}-{SEQ}", example: "ROLL-2026-MPC-0001" },
+        { format: "{CAMPUS}-{GROUP}-{SEQ}", example: "MC-MPC-0001" },
+      ],
+    },
+    {
+      id: "non-teaching-staff-id",
+      key: "non-teaching-staff-id",
+      name: "Non-Teaching Staff ID",
+      category: "Staff Management",
+      prefix: `${acr}NT`,
+      format: "{PREFIX}{SEQ}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: `${acr}NT0001`,
+      description: "Configure ID series for Administrative, Technical and Support staff.",
+      status: "Active",
+      allowedTokens: ["{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{DEPT}", "{DESIG}", "{STAFF}"],
+      sampleFormats: [
+        { format: `${acr}NT{SEQ}`, example: `${acr}NT0001` },
+        { format: "NT-{YYYY}-{SEQ}", example: "NT-2026-0001" },
+        { format: "ADM-{DEPT}-{SEQ}", example: "ADM-OFFICE-0001" },
+      ],
+    },
+    {
+      id: "admission-no",
+      key: "admission-no",
+      name: "Admission No.",
+      category: "Student Admissions",
+      prefix: "ADM",
+      format: "{CAMPUS}-{PREFIX}-{YY}-{SEQ}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: "MAIN-ADM-26-0001",
+      description: "Configure admission number format for students.",
+      status: "Active",
+      allowedTokens: ["{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{SEQ}", "{YYYY}", "{YY}", "{MM}", "{DD}", "{AY}", "{BOARD}"],
+      sampleFormats: [
+        { format: "{CAMPUS}-ADM-{YY}-{SEQ}", example: "MAIN-ADM-26-0001" },
+        { format: "ADM-{SEQ}", example: "ADM-0001" },
+        { format: "ADM-{AY}-{SEQ}", example: "ADM-2026-0001" },
+      ],
+    },
+    {
+      id: "exam-code",
+      key: "exam-code",
+      name: "Exam Code",
+      category: "Examinations",
+      prefix: "EXAM",
+      format: "{GROUP}-{TYPE}-{YEAR}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: "MPC-FINAL-2025",
+      description: "Configure code format for examination schedules and assessments.",
+      status: "Active",
+      allowedTokens: ["{GROUP}", "{TYPE}", "{YEAR}", "{SEQ}", "{EXAM}"],
+      sampleFormats: [
+        { format: "{GROUP}-{TYPE}-{YEAR}", example: "MPC-FINAL-2025" },
+        { format: "EXAM-{YEAR}-{SEQ}", example: "EXAM-2026-0001" },
+      ],
+    },
+    {
+      id: "offer-letter-no",
+      key: "offer-letter-no",
+      seriesCode: "OFFER_LETTER_NO",
+      name: "Staff Offer Letter Number",
+      category: "Staff Management",
+      prefix: `${acr}-OL`,
+      format: "{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: `${acr}-OL/2026/0001`,
+      description: "Official serial numbering sequence for institutional faculty and staff offer letters.",
+      status: "Active",
+      allowedTokens: ["{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}", "{DEPT}"],
+      sampleFormats: [
+        { format: "{CAMPUS}-OL/{YEAR}/{SEQ}", example: `${acr}-OL/2026/0001` },
+        { format: `OL-${acr}-{YEAR}-{SEQ}`, example: `OL-${acr}-2026-0001` },
+      ],
+    },
+    {
+      id: "staff-transfer-no",
+      key: "staff-transfer-no",
+      seriesCode: "TRANSFER_ORDER_NO",
+      name: "Staff Transfer Order Number",
+      category: "Staff Management",
+      prefix: "TRF",
+      format: "{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}",
+      numberLength: 4,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: "MAIN-TRF/2026/0001",
+      description: "Official serial numbering sequence for inter-campus faculty and staff transfer orders.",
+      status: "Active",
+      allowedTokens: ["{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{YEAR}", "{YYYY}", "{SEQ}"],
+      sampleFormats: [
+        { format: "{CAMPUS}-TRF/{YEAR}/{SEQ}", example: "MAIN-TRF/2026/0001" },
+        { format: "TRF-{CAMPUS}-{YEAR}-{SEQ}", example: "TRF-MAIN-2026-0001" },
+      ],
+    },
+    {
+      id: "receipt-no",
+      key: "receipt-no",
+      name: "Receipt No.",
+      category: "Fee Management",
+      prefix: "FEE",
+      format: "{CAMPUS}-{PREFIX}-{YYYYMMDD}-{SEQ}",
+      numberLength: 6,
+      startNumber: 1,
+      currentNumber: 0,
+      totalGenerated: 0,
+      currentExample: "MAIN-FEE-20260904-000001",
+      description: "Configure receipt number format for fee collections.",
+      status: "Active",
+      allowedTokens: ["{PREFIX}", "{CAMPUS}", "{CAMPUS:2}", "{YYYYMMDD}", "{YYYY}", "{MM}", "{DD}", "{SEQ}"],
+      sampleFormats: [
+        { format: "{CAMPUS}-FEE-{YYYYMMDD}-{SEQ}", example: "MAIN-FEE-20260904-000011" },
+        { format: "RCP-{YYYY}-{SEQ}", example: "RCP-2026-000001" },
+        { format: "FEE-{SEQ}", example: "FEE-000001" },
+      ],
+    },
+  ];
+}
 
-  {
-    id: "receipt-no",
-    key: "receipt-no",
-    name: "Receipt No.",
-    category: "Fee Management",
-    prefix: "FEE",
-    format: "FEE-{YYYYMMDD}-{SEQ}",
-    numberLength: 6,
-    startNumber: 1,
-    currentNumber: 0,
-    totalGenerated: 0,
-    currentExample: "FEE-20260904-000001",
-    description: "Configure receipt number format for fee collections.",
-    status: "Active",
-    allowedTokens: ["{PREFIX}", "{YYYYMMDD}", "{YYYY}", "{MM}", "{DD}", "{SEQ}"],
-    sampleFormats: [
-      { format: "FEE-{YYYYMMDD}-{SEQ}", example: "FEE-20260904-000011" },
-      { format: "RCP-{YYYY}-{SEQ}", example: "RCP-2026-000001" },
-      { format: "FEE-{SEQ}", example: "FEE-000001" },
-    ],
-  },
-];
+export const FIXED_NUMBER_SERIES = getFixedNumberSeries();
 
 export function normalizeNumberSeriesItem(item = {}) {
   const rawCode = item.seriesCode || item.SeriesCode || item.slug || item.key || item.id || "";
   const code = String(rawCode).toLowerCase().replace(/_/g, '-');
   const name = item.seriesName || item.SeriesName || item.name || code;
-  const format = item.formatPattern || item.FormatPattern || item.format || "{SEQ}";
+  let rawFormat = item.formatPattern || item.FormatPattern || item.format || "{SEQ}";
+  if (typeof rawFormat === "string") {
+    rawFormat = rawFormat
+      .replace(/-ADM-/g, "-{PREFIX}-")
+      .replace(/-FEE-/g, "-{PREFIX}-")
+      .replace(/-OL\//g, "-{PREFIX}/")
+      .replace(/-TRF\//g, "-{PREFIX}/");
+    if (rawFormat.includes("TCH{SEQ}") && !rawFormat.includes("{PREFIX}")) rawFormat = "{PREFIX}{SEQ}";
+    if (rawFormat.includes("NT{SEQ}") && !rawFormat.includes("{PREFIX}")) rawFormat = "{PREFIX}{SEQ}";
+  }
+  const format = rawFormat;
   const prefix = item.prefix || item.Prefix || "";
   const numberLength = Number(item.numberLength ?? item.NumberLength ?? 4);
   const startNumber = Number(item.startNumber ?? item.StartNumber ?? 1);
@@ -272,10 +318,12 @@ export const MOCK_CONFIG_HISTORY = {};
 // --- HELPER STORAGE READ / WRITE ---
 export function readNumberSeriesSettings() {
   try {
-    const raw = localStorage.getItem(NUMBER_SERIES_STORAGE_KEY) || sessionStorage.getItem(NUMBER_SERIES_STORAGE_KEY);
-    if (!raw) return FIXED_NUMBER_SERIES;
+    const storageKey = getNumberSeriesStorageKey();
+    const raw = localStorage.getItem(storageKey) || sessionStorage.getItem(storageKey);
+    const defaults = getFixedNumberSeries();
+    if (!raw) return defaults;
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return FIXED_NUMBER_SERIES;
+    if (!Array.isArray(parsed) || parsed.length === 0) return defaults;
     
     // Filter out removed and legacy hidden series
     const cleanParsed = parsed.filter((p) => p && !isSeriesRemoved(p));
@@ -293,7 +341,7 @@ export function readNumberSeriesSettings() {
     const result = [];
 
     // Map onto FIXED_NUMBER_SERIES first so our 8 canonical cards always come first in stable order
-    FIXED_NUMBER_SERIES.forEach((fixed) => {
+    defaults.forEach((fixed) => {
       const fixedKey = getCanonicalKey(fixed);
       const found = cleanParsed.find((p) => {
         return (
@@ -318,7 +366,7 @@ export function readNumberSeriesSettings() {
     
     return result;
   } catch {
-    return FIXED_NUMBER_SERIES;
+    return defaults;
   }
 }
 
@@ -326,8 +374,9 @@ export function writeNumberSeriesSettings(list) {
   try {
     const cleanList = (Array.isArray(list) ? list : []).filter((item) => !isSeriesRemoved(item));
     const json = JSON.stringify(cleanList);
-    localStorage.setItem(NUMBER_SERIES_STORAGE_KEY, json);
-    sessionStorage.setItem(NUMBER_SERIES_STORAGE_KEY, json);
+    const storageKey = getNumberSeriesStorageKey();
+    localStorage.setItem(storageKey, json);
+    sessionStorage.setItem(storageKey, json);
   } catch (err) {
     console.error("Failed to save number series settings", err);
   }
@@ -396,7 +445,7 @@ export function buildNumberFromFormat(format, seqNum, numberLength = 4, customTo
   // Series specific tokens
   result = result.replace(/{DEPT}/g, customTokens.DEPT || "MATH");
   result = result.replace(/{DESIG}/g, customTokens.DESIG || "HOD");
-  result = result.replace(/{PREFIX}/g, customTokens.PREFIX || "MAIN");
+  result = result.replace(/{PREFIX}/g, customTokens.PREFIX !== undefined ? customTokens.PREFIX : "");
   const grpStr = customTokens.GROUP || "GROUP";
   result = result.replace(/{GROUP}/g, grpStr);
   result = result.replace(/{GROUP:1}/g, grpStr.startsWith("[") ? grpStr : grpStr.substring(0, 1));

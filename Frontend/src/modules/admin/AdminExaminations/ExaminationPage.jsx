@@ -41,6 +41,7 @@ import DashboardLayout from "../../../shared/layouts/DashboardLayout/DashboardLa
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "../../../shared/components/Ui.jsx";
 import "./ExaminationPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const PAGE_SIZE = 5;
 
@@ -3698,6 +3699,14 @@ export default function ExaminationPage() {
       }
     }
   }, [selectedBoardId, selectedBoard, academicYears, contextAcademicYears, selectedAcademicYearId, selectedAcademicYear, setSelectedAcademicYear]);
+
+  useLiveModuleSync({
+    moduleName: "Examinations",
+    campusId: effectiveCampusId,
+    onRefresh: () => {
+      loadExaminations(true);
+    }
+  });
 
   const loadExaminations = useCallback(async (
     isRetry = false,
