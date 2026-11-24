@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, LoaderCircle, WalletCards, X } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
+import { feePaymentGatewayApi } from "@/api/feePaymentGatewayApi.js";
 import { SkeletonPage } from "@/shared/components/Ui.jsx";
 import "@/modules/admin/AdminStudents/StudentManagementPage.css";
 import StudentFeeTab from "@/modules/admin/AdminStudents/StudentFeeTab.jsx";
@@ -251,18 +252,51 @@ export default function StudentFees() {
 
   const downloadReceipt = async (payment) => {
     const receiptNo = payment.receiptNo;
-    if (!receiptNo || receiptNo === "?" || receiptRequest.current || !student?.studentId) return;
-    receiptRequest.current = true; setReceiptLoading(receiptNo); setError("");
+    if (!receiptNo || receiptNo === "—" || receiptNo === "-" || receiptNo === "?" || receiptRequest.current || !student?.studentId) return;
+    receiptRequest.current = true;
+    setReceiptLoading(receiptNo);
+    setError("");
     try {
+      const paymentId = Number(payment.paymentId);
+      if (Number.isSafeInteger(paymentId) && paymentId > 0) {
+        const blob = await feePaymentGatewayApi.receiptPdf(paymentId);
+        const filename = `Fee_Receipt_${receiptNo || paymentId}.pdf`;
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        return;
+      }
+
       const response = await apiClient.get(apiEndpoints.fee.receiptByNumber(receiptNo));
       const receiptData = response.data?.data ?? response.data?.Data ?? response.data;
       if (!receiptData || typeof receiptData !== "object") throw new Error("Receipt details are unavailable. Please try again.");
+
+      const resolvedPaymentId = Number(receiptData.feePaymentId || receiptData.FeePaymentId || receiptData.paymentId || receiptData.PaymentId || receiptData.id || receiptData.Id);
+      if (Number.isSafeInteger(resolvedPaymentId) && resolvedPaymentId > 0) {
+        const blob = await feePaymentGatewayApi.receiptPdf(resolvedPaymentId);
+        const filename = `Fee_Receipt_${receiptNo || resolvedPaymentId}.pdf`;
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        return;
+      }
+
       await downloadFeeReceiptPdf({
-          ...receiptData,
-          studentName: receiptData.studentName || student?.studentName || student?.name,
-          admissionNumber: receiptData.admissionNumber || student?.admissionNo,
-          groupName: receiptData.groupName || student?.groupName,
-          sectionName: receiptData.sectionName || student?.sectionName,
+        ...receiptData,
+        studentName: receiptData.studentName || student?.studentName || student?.name,
+        admissionNumber: receiptData.admissionNumber || student?.admissionNo,
+        groupName: receiptData.groupName || student?.groupName,
+        sectionName: receiptData.sectionName || student?.sectionName,
       });
     } catch (requestError) {
       setError(getApiErrorMessage(requestError));
@@ -325,7 +359,7 @@ export default function StudentFees() {
       <button type="button" className="sp-fee-pay-now" disabled={paymentAccountLoading || !paymentAccount || !(paymentAccount.balance > 0)} onClick={openPayment}><WalletCards size={16}/> Pay Now</button>
     </div>
     {paymentNotice ? <p className="sp-api-state is-success" role="status">{paymentNotice}</p> : null}
-    <div className="sp-student-fee-tab"><StudentFeeTab key={`fees-${student.studentId}-${feeTabVersion}`} student={feeStudent} /></div>
+    <div className="sp-student-fee-tab"><StudentFeeTab key={`fees-${student.studentId}-${feeTabVersion}`} student={feeStudent} compactContext={true} /></div>
     <StudentCard title="Payment History">
       {error ? <p className="sp-api-state is-error" role="alert">{error}</p> : null}
       {historyLoading ? <SkeletonPage variant="table" columns={7} rows={3}/> : <StudentDataTable
