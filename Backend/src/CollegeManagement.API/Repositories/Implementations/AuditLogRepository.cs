@@ -11,6 +11,7 @@ using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
@@ -76,6 +77,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_RouteTemplate", auditLog.RouteTemplate);
             parameters.Add("p_HttpStatusCode", auditLog.HttpStatusCode);
             parameters.Add("p_DurationMs", auditLog.DurationMs);
+            parameters.Add("p_CollegeId", auditLog.CollegeId ?? ResolveCollegeId());
 
             var id = await conn.ExecuteScalarAsync<long>(
                 "sp_InsertAuditLog",

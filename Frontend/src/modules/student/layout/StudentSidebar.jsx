@@ -13,7 +13,7 @@ import certificateIcon from "@/assets/sidebar-3d/certificates.png";
 import holidayIcon from "@/assets/sidebar-3d/holiday-management.svg";
 import transportIcon from "../assets/transport-3d.svg";
 import hostelIcon from "../assets/hostel-3d.svg";
-import { Settings } from "lucide-react";
+import settingsIcon from "@/assets/sidebar-3d/board-academic-year.png";
 import { useStudentProfile } from "../context/StudentProfileContext.jsx";
 import { useEffectivePermissions } from "@/modules/admin/AdminRolesPermissions/useEffectivePermissions.js";
 
@@ -37,7 +37,7 @@ export const studentMenuGroups = [
     ["Holidays", "holidays", holidayIcon, "holiday-management"],
   ]],
   ["ADMINISTRATION", [
-    ["Settings", "settings", Settings, "settings"],
+    ["Settings", "settings", settingsIcon, "settings"],
   ]],
 ];
 

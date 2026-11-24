@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
@@ -27,15 +28,32 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IHolidayService _holidayService;
         private readonly ILogger<HolidayController> _logger;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public HolidayController(
             IHolidayService holidayService,
             ILogger<HolidayController> logger,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _holidayService = holidayService;
             _logger = logger;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishCalendarChange(string action, int? campusId = null, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Calendar",
+                    Action = action,
+                    CampusId = campusId,
+                    EntityId = entityId
+                });
+            }
         }
 
         // GET: api/v1/holidays
@@ -189,6 +207,7 @@ namespace CollegeManagement.API.Controllers.V1
                     catch { }
                 }
 
+                PublishCalendarChange("HolidayCreated", created?.CampusId, created?.Id.ToString());
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, new
                 {
                     success = true,
@@ -261,6 +280,7 @@ namespace CollegeManagement.API.Controllers.V1
                     catch { }
                 }
 
+                PublishCalendarChange("HolidayUpdated", updated?.CampusId, id.ToString());
                 return Ok(new
                 {
                     success = true,
@@ -304,6 +324,7 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                PublishCalendarChange("HolidayDeleted", entityId: id.ToString());
                 return Ok(new
                 {
                     success = true,
@@ -342,6 +363,7 @@ namespace CollegeManagement.API.Controllers.V1
             if (int.TryParse(idClaim, out int uid)) currentUserId = uid;
 
             var result = await _holidayService.ImportHolidaysFromExcelAsync(ms.ToArray(), validateOnly, currentUserId, campusId, academicYearId, boardId);
+            if (!validateOnly) PublishCalendarChange("HolidaysImported", campusId);
             return Ok(result);
         }
     }

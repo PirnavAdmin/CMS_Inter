@@ -46,6 +46,7 @@ import sharedApiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { getAuthToken } from "@/modules/auth/authStorage.js";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 import { Skeleton, SkeletonAvatar, SkeletonButton, SkeletonCard, SkeletonText, Toast } from "@/shared/components/Ui.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
@@ -1294,6 +1295,35 @@ export default function DashboardPage() {
     fetchStudentAttendance();
     fetchStaffAttendance();
   }, [fetchStudentAttendance, fetchStaffAttendance]);
+
+  useLiveModuleSync({
+    moduleName: "Admissions",
+    campusId,
+    debounceMs: 1000,
+    onRefresh: () => {
+      fetchSummary();
+      fetchStudentsOverview();
+    }
+  });
+
+  useLiveModuleSync({
+    moduleName: "Attendance",
+    campusId,
+    debounceMs: 1000,
+    onRefresh: () => {
+      fetchStudentAttendance();
+      fetchStaffAttendance();
+    }
+  });
+
+  useLiveModuleSync({
+    moduleName: "Examinations",
+    campusId,
+    debounceMs: 1000,
+    onRefresh: () => {
+      fetchUpcomingExaminations();
+    }
+  });
 
   // Full Refresh Dashboard handler
   const handleRefreshAll = useCallback(async () => {

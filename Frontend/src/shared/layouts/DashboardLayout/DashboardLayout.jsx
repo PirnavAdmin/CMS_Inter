@@ -1040,7 +1040,13 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className={`cms-shell ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`} data-dashboard-palette={palette}>
+    <div
+      className={`cms-shell ${isPrincipal ? "is-principal-workspace" : ""} ${ready ? "is-ready" : ""} ${navOpen ? "" : "nav-closed"}`}
+      data-dashboard-palette={palette}
+      style={{
+        "--cms-current-sidebar-w": navOpen ? "var(--cms-sidebar-w, 218px)" : "var(--cms-sidebar-collapsed-w, 70px)",
+      }}
+    >
       <aside className={`cms-sidebar ${ready && navOpen ? "is-open" : ""}`}>
         <div className="cms-brand">
           <CampusBrandImage className="cms-brand-logo" src={pirnavCollegesLogo} alt="Pirnav Colleges" />

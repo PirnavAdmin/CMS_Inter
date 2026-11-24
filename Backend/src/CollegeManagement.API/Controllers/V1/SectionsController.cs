@@ -21,9 +21,12 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ISectionService _sectionService;
 
-        public SectionsController(ISectionService sectionService)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public SectionsController(ISectionService sectionService, IRealtimeEventService? realtimeEventService = null)
         {
             _sectionService = sectionService;
+            _realtimeEventService = realtimeEventService;
         }
 
         /// <summary>
@@ -71,6 +74,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _sectionService.CreateSectionAsync(request);
+            if (_realtimeEventService != null) await _realtimeEventService.PublishDomainChangeAsync("Sections", "Created", result.CampusId > 0 ? result.CampusId : ResolveCampusId(), result.SectionId.ToString());
             return CreatedAtAction(nameof(GetSection), new { id = result.SectionId }, result);
         }
 
@@ -90,6 +94,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _sectionService.CreateMultipleSectionsAsync(request);
+            if (_realtimeEventService != null) await _realtimeEventService.PublishDomainChangeAsync("Sections", "BulkCreated", request.CampusId > 0 ? request.CampusId : ResolveCampusId());
             return Created(string.Empty, result);
         }
 
@@ -109,6 +114,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _sectionService.UpdateSectionAsync(id, request);
+            if (_realtimeEventService != null) await _realtimeEventService.PublishDomainChangeAsync("Sections", "Updated", result.CampusId > 0 ? result.CampusId : ResolveCampusId(), id.ToString());
             return Ok(result);
         }
 
@@ -121,6 +127,7 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> DeleteSection(int id)
         {
             await _sectionService.DeleteSectionAsync(id);
+            if (_realtimeEventService != null) await _realtimeEventService.PublishDomainChangeAsync("Sections", "Deleted", ResolveCampusId(), id.ToString());
             return NoContent();
         }
 

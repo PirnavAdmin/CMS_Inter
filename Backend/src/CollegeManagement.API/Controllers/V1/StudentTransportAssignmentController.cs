@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -16,11 +17,14 @@ namespace CollegeManagement.API.Controllers
     public class StudentTransportAssignmentController : ControllerBase
     {
         private readonly IStudentTransportAssignmentService _service;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public StudentTransportAssignmentController(
-            IStudentTransportAssignmentService service)
+            IStudentTransportAssignmentService service,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
+            _realtimeEventService = realtimeEventService;
         }
 
         private long? GetCurrentUserId()
@@ -61,6 +65,16 @@ namespace CollegeManagement.API.Controllers
             {
                 var userId = GetCurrentUserId();
                 var id = await _service.CreateAsync(dto, userId);
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Transport",
+                        Action = "StudentTransportAssigned",
+                        EntityId = id.ToString()
+                    });
+                }
 
                 return Ok(new
                 {

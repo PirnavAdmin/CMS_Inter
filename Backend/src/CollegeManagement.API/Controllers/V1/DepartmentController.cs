@@ -25,10 +25,13 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IDepartmentService _departmentService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public DepartmentController(IDepartmentService departmentService, IJwtTokenHelper jwtTokenHelper)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public DepartmentController(IDepartmentService departmentService, IJwtTokenHelper jwtTokenHelper, IRealtimeEventService? realtimeEventService = null)
         {
             _departmentService = departmentService;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? ResolveCollegeId(int? queryCollegeId = null)
@@ -148,6 +151,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
             var created = await _departmentService.CreateDepartmentAsync(dto, campusId, effectiveCollegeId);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Departments", "Created", campusId, created.DepartmentId.ToString());
+            }
             return CreatedAtAction(nameof(GetDepartmentById), new { id = created.DepartmentId }, created);
         }
 
@@ -189,6 +196,11 @@ namespace CollegeManagement.API.Controllers.V1
                 return NotFound(new { message = $"Department with ID {id} not found." });
             }
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Departments", "Updated", campusId, id.ToString());
+            }
+
             return Ok(updated);
         }
 
@@ -209,6 +221,10 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { message });
             }
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Departments", "Deleted", null, id.ToString());
+            }
             return NoContent();
         }
 

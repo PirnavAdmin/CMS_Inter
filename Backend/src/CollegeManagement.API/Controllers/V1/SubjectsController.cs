@@ -7,6 +7,7 @@ using CollegeManagement.API.DTOs.Subject;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services;
+using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -26,10 +27,13 @@ namespace CollegeManagement.API.Controllers
         private readonly ISubjectService _service;
         private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public SubjectsController(ISubjectService service, IJwtTokenHelper jwtTokenHelper)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public SubjectsController(ISubjectService service, IJwtTokenHelper jwtTokenHelper, IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? ResolveCollegeId()
@@ -215,6 +219,10 @@ namespace CollegeManagement.API.Controllers
             try
             {
                 var subject = await _service.CreateAsync(dto, cancellationToken);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Subjects", "Created", ResolveCollegeId(), subject.SubjectId.ToString());
+                }
                 return CreatedAtAction(
                     nameof(GetSubjectById),
                     new { id = subject.SubjectId },
@@ -249,6 +257,10 @@ namespace CollegeManagement.API.Controllers
             try
             {
                 var created = await _service.BulkCreateAsync(dtos, cancellationToken);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Subjects", "BulkCreated", ResolveCollegeId());
+                }
                 return Ok(new { status = true, message = $"{created.Count} subjects created successfully.", data = created });
             }
             catch (ValidationException ex)
@@ -280,6 +292,10 @@ namespace CollegeManagement.API.Controllers
                 if (subject == null)
                     return NotFound(new { status = false, message = "Subject not found." });
 
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Subjects", "Updated", ResolveCollegeId(), id.ToString());
+                }
                 return Ok(new { status = true, message = "Subject updated successfully.", data = subject });
             }
             catch (ValidationException ex)
@@ -309,6 +325,10 @@ namespace CollegeManagement.API.Controllers
                 if (updated == null)
                     return NotFound(new { status = false, message = "Subject not found." });
 
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Subjects", isActive ? "Activated" : "Deactivated", ResolveCollegeId(), id.ToString());
+                }
                 return Ok(new { status = true, message = $"Subject {(isActive ? "activated" : "deactivated")} successfully.", data = updated });
             }
             catch (Exception ex)
@@ -335,6 +355,10 @@ namespace CollegeManagement.API.Controllers
                     return NotFound(new { status = false, message });
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Subjects", "Deleted", ResolveCollegeId(), id.ToString());
+                }
                 return Ok(new { status = true, message });
             }
             catch (Exception ex)

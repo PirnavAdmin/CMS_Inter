@@ -107,6 +107,30 @@ export const getAuthUser = () => {
     if (!parsed || typeof parsed !== "object") return parsed;
 
     const cleaned = cleanUserObject(parsed);
+
+    // Fallback: decode CollegeId from JWT token if missing on user object
+    if (!cleaned.collegeId) {
+      const token = getAuthItem("token");
+      if (token && typeof token === "string" && token.includes(".")) {
+        try {
+          const parts = token.split(".");
+          if (parts[1]) {
+            const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+            const decoded = JSON.parse(
+              typeof window !== "undefined" && typeof window.atob === "function"
+                ? window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="))
+                : Buffer.from(normalized, "base64").toString("utf-8")
+            );
+            const cid = decoded.CollegeId || decoded.collegeId;
+            if (cid && !isNaN(Number(cid))) {
+              cleaned.collegeId = Number(cid);
+            }
+          }
+        } catch {
+          // Token decode fallback
+        }
+      }
+    }
     const hasDemoName = ["name", "fullName", "displayName"].some(
       (key) => typeof parsed[key] === "string" && /\bDemo\b/i.test(parsed[key]),
     );

@@ -4,6 +4,7 @@ using CollegeManagement.API.DTOs.StaffAttendance.Requests;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Http;
@@ -24,17 +25,20 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly IStaffAttendanceService? _staffAttendanceService;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public LeaveManagementController(
             ILeaveManagementService service,
             IJwtTokenHelper jwtTokenHelper,
             INotificationService? notificationService = null,
-            IStaffAttendanceService? staffAttendanceService = null)
+            IStaffAttendanceService? staffAttendanceService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _notificationService = notificationService;
             _staffAttendanceService = staffAttendanceService;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int GetCurrentUserId()
@@ -120,6 +124,18 @@ namespace CollegeManagement.API.Controllers.V1
 
             }
             catch { }
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Leave",
+                    Action = "LeaveRequested",
+                    CampusId = GetCurrentCampusId(),
+                    EntityId = result?.StaffLeaveRequestId.ToString()
+                });
+            }
+
             return Ok(new { Status = true, Message = "Staff leave requested successfully.", Data = result });
         }
 
@@ -168,6 +184,18 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
             catch { }
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Leave",
+                    Action = $"Leave{request.Status}",
+                    CampusId = GetCurrentCampusId(),
+                    EntityId = leaveRequestId.ToString()
+                });
+            }
+
             return Ok(new { Status = true, Message = $"Staff leave {request.Status} successfully.", Data = result });
         }
 

@@ -58,6 +58,7 @@ import {
 } from "@/data/feeManagementData.js";
 import "./FeeManagementPage.css";
 import { PaymentSettingsLink } from "../AdminSettings/PaymentGatewayConfigPage.jsx";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const TABS = ["Overview", "Fee Setup", "Student Fee Ledger"];
 const FEE_SETUP_TABS = ["Fee Types", "Fee Structure", "Hostel Fees", "Transport Fees", "Scholarships", "Fine"];
@@ -4944,8 +4945,15 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       loading: false,
       error: hostelError,
     });
+    const authUser = getAuthUser();
+    const userCollegeId = Number(authUser?.collegeId || authUser?.CollegeId || 0);
+
     if (fineRulesResult.status === "fulfilled") {
-      setFineRules(normalizeFineRuleRows(getCollection(fineRulesResult.value.data)));
+      const rawRules = getCollection(fineRulesResult.value.data);
+      const scopedRules = userCollegeId > 0
+        ? rawRules.filter((r) => !r.collegeId || Number(r.collegeId) === userCollegeId)
+        : rawRules;
+      setFineRules(normalizeFineRuleRows(scopedRules));
       setFineRuleState({ loading: false, error: "" });
     } else {
       setFineRules([]);
@@ -5023,7 +5031,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       setStructureError(getApiErrorMessage(structuresResult.reason));
     }
     if (scholarshipsResult.status === "fulfilled") {
-      setScholarships(normalizeScholarshipRows(getCollection(scholarshipsResult.value.data)));
+      const rawSch = getCollection(scholarshipsResult.value.data);
+      const scopedSch = userCollegeId > 0
+        ? rawSch.filter((s) => !s.collegeId || Number(s.collegeId) === userCollegeId)
+        : rawSch;
+      setScholarships(normalizeScholarshipRows(scopedSch));
     }
     setMasters((current) => ({
       boards: contextBoardOptions,
@@ -5171,6 +5183,21 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       window.removeEventListener("focus", refreshOnFocus);
     };
   }, [collecting, ledgerTab, loadFeeAccounts, loadOverviewData, tab]);
+
+  useLiveModuleSync({
+    moduleName: "Fees",
+    campusId: selectedCampusValue,
+    onRefresh: () => {
+      feeDetailCacheRef.current.clear();
+      setSelectedDetail(null);
+      setSelectedDetailVersion((current) => current + 1);
+      if (tab === "Overview") loadOverviewData();
+      else if (tab === "Fee Setup") loadFeeApiData();
+      else if (tab === "Student Fee Ledger") {
+        loadFeeAccounts(ledgerTab === "Fee Collection" ? "collection" : "ledger");
+      }
+    }
+  });
 
   useEffect(() => {
     if (tab !== "Student Fee Ledger" || ledgerTab !== "Payment History") return;

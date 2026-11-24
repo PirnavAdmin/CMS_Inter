@@ -25,10 +25,13 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IDesignationService _designationService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public DesignationController(IDesignationService designationService, IJwtTokenHelper jwtTokenHelper)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public DesignationController(IDesignationService designationService, IJwtTokenHelper jwtTokenHelper, IRealtimeEventService? realtimeEventService = null)
         {
             _designationService = designationService;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? ResolveCollegeId(int? queryCollegeId = null)
@@ -126,6 +129,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
             var result = await _designationService.CreateAsync(dto, campusId, effectiveCollegeId);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Designations", "Created", campusId, result.Id.ToString());
+            }
             return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
         }
 
@@ -143,6 +150,12 @@ namespace CollegeManagement.API.Controllers.V1
             var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
             var result = await _designationService.UpdateAsync(id, dto, campusId, effectiveCollegeId);
             if (result == null) return NotFound(new { message = $"Designation with ID {id} not found." });
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Designations", "Updated", campusId, id.ToString());
+            }
+
             return Ok(result);
         }
 
@@ -163,6 +176,10 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { message });
             }
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Designations", "Deleted", null, id.ToString());
+            }
             return NoContent();
         }
 

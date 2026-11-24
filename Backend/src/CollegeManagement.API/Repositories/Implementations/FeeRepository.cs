@@ -85,10 +85,11 @@ public class FeeRepository : IFeeRepository
             {
                 p_FeeTypeName = request.FeeTypeName,
                 p_Category = request.Category,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -128,10 +129,11 @@ public class FeeRepository : IFeeRepository
                 p_FeeTypeId = id,
                 p_FeeTypeName = request.FeeTypeName,
                 p_Category = request.Category,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -329,10 +331,11 @@ public class FeeRepository : IFeeRepository
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
                 p_Description = request.Description,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -346,7 +349,8 @@ public class FeeRepository : IFeeRepository
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -372,10 +376,11 @@ public class FeeRepository : IFeeRepository
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
                 p_Description = request.Description,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -636,9 +641,9 @@ public class FeeRepository : IFeeRepository
         {
             try
             {
-                int? studentCampusId = await c.QueryFirstOrDefaultAsync<int?>("SELECT CampusId FROM Students WHERE StudentId = @StudentId LIMIT 1", new { StudentId = request.StudentId });
-                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto();
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentCampusId ?? 1);
+                var studentInfo = await c.QueryFirstOrDefaultAsync<(int? CampusId, string? CampusCode)>(@"SELECT s.CampusId, c.CampusCode FROM Students s LEFT JOIN Campuses c ON s.CampusId = c.CampusId WHERE s.StudentId = @StudentId LIMIT 1", new { StudentId = request.StudentId });
+                var reqDto = new CollegeManagement.API.DTOs.Settings.GenerateNumberSeriesRequestDto { CampusCode = studentInfo.CampusCode };
+                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync("RECEIPT_NO", reqDto, studentInfo.CampusId ?? 1);
                 if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
                 {
                     finalReceiptNo = generatedDto.GeneratedNumber;
@@ -918,7 +923,8 @@ public class FeeRepository : IFeeRepository
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -932,7 +938,8 @@ public class FeeRepository : IFeeRepository
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
 

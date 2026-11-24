@@ -9,6 +9,9 @@ namespace CollegeManagement.API.DTOs.Campus
         [JsonPropertyName("campusId")]
         public int CampusId { get; set; }
 
+        [JsonPropertyName("collegeId")]
+        public int? CollegeId { get; set; }
+
         [JsonPropertyName("id")]
         public int Id => CampusId;
 

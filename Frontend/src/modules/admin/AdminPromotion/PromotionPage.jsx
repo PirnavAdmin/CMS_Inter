@@ -27,6 +27,7 @@ import {
 import { EMPTY_FEE_CONFIG, FeePreviewStatus, PromotionFeePanel, ProgramFeeComparison, TransferFeePanel, useFeePreview } from "@/modules/admin/AdminPromotion/FeeTransitionPanels.jsx";
 import { normalizeFeePreview, programAllocationBatches, promotionFeePayload, selectFeeStructure } from "@/modules/admin/AdminPromotion/feeTransition.js";
 import "./PromotionPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const EMPTY_SETUP = {
   fromYear: "", board: "", fromLevel: "", group: "", program: "", fromSection: "",
@@ -783,6 +784,12 @@ export default function PromotionPage({ screen = "promotion" }) {
     setSelectedIds([]);
     await Promise.all([fetchEligibleStudents(), fetchHistory()]);
   };
+
+  useLiveModuleSync({
+    moduleName: "Promotions",
+    campusId: activeCampusId,
+    onRefresh: () => refreshAfterMutation()
+  });
 
   const confirmPromotion = async () => {
     if (submitting || !validatePromotion()) return;

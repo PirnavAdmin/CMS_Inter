@@ -72,6 +72,8 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var id = await _service.CreateTransferRequestAsync(dto, GetCurrentUserId(), cancellationToken);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Students", "transfer-request", dto.ToCampusId, id.ToString());
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Promotions", "transfer-request", dto.ToCampusId, id.ToString());
                 return Ok(new { Message = "Transfer request created successfully", TransferId = id });
             }
             catch (ForbiddenException fex)
@@ -168,6 +170,8 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 await _service.ApproveTransferAsync(id, GetCurrentUserId(), dto, cancellationToken);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Students", "transfer-approve", null, id.ToString());
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Promotions", "transfer-approve", null, id.ToString());
                 return Ok(new { Message = "Transfer approved successfully" });
             }
             catch (ForbiddenException fex)
@@ -202,6 +206,8 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 await _service.RejectTransferAsync(id, GetCurrentUserId(), dto, cancellationToken);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Students", "transfer-reject", null, id.ToString());
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Promotions", "transfer-reject", null, id.ToString());
                 return Ok(new { Message = "Transfer rejected successfully" });
             }
             catch (ForbiddenException fex)

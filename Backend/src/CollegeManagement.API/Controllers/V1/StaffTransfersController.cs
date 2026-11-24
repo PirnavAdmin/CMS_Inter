@@ -16,10 +16,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class StaffTransfersController : ControllerBase
     {
         private readonly IStaffTransferService _transferService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public StaffTransfersController(IStaffTransferService transferService)
+        public StaffTransfersController(IStaffTransferService transferService, IRealtimeEventService? realtimeEventService = null)
         {
             _transferService = transferService;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int GetCurrentUserId()
@@ -42,6 +44,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             int currentUserId = GetCurrentUserId();
             var result = await _transferService.InitiateTransferAsync(dto, currentUserId);
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Staff", "transfer-initiated", dto.ToCampusId, dto.StaffId.ToString());
             return Ok(result);
         }
 
@@ -75,6 +78,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             int currentUserId = GetCurrentUserId();
             var result = await _transferService.ApproveTransferAsync(id, dto, currentUserId);
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Staff", "transfer-approved", null, id.ToString());
             return Ok(result);
         }
 
@@ -84,6 +88,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             int currentUserId = GetCurrentUserId();
             var result = await _transferService.RejectTransferAsync(id, dto, currentUserId);
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Staff", "transfer-rejected", null, id.ToString());
             return Ok(result);
         }
 

@@ -334,7 +334,7 @@
 .cms-main {
   flex: 1;
   width: calc(100% - var(--cms-sidebar-w));
-  max-width: 100%;
+  max-width: calc(100% - var(--cms-sidebar-w));
   height: 100dvh;
   margin-left: var(--cms-sidebar-w);
   min-width: 0;
@@ -342,16 +342,36 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: none;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .cms-shell.is-ready .cms-main {
-  transition: margin-left 0.25s ease;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), max-width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.cms-shell.nav-closed .cms-main {
-  width: 100%;
-  margin-left: 0;
+@media (min-width: 993px) {
+  .cms-shell:not(.nav-closed) .cms-main {
+    width: calc(100% - var(--cms-sidebar-w)) !important;
+    max-width: calc(100% - var(--cms-sidebar-w)) !important;
+    margin-left: var(--cms-sidebar-w) !important;
+  }
+
+  .cms-shell.nav-closed .cms-main {
+    width: calc(100% - var(--cms-sidebar-collapsed-w)) !important;
+    max-width: calc(100% - var(--cms-sidebar-collapsed-w)) !important;
+    margin-left: var(--cms-sidebar-collapsed-w) !important;
+  }
+}
+
+@media (max-width: 992px) {
+  .cms-main,
+  .cms-shell .cms-main,
+  .cms-shell.nav-closed .cms-main,
+  .cms-shell:not(.nav-closed) .cms-main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+  }
 }
 
 .cms-topbar {

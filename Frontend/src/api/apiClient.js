@@ -202,7 +202,11 @@ apiClient.interceptors.request.use(
     }
 
     try {
-      const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
+      const u = getAuthUser();
+      const suffix = u?.collegeId ? `_c${u.collegeId}` : "";
+      const selectedCampusId =
+        (suffix ? window.localStorage.getItem(`cms_selected_campus_id${suffix}`) : null) ||
+        window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
       const clientIp = window.localStorage.getItem("cms_client_ip") || window.sessionStorage.getItem("cms_client_ip");
       if (clientIp) config.headers["X-Client-IP"] = clientIp;

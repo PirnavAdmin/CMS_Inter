@@ -25,6 +25,7 @@ import apiClient, { getApiErrorMessage } from "@/api/axios.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "../ResultProcessingPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 export const DEFAULT_PAGE_SIZE = 10;
 export const DEFAULT_ANALYTICS_PAGE_SIZE = 10;
@@ -2477,6 +2478,16 @@ export default function ResultsManagementView({
       console.warn("Analytics fetch notice:", err);
     }
   }, [applied, filters, effectiveCampusId]);
+
+  useLiveModuleSync({
+    moduleName: "Results",
+    campusId: effectiveCampusId,
+    onRefresh: () => {
+      fetchPublishedGroups();
+      fetchRankList();
+      fetchAnalyticsData();
+    }
+  });
 
   useEffect(() => {
     if (viewMode === "analytics" && resultsGenerated) {

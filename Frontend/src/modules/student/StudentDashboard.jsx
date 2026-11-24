@@ -109,11 +109,73 @@ const normalizeFeeSummary = (detailsPayload, ledgerPayload) => {
     ?? rows.reduce((sum, row) => sum + (getNumber(row, ["paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"]) || 0), 0);
   const due = getNumber(account, ["balance", "Balance", "outstanding", "Outstanding", "outstandingAmount", "OutstandingAmount", "dueAmount", "DueAmount", "pendingAmount", "PendingAmount"])
     ?? Math.max(total - paid, 0);
+
+  const plan = account.paymentPlan || account.PaymentPlan || account.plan || account.Plan
+    || details.paymentPlan || details.PaymentPlan || details.plan || details.Plan;
+
+  const rawSchedules = account.installments || account.Installments
+    || account.schedules || account.Schedules
+    || account.scheduledFees || account.ScheduledFees
+    || account.courseSchedules || account.CourseSchedules
+    || account.feeSchedules || account.FeeSchedules
+    || account.paymentSchedules || account.PaymentSchedules
+    || plan?.installments || plan?.Installments
+    || plan?.schedules || plan?.Schedules
+    || plan?.courseSchedules || plan?.CourseSchedules
+    || details?.installments || details?.Installments
+    || details?.schedules || details?.Schedules
+    || details?.courseSchedules || details?.CourseSchedules;
+
+  const schedules = Array.isArray(rawSchedules) ? rawSchedules
+    : Array.isArray(rawSchedules?.$values) ? rawSchedules.$values
+    : Array.isArray(rawSchedules?.items) ? rawSchedules.items
+    : Array.isArray(rawSchedules?.Items) ? rawSchedules.Items : [];
+
+  let nextDue = account.nextDueDate || account.NextDueDate || account.nextPaymentDate || account.NextPaymentDate
+    || details.nextDueDate || details.NextDueDate || details.nextPaymentDate || details.NextPaymentDate || null;
+
+  if (schedules.length > 0) {
+    const pendingSchedules = schedules.filter((s) => {
+      const scheduleStatus = String(s?.status || s?.Status || s?.paymentStatus || s?.PaymentStatus || "").trim().toLowerCase();
+      if (scheduleStatus === "paid" || scheduleStatus === "completed" || scheduleStatus === "settled") return false;
+      const amt = getNumber(s, ["amount", "Amount", "installmentAmount", "InstallmentAmount", "scheduledAmount", "ScheduledAmount", "payableAmount", "PayableAmount", "dueAmount", "DueAmount"]) || 0;
+      const pd = getNumber(s, ["paid", "Paid", "paidAmount", "PaidAmount", "amountPaid", "AmountPaid"]) || 0;
+      const bal = getNumber(s, ["balance", "Balance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "pendingAmount", "PendingAmount"]);
+      const remaining = bal != null ? bal : Math.max(amt - pd, 0);
+      return remaining > 0;
+    });
+
+    const candidates = pendingSchedules.length > 0 ? pendingSchedules : schedules;
+    const sorted = [...candidates].sort((a, b) => {
+      const dateA = a?.dueDate || a?.DueDate || a?.date || a?.Date || "";
+      const dateB = b?.dueDate || b?.DueDate || b?.date || b?.Date || "";
+      return String(dateA).localeCompare(String(dateB));
+    });
+
+    const bestMatch = sorted[0];
+    const candidateDate = bestMatch?.dueDate || bestMatch?.DueDate || bestMatch?.date || bestMatch?.Date;
+    if (candidateDate) {
+      nextDue = candidateDate;
+    }
+  }
+
+  let formattedNextDue = "-";
+  if (nextDue && nextDue !== "-") {
+    const d = new Date(nextDue);
+    if (!Number.isNaN(d.getTime())) {
+      formattedNextDue = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    } else {
+      formattedNextDue = String(nextDue);
+    }
+  } else if (due <= 0 && total > 0) {
+    formattedNextDue = "All dues paid";
+  }
+
   return {
     total,
     paid,
     due,
-    nextDueDate: account.nextDueDate || account.NextDueDate || account.nextPaymentDate || account.NextPaymentDate || "-",
+    nextDueDate: formattedNextDue,
   };
 };
 

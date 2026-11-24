@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Dtos.Transport.Operations;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -18,10 +19,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class TransportOperationsController : ControllerBase
     {
         private readonly ITransportOperationsService _operationsService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public TransportOperationsController(ITransportOperationsService operationsService)
+        public TransportOperationsController(ITransportOperationsService operationsService, IRealtimeEventService? realtimeEventService = null)
         {
             _operationsService = operationsService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet("trips")]
@@ -57,6 +60,15 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var id = await _operationsService.CreateTripAsync(dto, ct);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Transport",
+                        Action = "TripCreated",
+                        EntityId = id.ToString()
+                    });
+                }
                 return Ok(new { success = true, data = id, message = "Trip created successfully" });
             }
             catch (Exception ex)
@@ -74,6 +86,15 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var rows = await _operationsService.UpdateTripAsync(tripId, dto, ct);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Transport",
+                        Action = "TripUpdated",
+                        EntityId = tripId.ToString()
+                    });
+                }
                 return Ok(new { success = rows, message = "Trip updated successfully" });
             }
             catch (Exception ex)
@@ -90,6 +111,15 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var rows = await _operationsService.DeleteTripAsync(tripId, ct);
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Transport",
+                        Action = "TripDeleted",
+                        EntityId = tripId.ToString()
+                    });
+                }
                 return Ok(new { success = rows, message = "Trip deleted successfully" });
             }
             catch (Exception ex)

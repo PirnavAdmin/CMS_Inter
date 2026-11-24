@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -394,6 +395,12 @@ export default function HolidayManagementPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useLiveModuleSync({
+    moduleName: "Calendar",
+    campusId: selectedCampusId,
+    onRefresh: loadData,
+  });
 
   // Sort the complete loaded list before filtering and slicing into pages.
   const today = todayIso();

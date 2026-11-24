@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using CollegeManagement.API.DTOs;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,10 +20,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class SectionRollAllocationController : ControllerBase
     {
         private readonly ISectionRollAllocationService _service;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public SectionRollAllocationController(ISectionRollAllocationService service)
+        public SectionRollAllocationController(ISectionRollAllocationService service, IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? ResolveCampusId()
@@ -81,6 +84,16 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var count = await _service.ConfirmSectionAllocationAsync(request, cancellationToken);
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Promotions",
+                    Action = "SectionAllocated",
+                    CampusId = request.CampusId
+                });
+            }
 
             return Ok(new
             {

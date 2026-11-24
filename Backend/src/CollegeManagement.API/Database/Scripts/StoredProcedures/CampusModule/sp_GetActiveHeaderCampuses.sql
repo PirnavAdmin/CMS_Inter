@@ -6,6 +6,7 @@ CREATE PROCEDURE `sp_GetActiveHeaderCampuses`()
 BEGIN
     SELECT 
         c.`CampusId`,
+        c.`CollegeId`,
         c.`CampusName`,
         c.`CampusCode`,
         c.`IsHQ`,

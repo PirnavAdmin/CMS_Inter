@@ -3492,6 +3492,8 @@
 /* Reuse the Student Management read-only fee tab within the student theme. */
 .sp-student-fee-tab {
   min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   --cms-primary: var(--sp-primary);
   --cms-primary-soft: var(--sp-primary-soft);
   --cms-border: var(--sp-border);
@@ -3520,16 +3522,55 @@
 }
 
 .sp-student-fee-tab .cms-fee-scroll {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto
 }
 
 .sp-student-fee-tab .cms-fee-table {
+  width: 100%;
   min-width: 620px
 }
 
 .sp-student-fee-tab .cms-fee-context-item strong {
   overflow-wrap: anywhere
+}
+
+/* Keep every fee section on one fluid column at all browser zoom levels. */
+.sp-shell .sp-content:has(> .sp-student-fees-page) {
+  padding: 18px clamp(16px, 1.1vw, 22px) 28px;
+}
+
+.sp-shell .sp-page.sp-student-fees-page {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
+  box-sizing: border-box;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sp-student-fees-page > *,
+.sp-student-fee-tab .cms-fee-step,
+.sp-student-fee-tab .cms-fee-block,
+.sp-student-fees-page .sp-card {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.sp-student-fees-page .sp-card-body,
+.sp-student-fees-page .sp-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .sp-shell .sp-content:has(> .sp-student-fees-page) { padding: 18px; }
+}
+
+@media (max-width: 620px) {
+  .sp-shell .sp-content:has(> .sp-student-fees-page) { padding: 14px 12px; }
 }
 
 /* Student holiday list and interactive calendar. */

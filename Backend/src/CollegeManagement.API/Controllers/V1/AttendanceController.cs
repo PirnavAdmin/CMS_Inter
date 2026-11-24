@@ -13,6 +13,7 @@ using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Enums;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -34,15 +35,18 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IAttendanceService _attendanceService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public AttendanceController(
             IAttendanceService attendanceService,
             IJwtTokenHelper jwtTokenHelper,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _attendanceService = attendanceService;
             _jwtTokenHelper = jwtTokenHelper;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpPost("create")]
@@ -57,6 +61,16 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var id = await _attendanceService.CreateAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Attendance",
+                    Action = "Created",
+                    CampusId = GetCurrentCampusId(),
+                    EntityId = id.ToString()
+                });
+            }
             return CreatedAtAction(
                 nameof(GetAttendanceById),
                 new
@@ -117,6 +131,16 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Attendance",
+                    Action = "BulkCreated",
+                    CampusId = GetCurrentCampusId(),
+                    EntityId = request.AttendanceDate.ToString("yyyy-MM-dd")
+                });
+            }
             return Ok(affectedRows);
         }
 
@@ -132,6 +156,16 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var affectedRows = await _attendanceService.UpdateAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Attendance",
+                    Action = "Updated",
+                    CampusId = GetCurrentCampusId(),
+                    EntityId = request.AttendanceId.ToString()
+                });
+            }
             return Ok(affectedRows);
         }
 
@@ -147,6 +181,15 @@ namespace CollegeManagement.API.Controllers.V1
             var userName = GetCurrentUserName();
             var userId = GetCurrentUserId();
             var affectedRows = await _attendanceService.BulkUpdateAttendanceAsync(request, isAdmin, userName, userId, cancellationToken);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Attendance",
+                    Action = "BulkUpdated",
+                    CampusId = GetCurrentCampusId()
+                });
+            }
             return Ok(affectedRows);
         }
 
@@ -290,6 +333,16 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Attendance",
+                    Action = "BulkSaved",
+                    CampusId = GetCurrentCampusId(),
+                    EntityId = request.AttendanceDate.ToString("yyyy-MM-dd")
+                });
+            }
             return Ok(new { success = true, message = $"Attendance saved successfully for {count} records.", count });
         }
 
@@ -635,6 +688,16 @@ namespace CollegeManagement.API.Controllers.V1
                 return "System Admin";
             }
             return userName;
+        }
+
+        private int? GetCurrentCampusId()
+        {
+            var campusClaim = User.FindFirst("campus_id")?.Value
+                ?? User.FindFirst("CampusId")?.Value
+                ?? User.FindFirst(ClaimTypes.PrimaryGroupSid)?.Value
+                ?? User.FindFirst(ClaimTypes.GroupSid)?.Value;
+
+            return int.TryParse(campusClaim, out int cid) && cid > 0 ? cid : null;
         }
 
         #endregion

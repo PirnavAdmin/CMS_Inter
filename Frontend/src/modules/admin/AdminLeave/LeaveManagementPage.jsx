@@ -21,6 +21,7 @@ import {
   assignSubstitutes
 } from "@/modules/admin/AdminLeave/services/leaveStore.js";
 import "./LeaveManagementPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const STATUS_BADGE = {
   Approved: "cms-badge-active",
@@ -1576,6 +1577,15 @@ export default function LeaveManagementPage() {
   useEffect(() => {
     loadRequests();
   }, [loadRequests]);
+
+  useLiveModuleSync({
+    moduleName: "Leave",
+    campusId: campusId,
+    onRefresh: () => {
+      loadRequests();
+      fetchAdminLeaveData();
+    }
+  });
 
   const openDetails = (req) => {
     const id = req.staffLeaveRequestId || req.id;

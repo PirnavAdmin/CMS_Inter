@@ -19,9 +19,12 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IAttendanceTimingConfigService _timingConfigService;
 
-        public AttendanceTimingConfigController(IAttendanceTimingConfigService timingConfigService)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public AttendanceTimingConfigController(IAttendanceTimingConfigService timingConfigService, IRealtimeEventService? realtimeEventService = null)
         {
             _timingConfigService = timingConfigService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet]
@@ -120,6 +123,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var created = await _timingConfigService.CreateConfigAsync(request, ct);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("AttendanceTiming", "Created", null, created?.Id.ToString());
+                }
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, new
                 {
                     success = true,
@@ -155,6 +162,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var updated = await _timingConfigService.UpdateConfigAsync(id, request, ct);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("AttendanceTiming", "Updated", null, id.ToString());
+                }
                 if (updated == null)
                 {
                     return NotFound(new
@@ -189,6 +200,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _timingConfigService.DeleteConfigAsync(id, ct);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("AttendanceTiming", "Deleted", null, id.ToString());
+                }
 
                 return Ok(new
                 {

@@ -45,6 +45,8 @@ namespace CollegeManagement.API.DTOs.Settings
         [Range(1, int.MaxValue)]
         public int StartNumber { get; set; } = 1;
 
+        public int? CurrentSequence { get; set; }
+
         [MaxLength(500)]
         public string? Description { get; set; }
 
