@@ -534,6 +534,7 @@ public class FeeRepository : IFeeRepository
         int? boardId = null)
     {
         var c = Connection();
+        var collegeId = ResolveCollegeId();
         return await c.QueryAsync<StudentFeeLedgerResponse>(
             "sp_StudentFee_GetLedger",
             new
@@ -545,7 +546,8 @@ public class FeeRepository : IFeeRepository
                 p_PaymentPlan = paymentPlan,
                 p_Status = status,
                 p_Search = search,
-                p_BoardId = boardId
+                p_BoardId = boardId,
+                p_CollegeId = collegeId
             },
             commandType: CommandType.StoredProcedure);
     }

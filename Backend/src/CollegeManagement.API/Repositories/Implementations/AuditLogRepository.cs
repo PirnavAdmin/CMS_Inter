@@ -17,10 +17,20 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class AuditLogRepository : IAuditLogRepository
     {
         private readonly AppDbContext _context;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
-        public AuditLogRepository(AppDbContext context)
+        public AuditLogRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return 1;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -150,6 +160,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             pagedParams.Add("p_CorrelationId", string.IsNullOrWhiteSpace(correlationId) ? null : correlationId.Trim());
             pagedParams.Add("p_PageNumber", pageNumber < 1 ? 1 : pageNumber);
             pagedParams.Add("p_PageSize", pageSize < 1 ? 50 : pageSize);
+            pagedParams.Add("p_CollegeId", ResolveCollegeId());
 
             int totalCount = 0;
             List<AuditLog> entities = new List<AuditLog>();
@@ -165,7 +176,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var stats = new AuditLogStatsDto();
             var distinctModules = new List<string>();
 
-            using (var statsMulti = await conn.QueryMultipleAsync("sp_GetAuditLogStatsToday", commandType: CommandType.StoredProcedure))
+            using (var statsMulti = await conn.QueryMultipleAsync("sp_GetAuditLogStatsToday", new { p_CollegeId = ResolveCollegeId() }, commandType: CommandType.StoredProcedure))
             {
                 var summary = await statsMulti.ReadFirstOrDefaultAsync<dynamic>();
                 if (summary != null)

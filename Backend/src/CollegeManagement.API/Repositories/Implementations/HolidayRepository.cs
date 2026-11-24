@@ -50,7 +50,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     p_CampusId = campusId ?? 0,
                     p_AcademicYearId = academicYearId ?? 0,
-                    p_BoardId = boardId ?? 0
+                    p_BoardId = boardId ?? 0,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -279,7 +280,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_CampusId = 0,
                     p_BoardId = boardId ?? 0,
                     p_AcademicYearId = academicYearId ?? 0,
-                    p_AppliesTo = appliesTo ?? ""
+                    p_AppliesTo = appliesTo ?? "",
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
