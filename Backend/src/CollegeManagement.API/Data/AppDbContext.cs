@@ -1712,7 +1712,7 @@ namespace CollegeManagement.API.Data
             {
                 entity.ToTable("NumberSeriesConfigurations");
                 entity.HasKey(n => n.Id);
-                entity.HasIndex(n => new { n.SeriesCode, n.CampusId }).IsUnique();
+                entity.HasIndex(n => new { n.CollegeId, n.SeriesCode, n.CampusId });
             });
             #endregion
 

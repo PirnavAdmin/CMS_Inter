@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -28,17 +29,34 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly IStaffAttendanceService? _staffAttendanceService;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public ReimbursementController(
             IReimbursementService service,
             IJwtTokenHelper jwtTokenHelper,
             IStaffAttendanceService? staffAttendanceService = null,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _staffAttendanceService = staffAttendanceService;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishReimbursementChange(string action, int? campusId = null, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Reimbursements",
+                    Action = action,
+                    CampusId = ResolveCampusId(campusId),
+                    EntityId = entityId
+                });
+            }
         }
 
         private (int UserId, int? StaffId, bool IsPrivileged) GetCallerIdentity()
@@ -191,6 +209,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
                 catch { }
             }
+            PublishReimbursementChange("Created", request.CampusId, result?.Id.ToString());
             return Ok(new { Status = true, Message = "Reimbursement claim submitted successfully.", Data = result });
         }
 
@@ -336,6 +355,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("Approved", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Claim approved successfully.", AccountRef = accountRef });
         }
 
@@ -376,6 +396,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("ClarificationRequested", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Clarification requested. Status updated to Under Review." });
         }
 
@@ -416,6 +437,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("Rejected", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Claim rejected successfully." });
         }
 
@@ -456,6 +478,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("MarkedPaid", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Claim marked as paid successfully." });
         }
 
@@ -488,6 +511,7 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var filePath = await _service.UploadProofAsync(id, file);
+            PublishReimbursementChange("ProofUploaded", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Proof document uploaded successfully.", Data = filePath });
         }
 

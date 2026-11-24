@@ -6,6 +6,7 @@ using CollegeManagement.API.DTOs.Students.Responses;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Services;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
@@ -34,19 +35,22 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IStudentImportService _importService;
         private readonly CollegeManagement.API.Helpers.IJwtTokenHelper _jwtTokenHelper;
         private readonly IAuthService _authService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public StudentsController(
             IStudentService service,
             IStudentExportService exportService,
             IStudentImportService importService,
             CollegeManagement.API.Helpers.IJwtTokenHelper jwtTokenHelper,
-            IAuthService? authService = null)
+            IAuthService? authService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _exportService = exportService;
             _importService = importService;
             _jwtTokenHelper = jwtTokenHelper;
             _authService = authService!;
+            _realtimeEventService = realtimeEventService;
         }
 
         private int GetCurrentStudentId()
@@ -374,6 +378,17 @@ namespace CollegeManagement.API.Controllers.V1
 
             var result = await _service.CreateAsync(request);
 
+            if (_realtimeEventService != null && result != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Students",
+                    Action = "Created",
+                    CampusId = result.CampusId,
+                    EntityId = result.StudentId.ToString()
+                });
+            }
+
             return Ok(result);
         }
 
@@ -400,6 +415,17 @@ namespace CollegeManagement.API.Controllers.V1
                     message = "Student not found"
                 });
 
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Students",
+                    Action = "Updated",
+                    CampusId = result.CampusId,
+                    EntityId = studentId.ToString()
+                });
+            }
+
             return Ok(result);
         }
 
@@ -418,6 +444,16 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     message = "Student not found"
                 });
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Students",
+                    Action = "Deleted",
+                    EntityId = studentId.ToString()
+                });
+            }
 
             return Ok(new
             {
@@ -466,6 +502,16 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     message = "Student not found"
                 });
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Students",
+                    Action = "ProfileUpdated",
+                    EntityId = studentId.ToString()
+                });
+            }
 
             return Ok(result);
         }
@@ -601,6 +647,16 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     message = "Failed to activate student"
                 });
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Students",
+                    Action = "Activated",
+                    EntityId = studentId.ToString()
+                });
+            }
 
             return Ok(new
             {

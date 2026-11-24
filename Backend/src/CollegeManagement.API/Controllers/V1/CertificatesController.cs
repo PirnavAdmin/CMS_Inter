@@ -26,16 +26,20 @@ public class CertificatesController : ControllerBase
     private readonly ICertificateExportService _exportService;
     private readonly INotificationService _notificationService;
 
+    private readonly IRealtimeEventService? _realtimeEventService;
+
     public CertificatesController(
         ICertificateService service, 
         ITemplateService templateService,
         ICertificateExportService exportService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IRealtimeEventService? realtimeEventService = null)
     {
         _service = service;
         _templateService = templateService;
         _exportService = exportService;
         _notificationService = notificationService;
+        _realtimeEventService = realtimeEventService;
     }
 
     private int? GetCampusIdFromRequest(int? queryCampusId)
@@ -242,6 +246,11 @@ public class CertificatesController : ControllerBase
             if (result == null)
                 return BadRequest(new { message = $"Unable to generate {request.CertificateType} certificate for AdmissionNo '{request.AdmissionNo}'." });
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Certificates", "Generated", result.CampusId, result.CertificateId.ToString());
+            }
+
             return Ok(result);
         }
         catch (Exception ex)
@@ -361,6 +370,11 @@ public class CertificatesController : ControllerBase
         var success = await _service.MoveStatusAsync(id, "Reviewed", userName, ct);
         if (!success) return NotFound(new { message = "Certificate not found" });
 
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "Reviewed", null, id.ToString());
+        }
+
         return Ok(new { success = true, message = "Certificate reviewed successfully" });
     }
 
@@ -436,6 +450,11 @@ public class CertificatesController : ControllerBase
         }
         catch { }
 
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "Approved", null, id.ToString());
+        }
+
         return Ok(new { success = true, message = "Certificate approved successfully" });
     }
 
@@ -481,6 +500,11 @@ public class CertificatesController : ControllerBase
             }
             catch { }
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Certificates", "Issued", null, id.ToString());
+            }
+
             return Ok(new { success = true, message = "Certificate issued successfully" });
         }
         catch (InvalidOperationException ex)
@@ -499,6 +523,10 @@ public class CertificatesController : ControllerBase
         campusId = GetCampusIdFromRequest(campusId);
         var userName = GetCurrentUserName("Admin");
         var affected = await _service.BulkReviewAsync(userName, campusId, ct);
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "BulkReviewed", campusId);
+        }
         return Ok(new { success = true, count = affected, message = $"{affected} certificate(s) reviewed successfully." });
     }
 
@@ -512,6 +540,10 @@ public class CertificatesController : ControllerBase
         campusId = GetCampusIdFromRequest(campusId);
         var userName = GetCurrentUserName("Principal");
         var affected = await _service.BulkApproveAsync(userName, campusId, ct);
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "BulkApproved", campusId);
+        }
         return Ok(new { success = true, count = affected, message = $"{affected} certificate(s) approved successfully." });
     }
 
@@ -525,6 +557,10 @@ public class CertificatesController : ControllerBase
         campusId = GetCampusIdFromRequest(campusId);
         var issuer = issuedBy ?? GetCurrentUserName("Principal");
         var affected = await _service.BulkIssueAsync(issuer, campusId, ct);
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "BulkIssued", campusId);
+        }
         return Ok(new { success = true, count = affected, message = $"{affected} certificate(s) issued successfully." });
     }
 
@@ -588,6 +624,11 @@ public class CertificatesController : ControllerBase
         var success = await _service.CancelAsync(id, ct);
         if (!success) return NotFound(new { message = "Certificate not found" });
 
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "Cancelled", null, id.ToString());
+        }
+
         return Ok(new { success = true, message = "Certificate cancelled successfully" });
     }
 
@@ -602,6 +643,11 @@ public class CertificatesController : ControllerBase
 
         var success = await _service.DeleteAsync(id, ct);
         if (!success) return NotFound(new { message = "Certificate not found" });
+
+        if (_realtimeEventService != null)
+        {
+            await _realtimeEventService.PublishDomainChangeAsync("Certificates", "Deleted", null, id.ToString());
+        }
 
         return Ok(new { success = true, message = "Certificate deleted successfully" });
     }

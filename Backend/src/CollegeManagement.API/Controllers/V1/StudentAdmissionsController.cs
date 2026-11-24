@@ -2,6 +2,7 @@ using Asp.Versioning;
 using CollegeManagement.API.DTOs.StudentAdmission;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -20,13 +21,16 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IStudentAdmissionService _service;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public StudentAdmissionController(
             IStudentAdmissionService service,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         // =========================================================
@@ -123,6 +127,17 @@ namespace CollegeManagement.API.Controllers.V1
                             $"/dashboard/admission?view=preview&admissionId={result.AdmissionId}");
                     }
                     catch { }
+                }
+
+                if (_realtimeEventService != null && result != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "Created",
+                        CampusId = result.CampusId,
+                        EntityId = result.AdmissionId.ToString()
+                    });
                 }
 
                 return CreatedAtAction(
@@ -380,6 +395,16 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "Verified",
+                        EntityId = id.ToString()
+                    });
+                }
+
                 return Ok(new
                 {
                     statusCode = 200,
@@ -416,6 +441,15 @@ namespace CollegeManagement.API.Controllers.V1
                 var remarks = request?.Remarks;
                 var success = await _service.ApproveAdmissionRequestAsync(id, remarks);
                 if (!success) return BadRequest(new { message = "Could not approve request." });
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "RequestApproved",
+                        EntityId = id.ToString()
+                    });
+                }
                 return Ok(new { message = "Request approved successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -440,6 +474,15 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var success = await _service.RejectAdmissionRequestAsync(id, request.RejectionReason.Trim(), request.Remarks);
                 if (!success) return BadRequest(new { message = "Could not reject request." });
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "RequestRejected",
+                        EntityId = id.ToString()
+                    });
+                }
                 return Ok(new { message = "Request rejected successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -497,6 +540,17 @@ namespace CollegeManagement.API.Controllers.V1
                             $"/dashboard/admission?view=preview&admissionId={id}");
                     }
                     catch { }
+                }
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "Approved",
+                        CampusId = admission?.CampusId,
+                        EntityId = id.ToString()
+                    });
                 }
 
                 return Ok(new
@@ -651,6 +705,16 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "Rejected",
+                        EntityId = id.ToString()
+                    });
+                }
+
                 return Ok(new
                 {
                     statusCode = 200,
@@ -707,6 +771,16 @@ namespace CollegeManagement.API.Controllers.V1
                     });
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "SectionAllocated",
+                        EntityId = id.ToString()
+                    });
+                }
+
                 return Ok(new
                 {
                     statusCode = 200,
@@ -749,6 +823,15 @@ namespace CollegeManagement.API.Controllers.V1
                 var count =
                     await _service
                         .BulkAllocateSectionAsync(request);
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "BulkSectionAllocated"
+                    });
+                }
 
                 return Ok(new
                 {
@@ -848,6 +931,15 @@ namespace CollegeManagement.API.Controllers.V1
                     await _service
                         .BulkAllocateRollNumbersAsync(
                             request);
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Admissions",
+                        Action = "BulkRollNumbersAllocated"
+                    });
+                }
 
                 return Ok(new
                 {

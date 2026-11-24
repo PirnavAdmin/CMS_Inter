@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import DataTable from "@/shared/components/DataTable.jsx";
@@ -75,6 +76,11 @@ function Section({ slug, config, secondary, onToast, heading, onView }) {
   const [filterFields, setFilterFields] = useState(sectionConfig.filters || []);
   const [statusFilter, setStatusFilter] = useState(null);
   const navigate = useNavigate();
+
+  const liveModuleName = sectionConfig?.module || (slug === "academic-years" ? "AcademicYears" : slug === "boards" ? "Boards" : null);
+  useLiveModuleSync(liveModuleName, () => {
+    loadRows(search, filters);
+  }, { enabled: Boolean(liveModuleName && usesApi) });
 
   const loadRows = useCallback(async (nextSearch = "", nextFilters = {}) => {
     if (!usesApi) return;

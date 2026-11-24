@@ -12,7 +12,7 @@ using CollegeManagement.API.Filters;
 
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services;
-
+using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 
 using Microsoft.AspNetCore.Mvc;
@@ -40,13 +40,13 @@ namespace CollegeManagement.API.Controllers
         private readonly IGroupService _groupService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public GroupsController(IGroupService groupService, IJwtTokenHelper jwtTokenHelper)
+        private readonly IRealtimeEventService? _realtimeEventService;
 
+        public GroupsController(IGroupService groupService, IJwtTokenHelper jwtTokenHelper, IRealtimeEventService? realtimeEventService = null)
         {
-
             _groupService = groupService;
             _jwtTokenHelper = jwtTokenHelper;
-
+            _realtimeEventService = realtimeEventService;
         }
 
         private int? ResolveCollegeId()
@@ -264,8 +264,12 @@ namespace CollegeManagement.API.Controllers
                 HttpContext.RequestAborted);
 
             if (!updated)
-
                 throw new NotFoundException("Group not found");
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Courses", "ProgramsUpdated", ResolveCollegeId(), groupId.ToString());
+            }
 
             return Ok(new
 
@@ -417,12 +421,14 @@ namespace CollegeManagement.API.Controllers
 
                         HttpContext.RequestAborted);
 
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Courses", "Created", ResolveCollegeId(), group.GroupId.ToString());
+                }
+
                 return CreatedAtAction(
-
                     nameof(GetGroup),
-
                     new { groupId = group.GroupId },
-
                     new
 
                     {
@@ -488,8 +494,12 @@ namespace CollegeManagement.API.Controllers
                         HttpContext.RequestAborted);
 
                 if (group == null)
-
                     throw new NotFoundException("Group not found");
+
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Courses", "Updated", ResolveCollegeId(), group.GroupId.ToString());
+                }
 
                 return Ok(new
 
@@ -548,8 +558,12 @@ namespace CollegeManagement.API.Controllers
                         HttpContext.RequestAborted);
 
                 if (!deleted)
-
                     throw new NotFoundException("Group not found");
+
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Courses", "Deleted", ResolveCollegeId(), groupId.ToString());
+                }
 
                 return Ok(new
 
@@ -622,8 +636,12 @@ namespace CollegeManagement.API.Controllers
                     HttpContext.RequestAborted);
 
             if (!success)
-
                 throw new NotFoundException("Group not found");
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Courses", isActive ? "Activated" : "Deactivated", ResolveCollegeId(), groupId.ToString());
+            }
 
             return Ok(new
 

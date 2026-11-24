@@ -5,6 +5,7 @@ import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { Modal, SkeletonPage } from "@/shared/components/Ui.jsx";
 import { attendanceService } from "@/api/attendanceService.js";
 import { getApiErrorMessage } from "@/api/apiClient.js";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const toUtcDate = (raw) => {
   if (!raw) return null;
@@ -250,6 +251,15 @@ export default function StaffRegularizePanel({ departments = [], campusId, onNot
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  // Live automatic event-driven synchronization with zero periodic polling
+  useLiveModuleSync({
+    moduleName: "Attendance",
+    onRefresh: () => {
+      loadPending();
+      loadHistory();
+    },
+  });
 
   // Real-time refresh when SignalR / notification click arrives on this admin session
   useEffect(() => {

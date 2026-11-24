@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Filters;
 using CollegeManagement.API.Helpers;
@@ -26,6 +27,7 @@ namespace CollegeManagement.API.Controllers
         private readonly IUserRepository? _userRepository;
         private readonly IPermissionRepository? _permissionRepository;
         private readonly AppDbContext? _db;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public PayrollController(
             IPayrollService payrollService,
@@ -33,7 +35,8 @@ namespace CollegeManagement.API.Controllers
             IJwtTokenHelper? jwtTokenHelper = null,
             IUserRepository? userRepository = null,
             IPermissionRepository? permissionRepository = null,
-            AppDbContext? db = null)
+            AppDbContext? db = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _payrollService = payrollService;
             _notificationService = notificationService;
@@ -41,6 +44,21 @@ namespace CollegeManagement.API.Controllers
             _userRepository = userRepository;
             _permissionRepository = permissionRepository;
             _db = db;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishPayrollChange(string action, int? campusId = null, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Payroll",
+                    Action = action,
+                    CampusId = ResolveCampusId(campusId),
+                    EntityId = entityId
+                });
+            }
         }
 
         private int? ResolveCampusId(int? explicitlyProvided = null)
@@ -230,6 +248,7 @@ namespace CollegeManagement.API.Controllers
             var id =
                 await _payrollService.CreateSalaryStructureAsync(request);
 
+            PublishPayrollChange("StructureCreated", entityId: id.ToString());
             return Ok(new
             {
                 Id = id,
@@ -256,6 +275,7 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            PublishPayrollChange("StructureUpdated", entityId: id.ToString());
             return Ok(new
             {
                 Message = "Salary structure updated successfully."
@@ -277,6 +297,7 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            PublishPayrollChange("StructureDeleted", entityId: id.ToString());
             return Ok(new
             {
                 Message = "Salary structure deleted successfully."
@@ -371,6 +392,7 @@ namespace CollegeManagement.API.Controllers
             var assignmentId =
                 await _payrollService.AssignSalaryStructureAsync(request);
 
+            PublishPayrollChange("StructureAssigned", entityId: assignmentId.ToString());
             return Ok(new
             {
                 AssignmentId = assignmentId,
@@ -413,6 +435,7 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            PublishPayrollChange("AssignmentUpdated", entityId: id.ToString());
             return Ok(new
             {
                 Message = "Salary assignment updated successfully."
@@ -442,6 +465,7 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            PublishPayrollChange("AssignmentDeleted", entityId: id.ToString());
             return Ok(new
             {
                 Message = "Salary assignment deleted successfully."
@@ -484,6 +508,7 @@ namespace CollegeManagement.API.Controllers
                 });
             }
 
+            PublishPayrollChange("AssignmentStatusChanged", entityId: id.ToString());
             return Ok(new
             {
                 Message =
@@ -541,6 +566,7 @@ namespace CollegeManagement.API.Controllers
                 catch { }
             }
 
+            PublishPayrollChange("PayslipGenerated", entityId: payslipId.ToString());
             return Ok(new
             {
                 PayslipId = payslipId,
@@ -609,6 +635,7 @@ namespace CollegeManagement.API.Controllers
                 catch { }
             }
 
+            PublishPayrollChange("BulkPayslipsGenerated");
             return Ok(new
             {
                 PayslipIds = payslipIds,
@@ -1057,6 +1084,7 @@ namespace CollegeManagement.API.Controllers
                 catch { }
             }
 
+            PublishPayrollChange("RevisionRequested", entityId: revisionId.ToString());
             return Ok(new
             {
                 RevisionId = revisionId,
@@ -1118,6 +1146,7 @@ namespace CollegeManagement.API.Controllers
                 catch { }
             }
 
+            PublishPayrollChange("RevisionApproved", entityId: id.ToString());
             return Ok(new
             {
                 Message = "Salary revision approved successfully."
@@ -1188,6 +1217,7 @@ namespace CollegeManagement.API.Controllers
                 return BadRequest(new { Message = "Valid BonusYear is required." });
 
             var bonusId = await _payrollService.CreateBonusAsync(request);
+            PublishPayrollChange("BonusRequested", entityId: bonusId.ToString());
             return Ok(new
             {
                 BonusId = bonusId,
@@ -1218,6 +1248,7 @@ namespace CollegeManagement.API.Controllers
                     Message = "Bonus not found or could not be approved."
                 });
 
+            PublishPayrollChange("BonusApproved", entityId: id.ToString());
             return Ok(new { Message = "Bonus approved successfully." });
         }
 
@@ -1299,6 +1330,7 @@ namespace CollegeManagement.API.Controllers
                 return BadRequest(new { Message = "Valid StartYear is required." });
 
             var advanceId = await _payrollService.CreateAdvanceAsync(request);
+            PublishPayrollChange("AdvanceRequested", entityId: advanceId.ToString());
             return Ok(new
             {
                 AdvanceId = advanceId,

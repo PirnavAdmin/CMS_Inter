@@ -7,6 +7,7 @@ import { useFinancePage, rowsOf } from "../services/accountantService.js";
 import { loadFeeOverview } from "../services/accountantService.js";
 import { feeCompactMoney, feeDate, feeMoney, feeText, pageOf, readFee, splitFeeSchedules } from "../utils/feeViewData.js";
 import { FeeBadge, FeeCard, FeeLoadState, FeeNotice, FeePagination, FeeTable } from "./AccountantUI.jsx";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const overviewTabs = [["overdue", "Overdue Fees", AlertCircle], ["upcoming", "Upcoming Fee Schedules", CalendarClock], ["recent", "Recent Payments", ReceiptText]];
 const colors = ["var(--cms-primary)", "var(--cms-green)", "var(--cms-amber)"];
@@ -26,6 +27,14 @@ export default function AccountantFeeOverview({ params }) {
   const [group, setGroup] = useState("");
   const load = useCallback((signal) => loadFeeOverview(params, signal), [params]);
   const state = useFinancePage(load);
+
+  // Live automatic event-driven synchronization with zero periodic polling
+  useLiveModuleSync({
+    moduleName: "Fees",
+    onRefresh: () => {
+      state.reload?.();
+    },
+  });
   const dashboard = state.data?.dashboard;
   const due = state.data?.due ?? (dashboard ? rowsOf(readFee(dashboard, "upcomingSchedules")) : []);
   const now = new Date();

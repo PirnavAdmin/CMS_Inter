@@ -4,6 +4,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
@@ -28,19 +29,22 @@ public class FeeController : ControllerBase
     private readonly IPaymentSettlementService? _settlementService;
     private readonly AppDbContext? _dbContext;
     private readonly ICampusAuthorizationService? _campusAuthService;
+    private readonly IRealtimeEventService? _realtimeEventService;
 
     public FeeController(
         IFeeService service,
         INotificationService? notificationService = null,
         IPaymentSettlementService? settlementService = null,
         AppDbContext? dbContext = null,
-        ICampusAuthorizationService? campusAuthService = null)
+        ICampusAuthorizationService? campusAuthService = null,
+        IRealtimeEventService? realtimeEventService = null)
     {
         _service = service;
         _notificationService = notificationService;
         _settlementService = settlementService;
         _dbContext = dbContext;
         _campusAuthService = campusAuthService;
+        _realtimeEventService = realtimeEventService;
     }
 
     private bool IsPrivilegedStaff()
@@ -178,7 +182,21 @@ public class FeeController : ControllerBase
     // ---------------- Fee Structures ----------------
     /// <summary>Create a fee structure for Board, Academic Year, Group and optional Program.</summary>
     [HttpPost("structures")]
-    public async Task<IActionResult> CreateFeeStructure(CreateFeeStructureRequest request) => Ok(await _service.CreateFeeStructureAsync(request));
+    public async Task<IActionResult> CreateFeeStructure(CreateFeeStructureRequest request)
+    {
+        var result = await _service.CreateFeeStructureAsync(request);
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "StructureCreated",
+                CampusId = request.CampusId,
+                EntityId = result?.FeeStructureId.ToString()
+            });
+        }
+        return Ok(result);
+    }
 
     /// <summary>List configured fee structures with configured fee types and total fee.</summary>
     [HttpGet("structures")]
@@ -201,15 +219,54 @@ public class FeeController : ControllerBase
 
     /// <summary>Update fee structure program or active status.</summary>
     [HttpPut("structures/{id:int}")]
-    public async Task<IActionResult> UpdateFeeStructure(int id, UpdateFeeStructureRequest request) => Ok(await _service.UpdateFeeStructureAsync(id, request));
+    public async Task<IActionResult> UpdateFeeStructure(int id, UpdateFeeStructureRequest request)
+    {
+        var result = await _service.UpdateFeeStructureAsync(id, request);
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "StructureUpdated",
+                EntityId = id.ToString()
+            });
+        }
+        return Ok(result);
+    }
 
     /// <summary>Deactivate a fee structure.</summary>
     [HttpDelete("structures/{id:int}")]
-    public async Task<IActionResult> DeleteFeeStructure(int id) => Ok(new { success = await _service.DeleteFeeStructureAsync(id) });
+    public async Task<IActionResult> DeleteFeeStructure(int id)
+    {
+        var success = await _service.DeleteFeeStructureAsync(id);
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "StructureDeleted",
+                EntityId = id.ToString()
+            });
+        }
+        return Ok(new { success });
+    }
 
     /// <summary>Add a fee type and amount to an existing fee structure.</summary>
     [HttpPost("structures/{id:int}/items")]
-    public async Task<IActionResult> AddStructureItem(int id, CreateFeeStructureItemRequest request) => Ok(await _service.AddFeeStructureItemAsync(id, request));
+    public async Task<IActionResult> AddStructureItem(int id, CreateFeeStructureItemRequest request)
+    {
+        var result = await _service.AddFeeStructureItemAsync(id, request);
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "StructureItemAdded",
+                EntityId = id.ToString()
+            });
+        }
+        return Ok(result);
+    }
 
     /// <summary>Get configured fee types for one fee structure.</summary>
     [HttpGet("structures/{id:int}/items")]
@@ -217,11 +274,37 @@ public class FeeController : ControllerBase
 
     /// <summary>Update amount or Mandatory/Optional rule of a configured fee type.</summary>
     [HttpPut("items/{id:int}")]
-    public async Task<IActionResult> UpdateStructureItem(int id, UpdateFeeStructureItemRequest request) => Ok(await _service.UpdateFeeStructureItemAsync(id, request));
+    public async Task<IActionResult> UpdateStructureItem(int id, UpdateFeeStructureItemRequest request)
+    {
+        var result = await _service.UpdateFeeStructureItemAsync(id, request);
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "StructureItemUpdated",
+                EntityId = id.ToString()
+            });
+        }
+        return Ok(result);
+    }
 
     /// <summary>Deactivate a configured fee type from a structure.</summary>
     [HttpDelete("items/{id:int}")]
-    public async Task<IActionResult> DeleteStructureItem(int id) => Ok(new { success = await _service.DeleteFeeStructureItemAsync(id) });
+    public async Task<IActionResult> DeleteStructureItem(int id)
+    {
+        var success = await _service.DeleteFeeStructureItemAsync(id);
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "StructureItemDeleted",
+                EntityId = id.ToString()
+            });
+        }
+        return Ok(new { success });
+    }
 
     // ---------------- Scholarships ----------------
     /// <summary>Add a scholarship or concession scheme to Fee Setup.</summary>
@@ -252,6 +335,16 @@ public class FeeController : ControllerBase
         var (ok, err) = await EnsureAuthorizedForStudentCampusAsync(request.StudentId);
         if (!ok) return err!;
         var result = await _service.AssignStudentFeeAsync(request);
+
+        if (_realtimeEventService != null && result != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "FeeAssigned",
+                EntityId = request.StudentId.ToString()
+            });
+        }
 
         if (_notificationService != null && request.StudentId > 0 && result != null)
         {
@@ -345,6 +438,16 @@ public class FeeController : ControllerBase
     {
         var result = await _service.ApplyFeeConcessionAsync(request);
 
+        if (_realtimeEventService != null && result != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "ConcessionApplied",
+                EntityId = request.StudentId.ToString()
+            });
+        }
+
         if (_notificationService != null && request.StudentId > 0 && result != null)
         {
             try
@@ -425,6 +528,17 @@ public class FeeController : ControllerBase
 
         request.CollectedBy ??= GetCurrentUserId();
         var fallbackResult = await _service.CreateFeePaymentAsync(request);
+
+        if (_realtimeEventService != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "PaymentCollected",
+                EntityId = request.StudentId.ToString()
+            });
+        }
+
         return Ok(fallbackResult);
     }
 
@@ -557,7 +671,7 @@ public class FeeController : ControllerBase
         var (ok, effectiveCampusId, err) = await ResolveCampusScopeAsync(campusId);
         if (!ok) return err!;
         return Ok(await _service.GetMonthlyReportAsync(effectiveCampusId, year, month));
-    }
+    }
 
     /// <summary>Send fee payment reminder to student and parents.</summary>
     [HttpPost("students/{studentId:int}/send-reminder")]

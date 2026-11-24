@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Services.Interfaces;
 using CollegeManagement.API.Services.Interfaces.Hostel;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Cors;
 using CollegeManagement.API.Filters;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +29,7 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IHostelDashboardService _hostelDashboardService;
         private readonly IHostelReportService _hostelReportService;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public HostelController(
             IHostelBlockService hostelBlockService,
@@ -41,8 +43,10 @@ namespace CollegeManagement.API.Controllers.V1
             IHostelTransferVacateService hostelTransferVacateService,
             IHostelDashboardService hostelDashboardService,
             IHostelReportService hostelReportService,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
+            _realtimeEventService = realtimeEventService;
             _hostelBlockService = hostelBlockService;
             _roomTypeConfigService = roomTypeConfigService;
             _roomMasterService = roomMasterService;
@@ -777,6 +781,16 @@ namespace CollegeManagement.API.Controllers.V1
                 });
             }
 
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Hostel",
+                    Action = "AllocationCreated",
+                    EntityId = dto.StudentId.ToString()
+                });
+            }
+
             return Ok(new
             {
                 success = true,
@@ -825,6 +839,16 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     success = false,
                     message = result.Message
+                });
+            }
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Hostel",
+                    Action = "AllocationVacated",
+                    EntityId = id.ToString()
                 });
             }
 
@@ -1172,6 +1196,16 @@ namespace CollegeManagement.API.Controllers.V1
                         "/parent/hostel");
                 }
                 catch { }
+            }
+
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Hostel",
+                    Action = "OutpassApprovalChanged",
+                    EntityId = id.ToString()
+                });
             }
 
             return Ok(new

@@ -18,9 +18,12 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IRoleManagementService _roleManagementService;
 
-        public RoleManagementController(IRoleManagementService roleManagementService)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public RoleManagementController(IRoleManagementService roleManagementService, IRealtimeEventService? realtimeEventService = null)
         {
             _roleManagementService = roleManagementService;
+            _realtimeEventService = realtimeEventService;
         }
 
         #region Standard Role CRUD & Cards
@@ -130,7 +133,6 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var role = await _roleManagementService.GetRoleByIdAsync(id);
             if (role == null) return NotFound(new { success = false, message = "Role not found" });
-
             return Ok(new { success = true, data = role });
         }
 
@@ -144,6 +146,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var role = await _roleManagementService.CreateRoleAsync(request);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Roles", "Created", null, role.RoleId.ToString());
+                }
                 return CreatedAtAction(nameof(GetRoleById), new { id = role.RoleId }, new { success = true, data = role });
             }
             catch (Exception ex)
@@ -185,6 +191,11 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var success = await _roleManagementService.DeleteRoleAsync(id);
                 if (!success) return NotFound(new { success = false, message = "Role not found" });
+
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Roles", "Deleted", null, id.ToString());
+                }
 
                 return Ok(new { success = true, message = "Role deleted successfully" });
             }
@@ -237,6 +248,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var success = await _roleManagementService.UpdateRolePermissionsAsync(roleId, request);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Roles", "PermissionsUpdated", null, roleId.ToString());
+                }
                 return Ok(new { success = true, message = "Permissions updated successfully" });
             }
             catch (KeyNotFoundException ex)
@@ -301,6 +316,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var success = await _roleManagementService.AssignUserRoleAsync(userId, request.RoleId, request.RoleCode);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Roles", "UserAssigned", null, userId.ToString());
+                }
                 return Ok(new { success = true, message = "Role assigned successfully" });
             }
             catch (KeyNotFoundException ex)
@@ -324,6 +343,10 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var success = await _roleManagementService.RemoveUserRoleAsync(userId, roleCode);
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Roles", "UserRemoved", null, userId.ToString());
+                }
                 return Ok(new { success = true, message = "Role removed successfully" });
             }
             catch (KeyNotFoundException ex)

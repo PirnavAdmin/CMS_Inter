@@ -67,6 +67,7 @@ export async function updateNumberSeries(seriesCode, configData, campusId) {
     formatPattern: configData.formatPattern ?? configData.format ?? "",
     numberLength: Number(configData.numberLength ?? 4),
     startNumber: Number(configData.startNumber ?? 1),
+    currentSequence: configData.currentSequence !== undefined ? Number(configData.currentSequence) : undefined,
     description: configData.description ?? "",
     isActive: configData.isActive !== undefined ? configData.isActive : true,
     seriesName: configData.seriesName || configData.name || "",

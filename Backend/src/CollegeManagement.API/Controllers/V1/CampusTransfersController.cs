@@ -19,11 +19,13 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly ICampusTransferService _service;
         private readonly IFeeService _feeService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public CampusTransfersController(ICampusTransferService service, IFeeService feeService)
+        public CampusTransfersController(ICampusTransferService service, IFeeService feeService, IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _feeService = feeService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet("{id}/fee-preview")]
@@ -45,6 +47,8 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var id = await _service.CreateTransferRequestAsync(dto, GetCurrentUserId(), cancellationToken);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Students", "transfer-request", dto.ToCampusId, id.ToString());
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Promotions", "transfer-request", dto.ToCampusId, id.ToString());
                 return Ok(new { Message = "Transfer request created successfully", TransferId = id });
             }
             catch (Exception ex) when (ex.Message.Contains("BOARD_MISMATCH"))
@@ -90,6 +94,8 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _service.ApproveTransferAsync(id, GetCurrentUserId(), dto, cancellationToken);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Students", "transfer-approve", null, id.ToString());
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Promotions", "transfer-approve", null, id.ToString());
                 return Ok(new { Message = "Transfer approved successfully" });
             }
             catch (Exception ex)
@@ -107,6 +113,8 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _service.RejectTransferAsync(id, GetCurrentUserId(), dto, cancellationToken);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Students", "transfer-reject", null, id.ToString());
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Promotions", "transfer-reject", null, id.ToString());
                 return Ok(new { Message = "Transfer rejected successfully" });
             }
             catch (Exception ex)

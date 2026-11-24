@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
@@ -173,6 +174,12 @@ export default function ReimbursementPage({ isAccountantView = false }) {
       window.removeEventListener("cms-account-updated", onUpdated);
     };
   }, [refreshData]);
+
+  useLiveModuleSync({
+    moduleName: "Reimbursements",
+    campusId,
+    onRefresh: refreshData,
+  });
 
   // Account Entries: Uses dedicated Endpoint 5 list or falls back to approved/paid claims
   const accountEntries = useMemo(() => {

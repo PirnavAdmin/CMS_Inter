@@ -1,3 +1,5 @@
+using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -29,15 +31,32 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IInventoryService _service;
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly AppDbContext? _db;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public InventoryController(
             IInventoryService service,
             IJwtTokenHelper jwtTokenHelper,
-            AppDbContext? db = null)
+            AppDbContext? db = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _db = db;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishInventoryChange(string action, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Inventory",
+                    Action = action,
+                    CollegeId = GetTenantCollegeId(),
+                    EntityId = entityId
+                });
+            }
         }
 
         private int? GetTenantCollegeId()
@@ -231,6 +250,7 @@ namespace CollegeManagement.API.Controllers.V1
                     await StampCollegeIdAsync("InventoryItems", "ItemId", item.ItemId, tenantCollegeId.Value);
                     await StampCollegeIdAsync("InventoryTransactions", "ItemId", item.ItemId, tenantCollegeId.Value);
                 }
+                PublishInventoryChange("ItemCreated", item?.ItemId.ToString());
                 return CreatedAtAction(nameof(GetItemById), new { id = item.ItemId }, new { success = true, data = item, message = "Item created successfully." });
             }
             catch (ArgumentException ex)
@@ -263,6 +283,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 var item = await _service.UpdateItemAsync(id, request, userId, userName);
+                PublishInventoryChange("ItemUpdated", id.ToString());
                 return Ok(new { success = true, data = item, message = "Item updated successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -296,6 +317,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 await _service.DeleteItemAsync(id, userId, userName);
+                PublishInventoryChange("ItemDeleted", id.ToString());
                 return Ok(new { success = true, message = "Item deleted successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -325,6 +347,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 await _service.DeactivateItemAsync(id, userId, userName);
+                PublishInventoryChange("ItemDeactivated", id.ToString());
                 return Ok(new { success = true, message = "Item deactivated successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -400,6 +423,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (tenantCollegeId.HasValue && result != null)
                     await StampCollegeIdAsync("InventoryTransactions", "TransactionId", result.TransactionId, tenantCollegeId.Value);
 
+                PublishInventoryChange("StockIn", result?.TransactionId.ToString());
                 return Ok(new { success = true, data = result, message = "Stock received and ledger updated." });
             }
             catch (ArgumentException ex)
@@ -429,6 +453,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (tenantCollegeId.HasValue && result != null)
                     await StampCollegeIdAsync("InventoryTransactions", "TransactionId", result.TransactionId, tenantCollegeId.Value);
 
+                PublishInventoryChange("StockOut", result?.TransactionId.ToString());
                 return Ok(new { success = true, data = result, message = "Stock issued and ledger updated." });
             }
             catch (ArgumentException ex)
@@ -457,6 +482,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (tenantCollegeId.HasValue && correction != null)
                     await StampCollegeIdAsync("InventoryTransactions", "TransactionId", correction.TransactionId, tenantCollegeId.Value);
 
+                PublishInventoryChange("MovementReversed", id.ToString());
                 return Ok(new { success = true, data = correction, message = "Transaction reversed. Compensating entry recorded." });
             }
             catch (KeyNotFoundException ex)
@@ -546,6 +572,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (tenantCollegeId.HasValue && category != null)
                     await StampCollegeIdAsync("InventoryCategories", "CategoryId", category.CategoryId, tenantCollegeId.Value);
 
+                PublishInventoryChange("CategoryCreated", category?.CategoryId.ToString());
                 return Ok(new { success = true, data = category, message = "Category created successfully." });
             }
             catch (InvalidOperationException ex)
@@ -574,6 +601,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 var category = await _service.SaveCategoryAsync(id, request, userId, userName);
+                PublishInventoryChange("CategoryUpdated", id.ToString());
                 return Ok(new { success = true, data = category, message = "Category updated successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -603,6 +631,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 await _service.DeactivateCategoryAsync(id, userId, userName);
+                PublishInventoryChange("CategoryDeactivated", id.ToString());
                 return Ok(new { success = true, message = "Category deactivated successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -656,6 +685,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (tenantCollegeId.HasValue && supplier != null)
                     await StampCollegeIdAsync("InventorySuppliers", "SupplierId", supplier.SupplierId, tenantCollegeId.Value);
 
+                PublishInventoryChange("SupplierCreated", supplier?.SupplierId.ToString());
                 return Ok(new { success = true, data = supplier, message = "Supplier created successfully." });
             }
             catch (InvalidOperationException ex)
@@ -684,6 +714,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 var supplier = await _service.SaveSupplierAsync(id, request, userId, userName);
+                PublishInventoryChange("SupplierUpdated", id.ToString());
                 return Ok(new { success = true, data = supplier, message = "Supplier updated successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -713,6 +744,7 @@ namespace CollegeManagement.API.Controllers.V1
                 string userName = ResolveUserName();
 
                 await _service.DeactivateSupplierAsync(id, userId, userName);
+                PublishInventoryChange("SupplierDeactivated", id.ToString());
                 return Ok(new { success = true, message = "Supplier deactivated successfully." });
             }
             catch (KeyNotFoundException ex)
@@ -824,6 +856,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (tenantCollegeId.HasValue && po != null)
                     await StampCollegeIdAsync("InventoryPurchaseOrders", "OrderId", po.OrderId, tenantCollegeId.Value);
 
+                PublishInventoryChange("OrderCreated", po?.OrderId.ToString());
                 return CreatedAtAction(nameof(GetPurchaseOrderById), new { id = po.OrderId }, new { success = true, message = "Purchase order created successfully.", data = po });
             }
             catch (ArgumentException ex)
@@ -857,6 +890,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!success)
                     return NotFound(new { success = false, message = "Purchase order not found." });
 
+                PublishInventoryChange("OrderCancelled", id.ToString());
                 return Ok(new { success = true, message = "Purchase order cancelled successfully." });
             }
             catch (InvalidOperationException ex)
@@ -889,6 +923,7 @@ namespace CollegeManagement.API.Controllers.V1
                 if (!success)
                     return NotFound(new { success = false, message = "Purchase order not found." });
 
+                PublishInventoryChange("OrderStatusUpdated", id.ToString());
                 return Ok(new { success = true, message = "Purchase order status updated successfully." });
             }
             catch (InvalidOperationException ex)

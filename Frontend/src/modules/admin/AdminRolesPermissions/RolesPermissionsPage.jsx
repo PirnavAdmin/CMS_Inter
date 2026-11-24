@@ -1,5 +1,6 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
@@ -3380,6 +3381,13 @@ export default function RolesPermissionsPage() {
   useEffect(() => {
     selectedRoleIdRef.current = selectedRole?.id;
   }, [selectedRole?.id]);
+
+  useLiveModuleSync("Roles", () => {
+    refreshRoleCounts();
+    if (selectedRole && !dirty && !saving) {
+      loadPermissions(selectedRole);
+    }
+  });
 
   const refreshRoleCounts = useCallback(async () => {
     const requestId = roleCountsRequestRef.current + 1;

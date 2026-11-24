@@ -40,6 +40,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getAllTransportPages, scopeTransportRecords, scopeTransportReport, transportValue } from "./transportContext.js";
 import { normalizeDriver } from "@/modules/transport-manager/data/transportManagerModel.js";
 import "./TransportPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -2267,6 +2268,14 @@ function TransportContextPage({ navigation, onNavigate }) {
   useEffect(() => {
     refreshRef.current();
   }, [selectedCampusId, selectedBoardId, selectedAcademicYearId]);
+
+  useLiveModuleSync({
+    moduleName: "Transport",
+    campusId: selectedCampusId,
+    onRefresh: () => {
+      refreshRef.current?.();
+    }
+  });
 
   useEffect(() => {
     if (isLoading || !selectedCampusId || activeSection !== "reports") return undefined;

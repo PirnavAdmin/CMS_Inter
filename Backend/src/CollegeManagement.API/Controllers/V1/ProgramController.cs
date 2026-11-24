@@ -1,5 +1,6 @@
 ﻿using CollegeManagement.API.DTOs.Program;
 using CollegeManagement.API.Services;
+using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,10 +13,14 @@ namespace CollegeManagement.API.Controllers
     {
         private readonly IProgramService _programService;
 
+        private readonly IRealtimeEventService? _realtimeEventService;
+
         public ProgramController(
-            IProgramService programService)
+            IProgramService programService,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _programService = programService;
+            _realtimeEventService = realtimeEventService;
         }
 
 
@@ -173,6 +178,11 @@ namespace CollegeManagement.API.Controllers
                     });
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Courses", "Created", null, result.ProgramId.ToString());
+                }
+
                 return StatusCode(201, new
                 {
                     success = true,
@@ -250,6 +260,11 @@ namespace CollegeManagement.API.Controllers
                         success = false,
                         message = "Program not found."
                     });
+                }
+
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Courses", "Updated", null, programId.ToString());
                 }
 
                 return Ok(new
@@ -334,6 +349,11 @@ namespace CollegeManagement.API.Controllers
                         success = false,
                         message = "Program not found."
                     });
+                }
+
+                if (_realtimeEventService != null)
+                {
+                    await _realtimeEventService.PublishDomainChangeAsync("Courses", dto.IsActive ? "Activated" : "Deactivated", null, programId.ToString());
                 }
 
                 return Ok(new
