@@ -24,17 +24,20 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IFeeService _feeService;
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly ITenantSecurityService _securityService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public CampusTransfersController(
             ICampusTransferService service,
             IFeeService feeService,
             IJwtTokenHelper jwtTokenHelper,
-            ITenantSecurityService securityService)
+            ITenantSecurityService securityService,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _feeService = feeService;
             _jwtTokenHelper = jwtTokenHelper;
             _securityService = securityService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet("{id}/fee-preview")]
