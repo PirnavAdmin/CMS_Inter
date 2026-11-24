@@ -8,16 +8,27 @@ using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
     public class FineRuleRepository : IFineRuleRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public FineRuleRepository(AppDbContext context)
+        public FineRuleRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private IDbConnection Connection()
@@ -40,7 +51,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Status = fineRule.Status,
                     p_CampusId = fineRule.CampusId,
                     p_BoardId = fineRule.BoardId,
-                    p_AcademicYearId = fineRule.AcademicYearId
+                    p_AcademicYearId = fineRule.AcademicYearId,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -61,7 +73,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 {
                     p_CampusId = campusId ?? 0,
                     p_BoardId = boardId ?? 0,
-                    p_AcademicYearId = academicYearId ?? 0
+                    p_AcademicYearId = academicYearId ?? 0,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 splitOn: "FeeTypeId",
                 commandType: CommandType.StoredProcedure);
@@ -100,7 +113,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_Status = fineRule.Status,
                     p_CampusId = fineRule.CampusId,
                     p_BoardId = fineRule.BoardId,
-                    p_AcademicYearId = fineRule.AcademicYearId
+                    p_AcademicYearId = fineRule.AcademicYearId,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 

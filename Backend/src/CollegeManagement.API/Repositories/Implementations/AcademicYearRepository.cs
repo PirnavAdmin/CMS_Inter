@@ -21,6 +21,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             _httpContextAccessor = httpContextAccessor;
         }
 
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
+        }
+
         public async Task<IEnumerable<AcademicYear>> GetAllAsync()
         {
             return await _context.AcademicYears

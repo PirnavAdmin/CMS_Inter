@@ -11,16 +11,27 @@ using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
     public class LeaveCategoryRepository : ILeaveCategoryRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public LeaveCategoryRepository(AppDbContext context)
+        public LeaveCategoryRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -36,7 +47,9 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<LeaveCategory>> GetAllAsync(CancellationToken ct = default)
         {
             var conn = await GetOpenConnectionAsync();
-            var cmd = new CommandDefinition("sp_GetLeaveCategories", commandType: CommandType.StoredProcedure, cancellationToken: ct);
+            var parameters = new DynamicParameters();
+            parameters.Add("p_CollegeId", ResolveCollegeId());
+            var cmd = new CommandDefinition("sp_GetLeaveCategories", parameters, commandType: CommandType.StoredProcedure, cancellationToken: ct);
             var result = await conn.QueryAsync<LeaveCategory>(cmd);
             return result.ToList();
         }
@@ -82,6 +95,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_RequiresProof", category.RequiresProof ? (byte)1 : (byte)0);
             parameters.Add("p_Description", category.Description?.Trim());
             parameters.Add("p_DisplayOrder", category.DisplayOrder);
+            parameters.Add("p_CollegeId", ResolveCollegeId());
 
             var cmd = new CommandDefinition(
                 "sp_CreateLeaveCategory",

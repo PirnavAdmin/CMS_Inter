@@ -11,16 +11,27 @@ using CollegeManagement.API.Models.Reports;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations
 {
     public class AuditLogRepository : IAuditLogRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public AuditLogRepository(AppDbContext context)
+        public AuditLogRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -66,6 +77,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_RouteTemplate", auditLog.RouteTemplate);
             parameters.Add("p_HttpStatusCode", auditLog.HttpStatusCode);
             parameters.Add("p_DurationMs", auditLog.DurationMs);
+            parameters.Add("p_CollegeId", auditLog.CollegeId ?? ResolveCollegeId());
 
             var id = await conn.ExecuteScalarAsync<long>(
                 "sp_InsertAuditLog",
