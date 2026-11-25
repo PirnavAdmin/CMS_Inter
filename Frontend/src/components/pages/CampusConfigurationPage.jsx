@@ -26,6 +26,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import * as campusApi from "@/api/campusApi.js";
+import { formatProperCollegeName, validateCollegeNameCapitalization } from "@/modules/super-admin/superAdminValidation.js";
 import "./CampusConfigurationPage.css";
 
 const FALLBACK_BOARDS = [
@@ -111,6 +112,14 @@ export default function CampusConfigurationPage() {
   });
 
   const [formError, setFormError] = useState("");
+  const [phoneError, setPhoneError] = useState("");
+
+  const validatePhone = (value) => {
+    const phone = (value || "").trim();
+    return phone && !/^[0-9]{10}$/.test(phone)
+      ? "Contact phone must contain exactly 10 digits."
+      : "";
+  };
 
   // Load live statistics from /api/v1/campuses/stats
   const loadStats = useCallback(async () => {
@@ -181,7 +190,13 @@ export default function CampusConfigurationPage() {
       name: campus.name || campus.campusName || "",
       code: campus.code || campus.campusCode || "",
       address: campus.address || "",
-      phone: campus.phone || campus.contactPhone || "",
+      phone: (() => {
+      let p = campus.phone || campus.contactPhone || "";
+      const d = p.replace(/\D/g, "");
+      if (d.length === 10) return d;
+      if (d.length === 12 && d.startsWith("91")) return d.slice(2);
+      return p;
+    })(),
       email: campus.email || "",
       boards: existingBoards,
       status: (campus.status?.includes("Active") || campus.isActive) ? "Active (Displays in Header Selector)" : "Inactive",
@@ -227,8 +242,20 @@ export default function CampusConfigurationPage() {
     e.preventDefault();
     setFormError("");
 
+    const contactError = validatePhone(formData.phone);
+    setPhoneError(contactError);
+    if (contactError) {
+      document.getElementById("campusPhone")?.focus();
+      return;
+    }
+
     if (!formData.name.trim()) {
       setFormError("Campus Name is required.");
+      return;
+    }
+    const capErr = validateCollegeNameCapitalization(formData.name);
+    if (capErr) {
+      setFormError(capErr.replace(/College name/gi, "Campus Name"));
       return;
     }
     if (!formData.code.trim()) {
@@ -249,7 +276,7 @@ export default function CampusConfigurationPage() {
       .filter((id) => id != null && !isNaN(id));
 
     const payload = {
-      campusName: formData.name.trim(),
+      campusName: formatProperCollegeName(formData.name.trim()),
       campusCode: formData.code.trim().toUpperCase(),
       address: formData.address.trim(),
       contactPhone: formData.phone.trim(),
@@ -609,6 +636,7 @@ export default function CampusConfigurationPage() {
               )}
 
               <form onSubmit={handleFormSubmit} className="campus-modal-form">
+                <div className="campus-modal-body">
                 <div className="campus-modal-field">
                   <label htmlFor="campusName">
                     Campus Name <span className="star">*</span>
@@ -620,6 +648,7 @@ export default function CampusConfigurationPage() {
                     placeholder="e.g. North Branch"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onBlur={() => setFormData((prev) => ({ ...prev, name: formatProperCollegeName(prev.name || "") }))}
                     required
                   />
                 </div>
@@ -729,14 +758,29 @@ export default function CampusConfigurationPage() {
                 <div className="campus-modal-two-col">
                   <div className="campus-modal-field">
                     <label htmlFor="campusPhone">Contact Phone</label>
-                    <input
-                      id="campusPhone"
-                      type="tel"
-                      className="campus-modal-input"
-                      placeholder="+1 555-..."
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
+                    <div className="campus-phone-input-wrap" aria-invalid={Boolean(phoneError)}>
+                      <span className="campus-country-code-badge" title="India (+91)">
+                        <span>🇮🇳 +91</span>
+                      </span>
+                      <input
+                        id="campusPhone"
+                        maxLength={10}
+                        type="tel"
+                        inputMode="numeric"
+                        aria-invalid={Boolean(phoneError)}
+                        aria-describedby={phoneError ? "campus-phone-error" : undefined}
+                        className="campus-phone-input"
+                        placeholder="98765 43210"
+                        value={formData.phone}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                          setFormData((prev) => ({ ...prev, phone: val }));
+                          setPhoneError("");
+                        }}
+                        onBlur={() => setPhoneError(validatePhone(formData.phone))}
+                      />
+                    </div>
+                    {phoneError && <span id="campus-phone-error" role="alert" className="campus-phone-error">{phoneError}</span>}
                   </div>
 
                   <div className="campus-modal-field">
@@ -766,6 +810,8 @@ export default function CampusConfigurationPage() {
                     <option value="Inactive">Inactive</option>
                   </select>
                 </div>
+
+                </div> {/* End .campus-modal-body */}
 
                 <div className="campus-modal-actions">
                   <button

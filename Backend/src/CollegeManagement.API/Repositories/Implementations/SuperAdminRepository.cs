@@ -113,11 +113,40 @@ namespace CollegeManagement.API.Repositories.Implementations
             };
         }
 
+        public static string FormatProperCollegeName(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+            var tokens = System.Text.RegularExpressions.Regex.Split(input.Trim(), @"(\s+|-)");
+            var result = new System.Text.StringBuilder();
+            foreach (var token in tokens)
+            {
+                if (string.IsNullOrEmpty(token) || string.IsNullOrWhiteSpace(token) || token == "-")
+                {
+                    result.Append(token);
+                    continue;
+                }
+                if (System.Text.RegularExpressions.Regex.IsMatch(token, @"^(X|IX|IV|V?I{1,3})$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    result.Append(token.ToUpperInvariant());
+                }
+                else if (System.Text.RegularExpressions.Regex.IsMatch(token, @"^[A-Z]{2,4}$") &&
+                         !System.Text.RegularExpressions.Regex.IsMatch(token, @"^(AND|FOR|THE|OF|IN|AT|TO|BY)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    result.Append(token);
+                }
+                else
+                {
+                    result.Append(char.ToUpperInvariant(token[0]) + (token.Length > 1 ? token.Substring(1).ToLowerInvariant() : string.Empty));
+                }
+            }
+            return result.ToString();
+        }
+
         public async Task<int> CreateCollegeWithAdminAsync(CreateCollegeRequest request, string? adminPasswordHash)
         {
             var p = new DynamicParameters();
             p.Add("p_CollegeCode", request.Code.Trim().ToUpper());
-            p.Add("p_CollegeName", request.Name.Trim());
+            p.Add("p_CollegeName", FormatProperCollegeName(request.Name));
             p.Add("p_OfficialEmail", request.Email.Trim().ToLower());
             p.Add("p_ContactPhone", request.Phone);
             p.Add("p_Address", request.Address);
@@ -237,7 +266,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     SeriesCode = "ADMISSION_NO",
                     SeriesName = "Admission No.",
                     Prefix = "ADM",
-                    FormatPattern = "{CAMPUS}-ADM-{YY}-{SEQ}",
+                    FormatPattern = "{CAMPUS}-{PREFIX}-{YY}-{SEQ}",
                     NumberLength = 4,
                     StartNumber = 1,
                     CurrentSequence = 0,
@@ -250,7 +279,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     SeriesCode = "RECEIPT_NO",
                     SeriesName = "Receipt No.",
                     Prefix = "FEE",
-                    FormatPattern = "{CAMPUS}-FEE-{YYYYMMDD}-{SEQ}",
+                    FormatPattern = "{CAMPUS}-{PREFIX}-{YYYYMMDD}-{SEQ}",
                     NumberLength = 6,
                     StartNumber = 1,
                     CurrentSequence = 0,
@@ -263,7 +292,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     SeriesCode = "OFFER_LETTER_NO",
                     SeriesName = "Staff Offer Letter Number",
                     Prefix = $"{collegeAcronym}-OL",
-                    FormatPattern = "{CAMPUS}-OL/{YEAR}/{SEQ}",
+                    FormatPattern = "{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}",
                     NumberLength = 4,
                     StartNumber = 1,
                     CurrentSequence = 0,
@@ -276,7 +305,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     SeriesCode = "TRANSFER_ORDER_NO",
                     SeriesName = "Staff Transfer Order Number",
                     Prefix = "TRF",
-                    FormatPattern = "{CAMPUS}-TRF/{YEAR}/{SEQ}",
+                    FormatPattern = "{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}",
                     NumberLength = 4,
                     StartNumber = 1,
                     CurrentSequence = 0,
@@ -320,7 +349,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var p = new DynamicParameters();
             p.Add("p_CollegeId", collegeId);
-            p.Add("p_CollegeName", request.Name);
+            p.Add("p_CollegeName", FormatProperCollegeName(request.Name));
             p.Add("p_OfficialEmail", null);
             p.Add("p_ContactPhone", request.Phone);
             p.Add("p_Address", request.Address);

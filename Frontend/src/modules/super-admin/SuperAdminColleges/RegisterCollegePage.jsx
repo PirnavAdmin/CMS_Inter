@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
-import { isValidSuperAdminEmail, isValidIndianMobile, isStrongSuperAdminPassword } from "../superAdminValidation.js";
+import { isValidSuperAdminEmail, isValidIndianMobile, isStrongSuperAdminPassword, formatProperCollegeName, validateCollegeNameCapitalization } from "../superAdminValidation.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
   getCollegeCodeSeriesSettings,
@@ -375,6 +375,8 @@ export default function RegisterCollegePage() {
   /* ── Validation ── */
   const v1 = () => {
     if (profile.name.trim().length < 2) return "College Name must be at least 2 characters.";
+    const capErr = validateCollegeNameCapitalization(profile.name);
+    if (capErr) return capErr;
     if ((data?.colleges || []).some((college) => String(college.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase())) return "A college with this name is already registered.";
     if (!profile.code.trim()) return "Registration Code is required.";
     if (!/^[A-Z0-9-]{3,30}$/.test(profile.code.trim().toUpperCase())) return "Registration Code must use 3–30 letters, numbers, or hyphens.";
@@ -440,7 +442,7 @@ export default function RegisterCollegePage() {
     }
     setSubmitting(true);
     const payload = {
-      name: profile.name.trim(),
+      name: formatProperCollegeName(profile.name.trim()),
       code: profile.code.trim().toUpperCase(),
       email: profile.email.trim().toLowerCase(),
       phone: profile.phone.trim(),
@@ -572,6 +574,7 @@ export default function RegisterCollegePage() {
                   placeholder="e.g. ABC Degree College"
                   value={profile.name}
                   onChange={(e) => handleCollegeNameChange(e.target.value)}
+                  onBlur={() => setProfile((p) => ({ ...p, name: formatProperCollegeName(p.name || "") }))}
                   autoComplete="off"
                 />
               </Field>
