@@ -1761,19 +1761,12 @@ export default function DashboardPage() {
   // Student Attendance Normalized Values
   const studentAttData = useMemo(() => {
     const data = studentAttState.data || {};
-    let total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
+    const total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
     const marked = Number(metric(data, ["marked", "markedStudents", "markedCount"]) ?? 0);
     const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
     const absent = Number(metric(data, ["absent", "absentCount"]) ?? 0);
     const halfDay = Number(metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]) ?? 0);
     let percentage = metric(data, ["percentage", "attendancePercentage"]);
-
-    // Dynamically calculate and reconcile Total Students with studentManagementCount (Groups / Student Management)
-    if (studentManagementCount > 0) {
-      total = studentManagementCount;
-    } else if (total === 0) {
-      total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
-    }
 
     const hasMarkedRecords = Boolean(data.hasMarked) || marked > 0 || (present + absent + halfDay > 0);
 
@@ -1796,7 +1789,7 @@ export default function DashboardPage() {
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, marked, present, absent, halfDay, late: halfDay, percentage, hasMarkedRecords, chartData, breakdownList };
-  }, [studentAttState.data, studentManagementCount, summaryState.data?.totalStudents, overviewState.data?.totalStudents]);
+  }, [studentAttState.data]);
 
   // Staff Attendance Normalized Values
   const staffAttData = useMemo(() => {
