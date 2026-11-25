@@ -164,57 +164,57 @@ export const menu = [
   {
     section: "Academic",
     items: [
-      { to: "/dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups, moduleKey: "group-management", screenKey: "courses" },
-      { to: "/dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
-      { to: "/dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
-      { to: "/dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
-      { to: "/dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
-      { to: "/dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
-      { to: "/dashboard/inventory-management", label: "Inventory Management", icon: sectionsIcon, moduleKey: "inventory-management" },
+      { to: "/admin-dashboard/courses", label: "Group Management", icon: generatedSidebarIcons.groups, moduleKey: "group-management", screenKey: "courses" },
+      { to: "/admin-dashboard/subjects", label: "Subject Management", icon: subjectsIcon, moduleKey: "subject-management" },
+      { to: "/admin-dashboard/sections", label: "Section & Room", icon: sectionsIcon, moduleKey: "section-room" },
+      { to: "/admin-dashboard/timetable", label: "Timetable", icon: timetableIcon, moduleKey: "timetable" },
+      { to: "/admin-dashboard/academic-calendar", label: "Academic Calendar", icon: timetableIcon },
+      { to: "/admin-dashboard/holidays", label: "Holiday Management", icon: holidayManagementIcon, moduleKey: "holiday-management" },
+      { to: "/admin-dashboard/inventory-management", label: "Inventory Management", icon: sectionsIcon, moduleKey: "inventory-management" },
     ],
   },
   {
     section: "Student",
     items: [
-      { to: "/dashboard/admission", label: "Student Admission", icon: generatedSidebarIcons.admission, moduleKey: "student-admission" },
-      { to: "/dashboard/students", label: "Student Management", icon: studentsIcon, moduleKey: "student-management" },
-      { to: "/dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon, moduleKey: "section-allocation" },
-      { to: "/dashboard/attendance/student", label: "Attendance", icon: attendanceIcon, moduleKey: "attendance" },
-      { to: "/dashboard/promotion", label: "Promotion", icon: promotionIcon, moduleKey: "promotion" },
-      { to: "/dashboard/transport", label: "Transport", icon: transportBusIcon, moduleKey: "transport" },
+      { to: "/admin-dashboard/admission", label: "Student Admission", icon: generatedSidebarIcons.admission, moduleKey: "student-admission" },
+      { to: "/admin-dashboard/students", label: "Student Management", icon: studentsIcon, moduleKey: "student-management" },
+      { to: "/admin-dashboard/section-allocation", label: "Section Allocation", icon: allocateSectionIcon, moduleKey: "section-allocation" },
+      { to: "/admin-dashboard/attendance/student", label: "Attendance", icon: attendanceIcon, moduleKey: "attendance" },
+      { to: "/admin-dashboard/promotion", label: "Promotion", icon: promotionIcon, moduleKey: "promotion" },
+      { to: "/admin-dashboard/transport", label: "Transport", icon: transportBusIcon, moduleKey: "transport" },
     ],
   },
   {
     section: "Staff",
     items: [
-      { to: "/dashboard/staff", label: "Staff Management", icon: staffIcon, moduleKey: "staff-management" },
-      { to: "/dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
-      { to: "/dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
-      { to: "/dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
-      { to: "/dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll, moduleKey: "reimbursement" },
+      { to: "/admin-dashboard/staff", label: "Staff Management", icon: staffIcon, moduleKey: "staff-management" },
+      { to: "/admin-dashboard/departments", label: "Department & Designation", icon: generatedSidebarIcons.department, moduleKey: "department-designation" },
+      { to: "/admin-dashboard/attendance/staff", label: "Staff Attendance", icon: generatedSidebarIcons.staffAttendance, moduleKey: "staff-attendance" },
+      { to: "/admin-dashboard/leave-management?tab=staff", label: "Staff Leave Management", icon: generatedSidebarIcons.staffLeave, moduleKey: "staff-leave-management" },
+      { to: "/admin-dashboard/reimbursements", label: "Staff Reimbursements", icon: generatedSidebarIcons.payroll, moduleKey: "reimbursement" },
     ],
   },
   {
     section: "Examinations",
     items: [
-      { to: "/dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examination" },
-      { to: "/dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
-      { to: "/dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
+      { to: "/admin-dashboard/examinations", label: "Examination", icon: examinationIcon, moduleKey: "examination" },
+      { to: "/admin-dashboard/marks-entry", label: "Marks Evaluation", icon: marksEvaluationIcon, moduleKey: "marks-evaluation" },
+      { to: "/admin-dashboard/results", label: "Results", icon: resultsIcon, moduleKey: "results" },
     ],
   },
   {
     section: "Finance",
     items: [
-      { to: "/dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon, moduleKey: "fee-management" },
-      { to: "/dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll, moduleKey: "payroll" },
-      { to: "/dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon, moduleKey: "reimbursement" },
+      { to: "/admin-dashboard/fee-structure", label: "Fee Management", icon: feeManagementIcon, moduleKey: "fee-management" },
+      { to: "/admin-dashboard/payroll", label: "Payroll", icon: generatedSidebarIcons.payroll, moduleKey: "payroll" },
+      { to: "/admin-dashboard/reimbursement", label: "Reimbursement", icon: reimbursementIcon, moduleKey: "reimbursement" },
     ],
   },
   {
     section: "Documents & Reports",
     items: [
-      { to: "/dashboard/certificates", label: "Certificates", icon: certificatesIcon, moduleKey: "certificates" },
-      { to: "/dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
+      { to: "/admin-dashboard/certificates", label: "Certificates", icon: certificatesIcon, moduleKey: "certificates" },
+      { to: "/admin-dashboard/reports", label: "Reports & Analytics", icon: reportsAnalyticsIcon, moduleKey: "reports-analytics" },
     ],
   },
   {
@@ -227,7 +227,7 @@ export const menu = [
     section: "Enquiry Management",
     items: [
       {
-        to: "/dashboard/enquiry-management",
+        to: "/admin-dashboard/enquiry-management",
         label: "Enquiry Management",
         icon: settingsTemplatesIcon,
         moduleKey: "enquiry-management",
@@ -238,7 +238,7 @@ export const menu = [
     section: "Administration",
     items: [
       {
-        to: "/dashboard/settings",
+        to: "/admin-dashboard/settings",
         label: "Settings",
         icon: boardAcademicYearIcon,
         moduleKey: "settings",
@@ -357,7 +357,7 @@ const EMPTY_CAMPUS_CONTEXT = Object.freeze({
   setSelectedCampus: () => undefined,
 });
 const MOCK_NOTIFICATIONS = [
-  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/dashboard/reimbursements", label: "reimbursements" }
+  { id: "admin-notif-1", title: "New Staff Reimbursement Request", count: 1, to: "/admin-dashboard/reimbursements", label: "reimbursements" }
 ];
 const PARENT_NOTIFICATIONS = [
   { id: "pn-1", title: "Fee Balance Reminder", count: 1, to: "/parent-dashboard/fees", label: "fee payment" },
@@ -440,7 +440,7 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
       matches = pathname === "/parent-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
       matches =
-        !pathname.startsWith("/dashboard/attendance/staff") &&
+        !(pathname.startsWith("/admin-dashboard/attendance/staff") || pathname.startsWith("/dashboard/attendance/staff")) &&
         (pathname === "/dashboard/attendance" ||
           pathname === "/dashboard/attendance/student" ||
           pathname.startsWith("/dashboard/attendance/student/"));
@@ -713,7 +713,7 @@ export default function DashboardLayout({
     return base;
   }, [isWarden, isParent, isPrincipal, isExamCell, menuOverride, user]);
   const currentSearchIndex = searchIndexOverride || (menuOverride ? createSearchIndex(activeMenu) : isWarden ? wardenSearchIndex : isParent ? parentSearchIndex : isPrincipal ? createSearchIndex(activeMenu) : isExamCell ? examCellSearchIndex : searchIndex);
-  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/dashboard/settings/my-profile");
+  const resolvedProfilePath = profilePath || (isWarden ? "/warden-dashboard/profile" : isParent ? "/parent-dashboard/profile" : isExamCell ? "/exam-cell-dashboard/profile" : "/admin-dashboard/settings/my-profile");
   const resolvedSettingsPath = settingsPath === undefined ? (isWarden ? "/warden-dashboard" : isParent ? "/parent-dashboard/settings" : isExamCell ? "/exam-cell-dashboard/settings" : "/dashboard/settings") : settingsPath;
   const canManageAcademicContext = !isParent && !isWarden && !isExamCell && !menuOverride;
   const pageMenuItem = useMemo(() => menuBreadcrumbForPath(pathname, activeMenu), [pathname, activeMenu]);
@@ -811,11 +811,11 @@ export default function DashboardLayout({
     return () => cancelAnimationFrame(frame);
   }, [pathname]);
   useEffect(() => {
-    if (pathname.startsWith("/dashboard/faculty")) setFacultyOpen(true);
+    if ((pathname.startsWith("/admin-dashboard/faculty") || pathname.startsWith("/dashboard/faculty"))) setFacultyOpen(true);
   }, [pathname, setFacultyOpen]);
   useEffect(() => {
     if (
-      pathname.startsWith("/dashboard/attendance/") ||
+      (pathname.startsWith("/admin-dashboard/attendance/") || pathname.startsWith("/dashboard/attendance/")) ||
       pathname.startsWith("/exam-cell-dashboard/attendance") ||
       pathname.startsWith("/exam-cell-dashboard/check-in-out")
     ) {
@@ -823,7 +823,7 @@ export default function DashboardLayout({
     }
   }, [pathname]);
   useEffect(() => {
-    if (pathname.startsWith("/dashboard/settings")) setSettingsOpen(true);
+    if ((pathname.startsWith("/admin-dashboard/settings") || pathname.startsWith("/dashboard/settings"))) setSettingsOpen(true);
   }, [pathname]);
 
   useEffect(() => {
@@ -930,7 +930,7 @@ export default function DashboardLayout({
         (base === "/warden-dashboard/attendance" && pathname === "/warden/attendance") ||
         (base === "/warden-dashboard/students" && pathname === "/warden/students") ||
         (base === "/warden-dashboard/wardens" && pathname === "/warden/wardens") ||
-        (base === "/dashboard/settings" && (pathname === "/dashboard/settings/general" || pathname === "/settings")) ||
+        (base === "/dashboard/settings" && ((pathname === "/admin-dashboard/settings/general" || pathname === "/dashboard/settings/general") || pathname === "/settings")) ||
         (base === "/dashboard/courses" && pathname.startsWith("/dashboard/courses")) ||
         (targetTo === "/exam-cell-dashboard/exams" && (pathname === "/exam-cell-dashboard/exam-timetable" || pathname.startsWith("/exam-cell-dashboard/exams/"))) ||
         (targetTo === "/exam-cell-dashboard/marks-entry" && (pathname === "/exam-cell-dashboard/marks-verification" || pathname.startsWith("/exam-cell-dashboard/marks-entry/"))) ||
@@ -940,7 +940,7 @@ export default function DashboardLayout({
       ) {
         score = 800 + base.length;
       } else if (pathname.startsWith(`${base}/`)) {
-        if (base === "/dashboard/attendance/student" && pathname.startsWith("/dashboard/attendance/staff")) {
+        if (base === "/dashboard/attendance/student" && (pathname.startsWith("/admin-dashboard/attendance/staff") || pathname.startsWith("/dashboard/attendance/staff"))) {
           score = -1;
         } else {
           score = base.length;
@@ -1008,9 +1008,9 @@ export default function DashboardLayout({
                   );
                 }
                 if (item.children) {
-                  const isFacultyMenu = item.to === "/dashboard/faculty";
-                  const isAttendanceMenu = item.to === "/dashboard/attendance" || item.to === "/exam-cell-dashboard/attendance" || item.to.includes("attendance");
-                  const isSettingsMenu = item.to === "/dashboard/settings";
+                  const isFacultyMenu = (item.to === "/admin-dashboard/faculty" || item.to === "/dashboard/faculty");
+                  const isAttendanceMenu = (item.to === "/admin-dashboard/attendance" || item.to === "/admin-dashboard/attendance/student" || item.to === "/dashboard/attendance" || item.to === "/dashboard/attendance/student") || item.to === "/exam-cell-dashboard/attendance" || item.to.includes("attendance");
+                  const isSettingsMenu = (item.to === "/admin-dashboard/settings" || item.to === "/dashboard/settings");
                   const isOpen = isFacultyMenu ? facultyOpen : isAttendanceMenu ? attendanceOpen : isSettingsMenu ? settingsOpen : false;
                   const setOpen = isFacultyMenu ? setFacultyOpen : isAttendanceMenu ? setAttendanceOpen : isSettingsMenu ? setSettingsOpen : () => {};
                   const childIsActive = (child) => isActive(child.to);
@@ -1023,7 +1023,7 @@ export default function DashboardLayout({
                           className={`cms-nav-link ${active || item.children.some(childIsActive) ? "is-active" : ""}`}
                           onClick={(event) => {
                             if (isAttendanceMenu) {
-                              if (item.to === "/dashboard/attendance") {
+                              if ((item.to === "/admin-dashboard/attendance" || item.to === "/admin-dashboard/attendance/student" || item.to === "/dashboard/attendance" || item.to === "/dashboard/attendance/student")) {
                                 event.preventDefault();
                                 setOpen((v) => !v);
                               } else {
@@ -1075,7 +1075,7 @@ export default function DashboardLayout({
                   >
                     <SidebarIcon icon={item.icon} />
                     <span className="cms-nav-label">
-                      {item.to === "/dashboard/board-academic-year" ? <>Board &amp; Academic Year<br />Management</> : item.label}
+                      {(item.to === "/admin-dashboard/board-academic-year" || item.to === "/dashboard/board-academic-year") ? <>Board &amp; Academic Year<br />Management</> : item.label}
                     </span>
                   </Link>
                 );
@@ -1182,7 +1182,7 @@ export default function DashboardLayout({
                         className="cms-academic-manage-btn"
                         onClick={() => {
                           setCampusOpen(false);
-                          navigate("/dashboard/settings/campus-configuration");
+                          navigate("/admin-dashboard/settings/campus-configuration");
                         }}
                       >
                         <ThreeDIcon name="settings" size={16} /> Manage Campuses
@@ -1269,7 +1269,7 @@ export default function DashboardLayout({
                         className="cms-academic-manage-btn"
                         onClick={() => {
                           setBoardOpen(false);
-                          navigate("/dashboard/board-academic-year?tab=boards");
+                          navigate("/admin-dashboard/board-academic-year?tab=boards");
                         }}
                       >
                         <ThreeDIcon name="settings" size={16} /> Manage Boards
@@ -1337,7 +1337,7 @@ export default function DashboardLayout({
                           className="cms-academic-manage-btn"
                           onClick={() => {
                             setYearOpen(false);
-                            navigate("/dashboard/board-academic-year?tab=academic-years");
+                            navigate("/admin-dashboard/board-academic-year?tab=academic-years");
                           }}
                         >
                           <ThreeDIcon name="settings" size={16} /> Manage Academic Years

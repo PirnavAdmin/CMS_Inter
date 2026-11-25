@@ -614,7 +614,7 @@ export default function StudentManagementPage() {
                         >
                           <FileText size={16} />
                         </button>
-                        <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
+                        <Link to={`/admin-dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
                           <Eye size={16} />
                         </Link>
                         <button

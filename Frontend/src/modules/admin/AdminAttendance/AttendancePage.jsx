@@ -127,9 +127,12 @@ function AttendancePagination({ page, totalRows, pageSize, onPageChange, onPageS
   const [customSize, setCustomSize] = useState(String(pageSize));
   const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const navStyle = { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
   const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
   return <nav className="att-pagination" aria-label={`Attendance ${unit} pagination`} style={navStyle}>
+    <span className="cms-page-info" aria-live="polite" style={{ marginRight: "auto" }}>
+      Showing {totalRows === 0 ? 0 : (currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalRows)} of {totalRows} {unit}
+    </span>
     <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
       <select aria-label="Rows per page" value={customMode || !ATTENDANCE_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
         if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
@@ -1053,7 +1056,7 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
                    <button
                      type="button"
                      className="cms-btn cms-btn-ghost att-staff-export"
-                     onClick={() => navigate("/dashboard/settings/attendance-timing")}
+                     onClick={() => navigate("/admin-dashboard/settings/attendance-timing")}
                      title="Configure shifts, check-in thresholds and late rules"
                    >
                      <Clock size={16} /> Timing Settings
@@ -1131,14 +1134,14 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
              }}
              view={(record) => {
                const personId = staff ? get(record, "facultyId", "staffId", "id") : get(record, "studentId", "id");
-               if (personId != null) navigate({ pathname: `/dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, search: editParams.toString() }, {
+               if (personId != null) navigate({ pathname: `/admin-dashboard/attendance/${staff ? "staff" : "student"}/${personId}/overview`, search: editParams.toString() }, {
                  state: staff ? undefined : {
                    attendanceState: { filters: f, rows, report, loaded, search, page: currentPage, activeHoliday }
                  }
                });
              }}
            />
-           <AttendancePagination page={currentPage} totalRows={visible.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} />
+           <AttendancePagination page={currentPage} totalRows={visible.length} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={changePageSize} unit={staff ? "staff" : "students"} />
          </section>
        </>
      ))}
@@ -1597,7 +1600,7 @@ function Monthly({ data, staff, monthValue, page, pageSize, onPageChange, onPage
           </tbody>
         </table>
       </div>
-      <AttendancePagination page={currentPage} totalRows={rows.length} pageSize={pageSize} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} />
+      <AttendancePagination page={currentPage} totalRows={rows.length} pageSize={pageSize} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} unit={staff ? "staff" : "students"} />
     </section>
   );
 }

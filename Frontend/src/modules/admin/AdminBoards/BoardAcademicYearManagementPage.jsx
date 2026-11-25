@@ -1442,7 +1442,7 @@ export default function BoardAcademicYearManagementPage() {
       <main className="bay-page">
         <div className="cms-back-nav-bar" style={{ marginBottom: "12px" }}>
           <Link
-            to="/dashboard/settings"
+            to="/admin-dashboard/settings"
             className="cms-back-link"
             style={{
               display: "inline-flex",

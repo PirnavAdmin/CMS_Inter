@@ -586,7 +586,7 @@ export default function LOPConfigurationPage() {
       breadcrumb={["Settings", "LOP Configuration"]}
       backLinkPosition="below"
       backLink={
-        <Link to="/dashboard/settings" className="lop-back-link">
+        <Link to="/admin-dashboard/settings" className="lop-back-link">
           <ArrowLeft size={16} /> Back to Settings
         </Link>
       }

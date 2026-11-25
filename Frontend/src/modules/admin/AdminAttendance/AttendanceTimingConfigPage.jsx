@@ -236,7 +236,7 @@ export default function AttendanceTimingConfigPage() {
         {/* Back Navigation */}
         <div className="cms-back-nav-bar" style={{ marginBottom: "-12px" }}>
           <Link
-            to="/dashboard/settings"
+            to="/admin-dashboard/settings"
             className="cms-back-link"
             style={{
               display: "inline-flex",
