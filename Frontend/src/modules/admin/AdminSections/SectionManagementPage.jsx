@@ -1,5 +1,6 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useSearchParams } from "react-router-dom";
 import {
   Eye,
@@ -1276,6 +1277,10 @@ export default function SectionManagementPage() {
     }).catch((error) => { if (active) say(getApiErrorMessage(error), "error"); }).finally(() => { if (active) setInitialLoading(false); });
     return () => { active = false; ++boardRequests.current; ++groupRequests.current; ++programRequests.current; if (toastTimer.current) clearTimeout(toastTimer.current); };
   }, [say]);
+
+  useLiveModuleSync("Sections", () => {
+    loadSections(effectiveCampusId);
+  });
 
   // Reactive refresh when navbar campus changes
   useEffect(() => {

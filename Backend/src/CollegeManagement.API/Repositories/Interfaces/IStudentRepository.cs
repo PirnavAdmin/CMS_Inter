@@ -139,7 +139,7 @@ namespace CollegeManagement.API.Repositories
         Task<List<StudentListItemDto>> GetBySectionAsync(
             int sectionId);
 
-        Task<List<StudentListItemDto>> GetActiveAsync();
+        Task<List<StudentListItemDto>> GetActiveAsync(int? collegeId = null, int? campusId = null);
 
         Task<bool> EmailExistsAsync(
             string email,

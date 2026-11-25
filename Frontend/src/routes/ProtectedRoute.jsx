@@ -308,7 +308,7 @@ export function resolveHomePortalPath(role, user, permissionsOverride = null) {
     !isInventoryRole(effectiveRole, user) &&
     !isDriverRole(effectiveRole, user);
 
-  if (isAdmin) return "/dashboard";
+  if (isAdmin) return "/admin-dashboard";
   if (isTransportManagerRole(effectiveRole, user)) return "/transport-manager/overview";
   if (isWardenRole(effectiveRole, user)) return "/warden-dashboard";
   if (isInventoryRole(effectiveRole, user)) return "/inventory-dashboard";
@@ -316,16 +316,16 @@ export function resolveHomePortalPath(role, user, permissionsOverride = null) {
   if (user?.roleType === "examcell" || isExamCellRole(effectiveRole) || (user && isExamCellRole(user.role))) return "/exam-cell-dashboard";
   if (user?.roleType === "principal" || isPrincipalRole(effectiveRole) || (user && isPrincipalRole(user.role))) return "/principal-dashboard";
   if (user?.roleType === "accountant" || isAccountantRole(effectiveRole) || (user && isAccountantRole(user.role))) return "/accountant-dashboard";
-  if (isDeanRole(effectiveRole, user)) return "/dashboard";
+  if (isDeanRole(effectiveRole, user)) return "/admin-dashboard";
 
   const perms = permissionsOverride ?? user?.permissions ?? user?.rolePermissions;
   const hasAdminModuleGrants = hasAnyViewPermission(perms);
 
   if (isGeneralStaffDashboardRole(effectiveRole, user)) {
-    if (hasAdminModuleGrants) return "/dashboard";
+    if (hasAdminModuleGrants) return "/admin-dashboard";
     const st = String(user?.staffType || user?.StaffType || user?.roleStaffType || "").trim().toLowerCase();
     if (st.includes("non")) return "/non-teaching-dashboard";
-    return "/dashboard";
+    return "/admin-dashboard";
   }
 
   if (isNonTeachingRole(effectiveRole, user)) return "/non-teaching-dashboard";
@@ -333,9 +333,9 @@ export function resolveHomePortalPath(role, user, permissionsOverride = null) {
   if (user?.roleType === "parent" || isParentRole(effectiveRole) || (user && isParentRole(user.role))) return "/parent-dashboard";
   if (user?.roleType === "student" || isStudentRole(effectiveRole) || (user && isStudentRole(user.role))) return "/student-dashboard";
 
-  // Unmapped roles (e.g. ATTENDANT, UNASSIGNED, custom roles) resolve to /dashboard so ProtectedRoute
+  // Unmapped roles (e.g. ATTENDANT, UNASSIGNED, custom roles) resolve to /admin-dashboard so ProtectedRoute
   // can grant access when modules are assigned or cleanly render AccessDeniedView without bouncing.
-  return "/dashboard";
+  return "/admin-dashboard";
 }
 
 export function AccessDeniedView({ module, screen, action }) {
@@ -516,7 +516,7 @@ export default function ProtectedRoute({
       !homePath ||
       location.pathname === homePath ||
       location.pathname.startsWith(`${homePath}/`) ||
-      (requireAdmin && homePath === "/dashboard")
+      (requireAdmin && (homePath === "/admin-dashboard" || homePath === "/dashboard"))
     ) {
       return <AccessDeniedView module={blockedModule || requiredModule || "this resource"} screen={requiredScreen} action={requiredAction} />;
     }

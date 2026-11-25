@@ -21,9 +21,12 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly INumberSeriesService _numberSeriesService;
 
-        public NumberSeriesController(INumberSeriesService numberSeriesService)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public NumberSeriesController(INumberSeriesService numberSeriesService, IRealtimeEventService? realtimeEventService = null)
         {
             _numberSeriesService = numberSeriesService;
+            _realtimeEventService = realtimeEventService;
         }
 
         /// <summary>
@@ -94,6 +97,11 @@ namespace CollegeManagement.API.Controllers.V1
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
             }
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("NumberSeries", "Updated", campusId, seriesCode);
+            }
+
             return Ok(result);
         }
 
@@ -156,6 +164,11 @@ namespace CollegeManagement.API.Controllers.V1
             if (!deleted)
             {
                 return NotFound(new { message = $"Number series configuration '{seriesCode}' was not found." });
+            }
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("NumberSeries", "Deleted", campusId, seriesCode);
             }
 
             return Ok(new { message = $"Number series configuration '{seriesCode}' deleted successfully." });

@@ -38,5 +38,10 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> RouteNameExistsAsync(
             string routeName,
             long? excludeRouteId = null);
+
+        Task<RouteDistanceLookupResult?> GetRouteDistanceLookupAsync(
+            string startLocation,
+            string endLocation,
+            int? campusId = null);
     }
 }

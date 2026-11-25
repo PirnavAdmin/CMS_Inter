@@ -7,8 +7,8 @@ namespace CollegeManagement.API.Repositories.Interfaces
 {
     public interface IDesignationRepository
     {
-        Task<IEnumerable<Designation>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null);
-        Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null);
+        Task<IEnumerable<Designation>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null, int? collegeId = null);
+        Task<IEnumerable<DesignationResponseDto>> GetAllDtosAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null, int? collegeId = null);
         Task<Designation?> GetByIdAsync(int id);
         Task<DesignationResponseDto?> GetDtoByIdAsync(int id);
         Task<Designation?> GetByNameAsync(string name, int? campusId = null);
@@ -18,7 +18,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<Designation> AddAsync(Designation designation);
         Task UpdateAsync(Designation designation);
         Task DeleteAsync(int id);
-        Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null);
+        Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null);
         Task<int> GetAssignedStaffCountAsync(int designationId);
     }
 }

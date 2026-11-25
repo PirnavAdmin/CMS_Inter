@@ -14,6 +14,7 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import { getAuthUser } from "@/modules/auth/authStorage.js";
 import FacultyMyAttendance from "@/modules/faculty/pages/FacultyMyAttendance.jsx";
 import StaffRegularizePanel from "./StaffRegularizePanel.jsx";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 import "./AttendancePage.css";
 import "./AttendanceTimingConfigPage.css";
 // Only explicit mismatches are rejected; older scoped DTOs omit scope fields.
@@ -796,6 +797,15 @@ function Screen({ staff = false, say, onHolidayLockChange }) {
 
  return () => { window.clearTimeout(timer); loadSequence.current += 1; };
  }, [staff, collegeId, setupMessage, navbarCampusId, navbarBoardId, navbarAcademicYearId, f.date, f.level, f.group, f.program, f.section, f.department, f.type, f.person, f.view, f.view === "Defaulters" ? attendanceThreshold : null]);
+
+  useLiveModuleSync({
+    moduleName: "Attendance",
+    campusId: navbarCampusId,
+    onRefresh: () => {
+      dailyLoader.current?.();
+    }
+  });
+
 
  const markAllPresent = () => {
    if (!staff && (setupMessage || busy || dataScope !== requestScope || rows.length === 0)) return;

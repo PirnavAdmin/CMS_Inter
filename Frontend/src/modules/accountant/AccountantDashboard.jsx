@@ -18,6 +18,7 @@ import staffIcon from "@/assets/dashboard-3d/non-teaching-staff.png";
 import { getRows, getNumber, formatMoney, formatDate, normalizePayment, normalizeDue, normalizePayroll, checkedFeeData } from "./services/accountantService.js";
 import { profileValue as field } from "./utils/accountantProfileData.js";
 import { parseAccountantLeaveCategories, getApplicableAccountantLeaveCategories } from "./utils/accountantLeaveStats.js";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 export function accountantGreeting(hour) {
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
@@ -169,6 +170,15 @@ export default function AccountantDashboard() {
   const canLeave = permissions.canView("staff-leave-management", "staff-leave");
   const canReports = permissions.canView("reports-analytics");
   const [refresh, setRefresh] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Fees",
+    campusId: selectedCampusId,
+    debounceMs: 1000,
+    onRefresh: () => {
+      setRefresh((c) => c + 1);
+    }
+  });
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60000); return () => clearInterval(timer); }, []);
   const campusParams = useMemo(() => selectedCampusId ? { campusId: Number(selectedCampusId) || selectedCampusId } : {}, [selectedCampusId]);

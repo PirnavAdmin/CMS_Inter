@@ -177,7 +177,7 @@ export default function Login() {
       await syncUserTheme({ force: true }).catch(() => {});
 
       if (isAdmin) {
-        navigate("/dashboard", { replace: true });
+        navigate("/admin-dashboard", { replace: true });
       } else if (isTransportManager) {
         navigate("/transport-manager/overview", { replace: true });
       } else if (isWarden) {
@@ -199,7 +199,7 @@ export default function Login() {
       } else if (isParent) {
         navigate("/parent-dashboard", { replace: true });
       } else {
-        navigate(result.user.isAdmin ? "/dashboard" : "/student-dashboard", { replace: true });
+        navigate(result.user.isAdmin ? "/admin-dashboard" : "/student-dashboard", { replace: true });
       }
     } catch (loginError) {
       clearAuthSession();

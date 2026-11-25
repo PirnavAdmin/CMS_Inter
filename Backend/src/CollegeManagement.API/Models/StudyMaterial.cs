@@ -1,4 +1,5 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CollegeManagement.API.Models
@@ -9,6 +10,9 @@ namespace CollegeManagement.API.Models
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int StudyMaterialId { get; set; }
+
+        public int CollegeId { get; set; } = 1;
+        public int CampusId { get; set; } = 1;
 
         [Required]
         [MaxLength(200)]
@@ -25,6 +29,10 @@ namespace CollegeManagement.API.Models
         [Required]
         [MaxLength(500)]
         public string FilePath { get; set; } = string.Empty;
+
+        public int? GroupId { get; set; }
+        public string? Description { get; set; }
+        public int? UploadedByStaffId { get; set; }
 
         public DateTime UploadedAt { get; set; } = DateTime.UtcNow;
     }

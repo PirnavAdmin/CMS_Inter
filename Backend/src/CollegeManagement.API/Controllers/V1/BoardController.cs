@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -32,6 +33,7 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly ILogger<BoardController> _logger;
         private readonly AppDbContext _db;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="BoardController"/> class.
@@ -44,12 +46,28 @@ namespace CollegeManagement.API.Controllers.V1
             IBoardService boardService,
             ILogger<BoardController> logger,
             AppDbContext db,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _boardService = boardService;
             _logger = logger;
             _db = db;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishBoardChange(string action, int? campusId = null, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Boards",
+                    Action = action,
+                    CampusId = campusId,
+                    EntityId = entityId
+                });
+            }
         }
 
         private async Task<HashSet<int>?> GetTenantOwnedBoardIdsAsync()
@@ -216,6 +234,7 @@ namespace CollegeManagement.API.Controllers.V1
                 campusId = hCid;
             }
             var createdBoard = await _boardService.CreateBoardAsync(request, userName, collegeId, campusId);
+            PublishBoardChange("Created", campusId, createdBoard.BoardId.ToString());
             return CreatedAtAction(
                 nameof(GetBoardById),
                 new
@@ -247,6 +266,7 @@ namespace CollegeManagement.API.Controllers.V1
             _logger.LogInformation("Updating board with ID: {BoardId}", boardId);
             var userName = User.FindFirst(ClaimTypes.Name)?.Value ?? "System";
             var updatedBoard = await _boardService.UpdateBoardAsync(boardId, request, userName);
+            PublishBoardChange("Updated", entityId: boardId.ToString());
             return Ok(updatedBoard);
         }
 
@@ -269,6 +289,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             _logger.LogInformation("Deleting board with ID: {BoardId} using RowVersion: {RowVersion}", boardId, rowVersion);
             await _boardService.DeleteBoardAsync(boardId, rowVersion);
+            PublishBoardChange("Deleted", entityId: boardId.ToString());
             return NoContent();
         }
 

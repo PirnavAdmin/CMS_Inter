@@ -68,6 +68,72 @@ namespace CollegeManagement.API.Validators.StaffValidators
             RuleFor(x => x.StaffType)
                 .Must(x => string.IsNullOrEmpty(x) || x == "Teaching" || x == "Non-Teaching" || x == "Support")
                 .WithMessage("StaffType must be either 'Teaching', 'Non-Teaching', or 'Support'.");
+
+            RuleFor(x => x.Aadhaar)
+                .Must(a => string.IsNullOrWhiteSpace(a) || Regex.IsMatch(Regex.Replace(a, @"\D", ""), @"^\d{12}$"))
+                .WithMessage("Aadhaar number must contain exactly 12 digits.");
+
+            RuleFor(x => x.PanNumber)
+                .Must(p => string.IsNullOrWhiteSpace(p) || Regex.IsMatch(p.Trim().ToUpperInvariant(), @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"))
+                .WithMessage("PAN must follow standard 10-character format (5 uppercase letters, 4 digits, 1 uppercase letter, e.g. ABCDE1234F).");
+            RuleFor(x => x.AadhaarDocument)
+                .Must(a =>
+                {
+                    if (string.IsNullOrWhiteSpace(a)) return true;
+                    if (Regex.IsMatch(a, @"\.(pdf|jpe?g|png|webp|doc|docx)$", RegexOptions.IgnoreCase)) return true;
+                    var clean = Regex.Replace(a, @"\D", "");
+                    return clean.Length == 12;
+                })
+                .WithMessage("Aadhaar Copy must be a valid 12-digit Aadhaar number or document file.");
+
+            RuleFor(x => x.PanDocument)
+                .Must(p =>
+                {
+                    if (string.IsNullOrWhiteSpace(p)) return true;
+                    if (Regex.IsMatch(p, @"\.(pdf|jpe?g|png|webp|doc|docx)$", RegexOptions.IgnoreCase)) return true;
+                    var clean = p.Trim().ToUpperInvariant();
+                    return Regex.IsMatch(clean, @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$");
+                })
+                .WithMessage("PAN Copy must follow standard 10-character format (5 uppercase letters, 4 digits, 1 uppercase letter, e.g. ABCDE1234F) or be a document file.");
+
+            RuleFor(x => x.PassingYear)
+                .Must(py =>
+                {
+                    if (string.IsNullOrWhiteSpace(py)) return true;
+                    if (int.TryParse(py.Trim(), out int year))
+                    {
+                        return year >= 1970 && year <= DateTime.UtcNow.Year;
+                    }
+                    return false;
+                })
+                .WithMessage($"Passing Year must be a valid year between 1970 and {DateTime.UtcNow.Year}.");
+
+            RuleFor(x => x.Percentage)
+                .Must(p =>
+                {
+                    if (string.IsNullOrWhiteSpace(p)) return true;
+                    var clean = p.Trim().TrimEnd('%');
+                    if (decimal.TryParse(clean, out decimal score))
+                    {
+                        return (score >= 35 && score <= 100) || (score >= 4.0m && score <= 10.0m);
+                    }
+                    return false;
+                })
+                .WithMessage("Percentage / CGPA must be a valid academic score meeting minimum passing criteria (35% - 100% or 4.0 - 10.0 CGPA).");
+
+            RuleFor(x => x)
+                .Must(x =>
+                {
+                    var qual = (x.HighestQualification ?? x.Qualification ?? "").Trim().ToLowerInvariant();
+                    var spec = (x.Specialization ?? "").Trim().ToLowerInvariant();
+                    if (string.IsNullOrWhiteSpace(qual) || string.IsNullOrWhiteSpace(spec)) return true;
+
+                    bool isInter = qual.Contains("intermediate") || qual.Contains("10+2") || qual.Contains("ssc") || qual.Contains("10th");
+                    bool isDegree = spec.Contains("btech") || spec.Contains("b.tech") || spec.Contains("mtech") || spec.Contains("m.tech") || spec.Contains("phd") || spec.Contains("ph.d") || spec.Contains("mbbs");
+                    return !(isInter && isDegree);
+                })
+                .WithMessage("Specialization is inconsistent with the selected Highest Qualification. Higher degrees cannot be specializations for Intermediate or 10th.");
+
         }
     }
 }

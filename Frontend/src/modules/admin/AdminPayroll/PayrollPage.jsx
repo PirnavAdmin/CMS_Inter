@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -171,6 +172,13 @@ export default function PayrollPage({ mode = "payroll", layout = true, menuOverr
   const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
 
   const [store, setStore] = useState(createEmptyPayrollStore);
+  const [liveRefreshKey, setLiveRefreshKey] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Payroll",
+    campusId: selectedCampusId,
+    onRefresh: () => setLiveRefreshKey((k) => k + 1),
+  });
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
   const [viewingPayslip, setViewingPayslip] = useState(null);
@@ -416,7 +424,7 @@ export default function PayrollPage({ mode = "payroll", layout = true, menuOverr
       isMounted = false;
       if (payrollRequestRef.current === requestId) payrollRequestRef.current += 1;
     };
-  }, [selectedCampusId, mode]);
+  }, [selectedCampusId, mode, liveRefreshKey]);
 
   // Derived KPI metrics
   const kpiData = useMemo(() => {

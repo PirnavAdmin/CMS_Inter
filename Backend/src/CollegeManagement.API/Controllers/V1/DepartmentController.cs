@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Staff;
 using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
@@ -22,10 +23,35 @@ namespace CollegeManagement.API.Controllers.V1
     public class DepartmentController : ControllerBase
     {
         private readonly IDepartmentService _departmentService;
+        private readonly IJwtTokenHelper _jwtTokenHelper;
 
-        public DepartmentController(IDepartmentService departmentService)
+        private readonly IRealtimeEventService? _realtimeEventService;
+
+        public DepartmentController(IDepartmentService departmentService, IJwtTokenHelper jwtTokenHelper, IRealtimeEventService? realtimeEventService = null)
         {
             _departmentService = departmentService;
+            _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private int? ResolveCollegeId(int? queryCollegeId = null)
+        {
+            if (queryCollegeId.HasValue && queryCollegeId.Value > 0)
+            {
+                return queryCollegeId.Value;
+            }
+            if (User?.Identity?.IsAuthenticated != true) return null;
+            var role = _jwtTokenHelper.GetRole(User);
+            if (User.IsInRole("Super Admin") || string.Equals(role, "Super Admin", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+            var collegeId = _jwtTokenHelper.GetCollegeId(User);
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                return collegeId.Value;
+            }
+            return null;
         }
 
         /// <summary>
@@ -40,7 +66,8 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? type = null,
             [FromQuery] string? facultyType = null,
             [FromQuery] bool includeInactive = true,
-            [FromQuery] int? campusId = null)
+            [FromQuery] int? campusId = null,
+            [FromQuery] int? collegeId = null)
         {
             if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
             {
@@ -50,7 +77,8 @@ namespace CollegeManagement.API.Controllers.V1
             var effectiveStaffType = !string.IsNullOrWhiteSpace(staffType) 
                 ? staffType 
                 : (!string.IsNullOrWhiteSpace(type) ? type : facultyType);
-            var departments = await _departmentService.GetDepartmentsAsync(effectiveStaffType, includeInactive, campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId);
+            var departments = await _departmentService.GetDepartmentsAsync(effectiveStaffType, includeInactive, campusId, effectiveCollegeId);
             return Ok(departments);
         }
 
@@ -79,14 +107,15 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("summary")]
         [BypassPermission]
         [ProducesResponseType(typeof(DepartmentSummaryDto), StatusCodes.Status200OK)]
-        public async Task<ActionResult<DepartmentSummaryDto>> GetSummary([FromQuery] int? campusId = null)
+        public async Task<ActionResult<DepartmentSummaryDto>> GetSummary([FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
             {
                 return Ok(new DepartmentSummaryDto());
             }
 
-            var summary = await _departmentService.GetSummaryAsync(campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId);
+            var summary = await _departmentService.GetSummaryAsync(campusId, effectiveCollegeId);
             return Ok(summary);
         }
 
@@ -98,7 +127,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(typeof(DepartmentResponseDto), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<ActionResult<DepartmentResponseDto>> CreateDepartment([FromBody] CreateDepartmentDto dto, [FromQuery] int? campusId = null)
+        public async Task<ActionResult<DepartmentResponseDto>> CreateDepartment([FromBody] CreateDepartmentDto dto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(dto.DepartmentName))
             {
@@ -120,7 +149,12 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
 
-            var created = await _departmentService.CreateDepartmentAsync(dto, campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
+            var created = await _departmentService.CreateDepartmentAsync(dto, campusId, effectiveCollegeId);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Departments", "Created", campusId, created.DepartmentId.ToString());
+            }
             return CreatedAtAction(nameof(GetDepartmentById), new { id = created.DepartmentId }, created);
         }
 
@@ -133,7 +167,7 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status409Conflict)]
-        public async Task<ActionResult<DepartmentResponseDto>> UpdateDepartment(int id, [FromBody] UpdateDepartmentDto dto, [FromQuery] int? campusId = null)
+        public async Task<ActionResult<DepartmentResponseDto>> UpdateDepartment(int id, [FromBody] UpdateDepartmentDto dto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(dto.DepartmentName))
             {
@@ -155,10 +189,16 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
 
-            var updated = await _departmentService.UpdateDepartmentAsync(id, dto, campusId);
+            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
+            var updated = await _departmentService.UpdateDepartmentAsync(id, dto, campusId, effectiveCollegeId);
             if (updated == null)
             {
                 return NotFound(new { message = $"Department with ID {id} not found." });
+            }
+
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Departments", "Updated", campusId, id.ToString());
             }
 
             return Ok(updated);
@@ -181,6 +221,10 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { message });
             }
 
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Departments", "Deleted", null, id.ToString());
+            }
             return NoContent();
         }
 
@@ -217,13 +261,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("/api/v1/departments-designations/import")]
         [Consumes("multipart/form-data")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ImportExcel([FromForm] DepartmentImportExcelRequestDto dto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> ImportExcel([FromForm] DepartmentImportExcelRequestDto dto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (dto.File == null || dto.File.Length == 0)
             {
                 return BadRequest(new { message = "Please provide a valid Excel file (.xlsx or .xls)." });
             }
-            var result = await _departmentService.ImportDepartmentsAndDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType, campusId);
+            var result = await _departmentService.ImportDepartmentsAndDesignationsFromExcelAsync(dto.File, dto.DefaultStaffType, campusId, ResolveCollegeId(collegeId));
             return Ok(result);
         }
 
@@ -233,19 +277,19 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpPost("import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> ImportDepartments([FromForm] DepartmentImportExcelRequestDto? formDto, [FromBody] DepartmentBulkImportRequestDto? jsonDto, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> ImportDepartments([FromForm] DepartmentImportExcelRequestDto? formDto, [FromBody] DepartmentBulkImportRequestDto? jsonDto, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (Request.HasFormContentType && Request.Form.Files.Count > 0)
             {
                 var file = Request.Form.Files[0];
                 var staffType = Request.Form["defaultStaffType"].FirstOrDefault() ?? Request.Form["staffType"].FirstOrDefault();
-                var result = await _departmentService.ImportDepartmentsAndDesignationsFromExcelAsync(file, staffType, campusId);
+                var result = await _departmentService.ImportDepartmentsAndDesignationsFromExcelAsync(file, staffType, campusId, ResolveCollegeId(collegeId));
                 return Ok(result);
             }
 
             if (jsonDto != null && jsonDto.Departments != null && jsonDto.Departments.Any())
             {
-                var result = await _departmentService.BulkImportDepartmentsAsync(jsonDto.Departments, jsonDto.DefaultStaffType, campusId);
+                var result = await _departmentService.BulkImportDepartmentsAsync(jsonDto.Departments, jsonDto.DefaultStaffType, campusId, ResolveCollegeId(collegeId));
                 return Ok(result);
             }
 
@@ -259,13 +303,13 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("bulk")]
         [HttpPost("bulk-import")]
         [ProducesResponseType(typeof(MasterImportResultDto), StatusCodes.Status200OK)]
-        public async Task<IActionResult> BulkImport([FromBody] List<CreateDepartmentDto> dtos, [FromQuery] string? staffType = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> BulkImport([FromBody] List<CreateDepartmentDto> dtos, [FromQuery] string? staffType = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             if (dtos == null || !dtos.Any())
             {
                 return BadRequest(new { message = "Department list cannot be empty." });
             }
-            var result = await _departmentService.BulkImportDepartmentsAsync(dtos, staffType, campusId);
+            var result = await _departmentService.BulkImportDepartmentsAsync(dtos, staffType, campusId, ResolveCollegeId(collegeId));
             return Ok(result);
         }
 
@@ -276,10 +320,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("export-template")]
         [HttpGet("template")]
         [BypassPermission]
-        public async Task<IActionResult> DownloadDepartmentTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> DownloadDepartmentTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _departmentService.GenerateDepartmentTemplateExcelAsync(effectiveStaffType, campusId);
+            var (bytes, contentType, fileName) = await _departmentService.GenerateDepartmentTemplateExcelAsync(effectiveStaffType, campusId, ResolveCollegeId(collegeId));
             return File(bytes, contentType, fileName);
         }
 
@@ -290,10 +334,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("/api/v1/departments-designations/template")]
         [HttpGet("/api/v1/departments-designations/export-template")]
         [BypassPermission]
-        public async Task<IActionResult> DownloadUnifiedTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> DownloadUnifiedTemplate([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _departmentService.GenerateDepartmentDesignationTemplateExcelAsync(effectiveStaffType, campusId);
+            var (bytes, contentType, fileName) = await _departmentService.GenerateDepartmentDesignationTemplateExcelAsync(effectiveStaffType, campusId, ResolveCollegeId(collegeId));
             return File(bytes, contentType, fileName);
         }
 
@@ -304,10 +348,10 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpGet("export-excel")]
         [HttpGet("export")]
         [BypassPermission]
-        public async Task<IActionResult> ExportExcel([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null)
+        public async Task<IActionResult> ExportExcel([FromQuery] string? staffType = null, [FromQuery] string? type = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             var effectiveStaffType = staffType ?? type;
-            var (bytes, contentType, fileName) = await _departmentService.ExportDepartmentsExcelAsync(effectiveStaffType, campusId);
+            var (bytes, contentType, fileName) = await _departmentService.ExportDepartmentsExcelAsync(effectiveStaffType, campusId, ResolveCollegeId(collegeId));
             return File(bytes, contentType, fileName);
         }
     }

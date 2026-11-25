@@ -253,6 +253,6 @@ export function resolveNotificationTarget(notif, authUser = null) {
   // Safe portal landing fallback if ActionUrl was null on old/manual test notifications
   if (isStudentRole(roleLower)) return "/student-dashboard";
   if (isParentRole(roleLower)) return "/parent-dashboard";
-  if (isAdminRole(roleLower)) return "/dashboard";
+  if (isAdminRole(roleLower)) return "/admin-dashboard";
   return "/faculty-dashboard";
 }

@@ -612,78 +612,71 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-            
-            string? nextId = null;
-            try
+
+            var conn = Connection;
+            if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
+
+            // 1. Resolve collegeId from campus or context
+            var claimCid = _context.Campuses
+                .Where(c => c.CampusId == campusId)
+                .Select(c => (int?)c.CollegeId)
+                .FirstOrDefault() ?? 1;
+
+            // 2. Query NumberSeriesConfigurations for this college & seriesCode
+            var config = await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(@"
+                SELECT `Id`, `CollegeId`, `SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, 
+                       `NumberLength`, `StartNumber`, `CurrentSequence`, `Description`, `IsActive`, `CampusId`
+                FROM `NumberSeriesConfigurations`
+                WHERE `SeriesCode` = @seriesCode
+                  AND (`CollegeId` = @collegeId OR `CollegeId` = 1)
+                  AND (@campusId = 0 OR `CampusId` = @campusId OR `CampusId` IS NULL)
+                ORDER BY (`CollegeId` = @collegeId) DESC, (`CampusId` = @campusId) DESC, (`CampusId` IS NOT NULL) DESC
+                LIMIT 1;",
+                new { seriesCode = seriesCode, collegeId = claimCid, campusId = campusId },
+                transaction: CurrentTransaction);
+
+            if (config != null)
             {
-                var conn = Connection;
-                if (conn.State != ConnectionState.Open) await _context.Database.OpenConnectionAsync();
-                var parameters = new DynamicParameters();
-                parameters.Add("p_SeriesCode", seriesCode, DbType.String);
-                parameters.Add("p_CampusId", campusId, DbType.Int32);
-                parameters.Add("p_BaseSeriesCode", seriesCode, DbType.String);
+                // Atomic increment
+                await conn.ExecuteAsync(@"
+                    UPDATE `NumberSeriesConfigurations`
+                    SET `CurrentSequence` = CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END,
+                        `UpdatedAt` = UTC_TIMESTAMP()
+                    WHERE `Id` = @id;",
+                    new { id = config.Id },
+                    transaction: CurrentTransaction);
 
-                var config = await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
-                    "sp_GenerateNextNumberSeries",
-                    parameters,
-                    transaction: CurrentTransaction,
-                    commandType: CommandType.StoredProcedure);
+                var updatedConfig = await conn.QueryFirstOrDefaultAsync<NumberSeriesConfiguration>(
+                    "SELECT * FROM `NumberSeriesConfigurations` WHERE `Id` = @id;",
+                    new { id = config.Id },
+                    transaction: CurrentTransaction);
 
-                if (config != null && !string.IsNullOrWhiteSpace(config.FormatPattern))
+                if (updatedConfig != null)
                 {
-                    nextId = NumberSeriesPatternEvaluator.Evaluate(
-                        pattern: config.FormatPattern,
-                        sequenceNumber: config.CurrentSequence,
-                        numberLength: config.NumberLength,
-                        prefix: config.Prefix,
+                    return NumberSeriesPatternEvaluator.Evaluate(
+                        pattern: updatedConfig.FormatPattern,
+                        sequenceNumber: updatedConfig.CurrentSequence,
+                        numberLength: updatedConfig.NumberLength,
+                        prefix: updatedConfig.Prefix,
                         isPreview: false);
                 }
             }
-            catch
-            {
-            }
 
-            if (string.IsNullOrWhiteSpace(nextId))
-            {
-                var prefix = isTeaching ? "PCTCH" : "PCNT";
-                try
-                {
-                    var conn = Connection;
-                    if (conn.State != System.Data.ConnectionState.Open) await _context.Database.OpenConnectionAsync();
+            // Fallback: derive acronym if no configuration was found
+            var college = await conn.QueryFirstOrDefaultAsync<(string? CollegeName, string? CollegeCode)>(@"
+                SELECT col.CollegeName, col.CollegeCode 
+                FROM Campuses c 
+                INNER JOIN Colleges col ON c.CollegeId = col.CollegeId 
+                WHERE c.CampusId = @CampusId LIMIT 1;",
+                new { CampusId = campusId },
+                transaction: CurrentTransaction);
 
-                    // Ensure sequence row exists atomically
-                    await conn.ExecuteAsync(
-                        @"INSERT INTO `NumberSeriesConfigurations` 
-                          (`SeriesCode`, `SeriesName`, `Prefix`, `FormatPattern`, `NumberLength`, `StartNumber`, `CurrentSequence`, `CampusId`, `IsActive`, `CreatedAt`, `UpdatedAt`)
-                          SELECT @sCode, @sName, @pfx, '{PREFIX}{SEQ}', 4, 1, 0, @cId, 1, UTC_TIMESTAMP(), UTC_TIMESTAMP()
-                          FROM DUAL
-                          WHERE NOT EXISTS (SELECT 1 FROM `NumberSeriesConfigurations` WHERE `SeriesCode` = @sCode AND (`CampusId` = @cId OR `CampusId` IS NULL));",
-                        new { sCode = seriesCode, sName = isTeaching ? "Teaching Staff ID" : "Non-Teaching Staff ID", pfx = prefix, cId = campusId }, transaction: CurrentTransaction);
-
-                    // Atomic increment with LAST_INSERT_ID
-                    var seq = await conn.QuerySingleOrDefaultAsync<int>(
-                        @"UPDATE `NumberSeriesConfigurations` 
-                          SET `CurrentSequence` = LAST_INSERT_ID(CASE WHEN `CurrentSequence` < `StartNumber` THEN `StartNumber` ELSE `CurrentSequence` + 1 END),
-                              `UpdatedAt` = UTC_TIMESTAMP()
-                          WHERE `SeriesCode` = @sCode AND (`CampusId` = @cId OR `CampusId` IS NULL)
-                          ORDER BY `CampusId` DESC LIMIT 1;
-                          SELECT LAST_INSERT_ID();",
-                        new { sCode = seriesCode, cId = campusId }, transaction: CurrentTransaction);
-
-                    if (seq > 0)
-                    {
-                        return $"{prefix}{seq:D4}";
-                    }
-                }
-                catch { }
-
-                var max = await _context.Staffs
-                    .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null && s.EmployeeId.StartsWith(prefix))
-                    .CountAsync();
-                return $"{prefix}{(max + 1):D4}";
-            }
-
-            return nextId;
+            var acronym = SuperAdminRepository.DeriveCollegeAcronym(college.CollegeName, college.CollegeCode);
+            var prefix = isTeaching ? $"{acronym}TCH" : $"{acronym}NT";
+            var max = await _context.Staffs
+                .Where(s => s.CampusId == campusId && !s.IsDeleted && s.EmployeeId != null && s.EmployeeId.StartsWith(prefix))
+                .CountAsync();
+            return $"{prefix}{(max + 1):D4}";
         }
 
         public async Task<StaffDashboardStatsDto> GetDashboardStatsAsync(int? boardId = null, int? campusId = null)

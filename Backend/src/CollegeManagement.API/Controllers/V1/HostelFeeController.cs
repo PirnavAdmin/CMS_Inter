@@ -1,5 +1,6 @@
 using CollegeManagement.API.DTOs.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
+using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -16,10 +17,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class HostelFeeController : ControllerBase
     {
         private readonly IHostelFeeConfigService _hostelFeeConfigService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public HostelFeeController(IHostelFeeConfigService hostelFeeConfigService)
+        public HostelFeeController(IHostelFeeConfigService hostelFeeConfigService, IRealtimeEventService? realtimeEventService = null)
         {
             _hostelFeeConfigService = hostelFeeConfigService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpPost]
@@ -29,6 +32,8 @@ namespace CollegeManagement.API.Controllers.V1
             CancellationToken cancellationToken = default)
         {
             var id = await _hostelFeeConfigService.CreateAsync(request);
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Hostel", "create", null, id.ToString());
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Fees", "create", null, id.ToString());
             return Ok(new { success = true, feeConfigId = id, message = "Hostel Fee Configuration created successfully." });
         }
 
@@ -64,6 +69,8 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var success = await _hostelFeeConfigService.UpdateAsync(id, request);
             if (!success) return NotFound(new { success = false, message = "Fee Configuration not found or update failed." });
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Hostel", "update", null, id.ToString());
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Fees", "update", null, id.ToString());
             return Ok(new { success = true, message = "Hostel Fee Configuration updated successfully." });
         }
 
@@ -75,6 +82,8 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var success = await _hostelFeeConfigService.DeleteAsync(id);
             if (!success) return NotFound(new { success = false, message = "Fee Configuration not found." });
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Hostel", "delete", null, id.ToString());
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Fees", "delete", null, id.ToString());
             return Ok(new { success = true, message = "Hostel Fee Configuration deactivated successfully." });
         }
     }

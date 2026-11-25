@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Plus } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -643,6 +644,10 @@ function CourseGroupListPage() {
   useEffect(() => {
     loadRows(search);
   }, [loadRows, search]);
+
+  useLiveModuleSync("Courses", () => {
+    loadRows(search);
+  });
 
   const handleSearch = (value) => {
     if (value === search) return;

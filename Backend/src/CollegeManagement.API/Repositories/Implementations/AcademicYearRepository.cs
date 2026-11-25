@@ -21,6 +21,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             _httpContextAccessor = httpContextAccessor;
         }
 
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
+        }
+
         public async Task<IEnumerable<AcademicYear>> GetAllAsync()
         {
             return await _context.AcademicYears
@@ -48,17 +56,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 query = query.Where(x => x.BoardId == boardId.Value);
             }
 
+            var effectiveCollegeId = ResolveCollegeId();
+            if (effectiveCollegeId.HasValue && effectiveCollegeId.Value > 0)
+            {
+                query = query.Where(x => x.CollegeId == effectiveCollegeId.Value);
+            }
+
             if (campusId.HasValue && campusId.Value > 0)
             {
-                // If there are academic years specifically assigned to this campus (matching board if specified), filter to it.
-                // Otherwise fall back to institutional/global academic years so campus transfer and dependent modules have access to academic years.
-                bool hasCampusYears = await _context.AcademicYears
-                    .AnyAsync(x => x.CampusId == campusId.Value && (!boardId.HasValue || boardId.Value <= 0 || x.BoardId == boardId.Value));
-
-                if (hasCampusYears)
-                {
-                    query = query.Where(x => x.CampusId == campusId.Value);
-                }
+                query = query.Where(x => x.CampusId == campusId.Value);
             }
 
             if (status.HasValue)
@@ -94,15 +100,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 .AsNoTracking()
                 .AsQueryable();
 
+            var effectiveCollegeId = ResolveCollegeId();
+            if (effectiveCollegeId.HasValue && effectiveCollegeId.Value > 0)
+            {
+                query = query.Where(x => x.CollegeId == effectiveCollegeId.Value);
+            }
+
             if (campusId.HasValue && campusId.Value > 0)
             {
-                bool hasCampusYears = await _context.AcademicYears
-                    .AnyAsync(x => x.CampusId == campusId.Value);
-
-                if (hasCampusYears)
-                {
-                    query = query.Where(x => x.CampusId == campusId.Value);
-                }
+                query = query.Where(x => x.CampusId == campusId.Value);
             }
 
             if (status.HasValue)
@@ -153,7 +159,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     }
                     else
                     {
-                        academicYear.CollegeId = 1;
+                        academicYear.CollegeId = ResolveCollegeId() ?? 1;
                     }
                 }
             }

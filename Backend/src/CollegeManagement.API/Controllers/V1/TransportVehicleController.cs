@@ -11,10 +11,12 @@ namespace CollegeManagement.API.Controllers
     public class TransportVehicleController : ControllerBase
     {
         private readonly ITransportVehicleService _service;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public TransportVehicleController(ITransportVehicleService service)
+        public TransportVehicleController(ITransportVehicleService service, IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
+            _realtimeEventService = realtimeEventService;
         }
 
         // GET: api/transport/vehicles
@@ -110,6 +112,7 @@ namespace CollegeManagement.API.Controllers
 
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
                 var id = await _service.CreateAsync(dto, userId);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "create", dto.CampusId, id.ToString());
                 var result = await _service.GetByIdAsync(id);
 
                 return Ok(new
@@ -170,6 +173,7 @@ namespace CollegeManagement.API.Controllers
                     var updated = await _service.UpdateAsync(existing.VehicleId, dto, userId);
                     if (updated)
                     {
+                        _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "update", dto.CampusId, existing.VehicleId.ToString());
                         var updatedDto = await _service.GetByIdAsync(existing.VehicleId);
                         return Ok(new { success = true, message = "Vehicle updated successfully.", data = updatedDto });
                     }
@@ -213,6 +217,7 @@ namespace CollegeManagement.API.Controllers
                 if (existing != null)
                 {
                     await _service.DeleteAsync(existing.VehicleId, null);
+                    _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "delete", null, existing.VehicleId.ToString());
                 }
 
                 return Ok(new { success = true, message = "Vehicle deleted successfully." });

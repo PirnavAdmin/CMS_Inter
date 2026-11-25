@@ -15,12 +15,25 @@ namespace CollegeManagement.API.Repositories.Implementations;
 public class CertificateRepository : ICertificateRepository
 {
     private readonly DatabaseContext _database;
+    private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
     private readonly Microsoft.Extensions.Logging.ILogger<CertificateRepository> _logger;
 
-    public CertificateRepository(DatabaseContext database, Microsoft.Extensions.Logging.ILogger<CertificateRepository>? logger = null)
+    public CertificateRepository(
+        DatabaseContext database,
+        Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null,
+        Microsoft.Extensions.Logging.ILogger<CertificateRepository>? logger = null)
     {
         _database = database;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<CertificateRepository>.Instance;
+    }
+
+    private int? ResolveCollegeId()
+    {
+        var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                 ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+        if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+        return null;
     }
 
     // =========================================================
@@ -44,6 +57,7 @@ public class CertificateRepository : ICertificateRepository
         parameters.Add("p_CampusId", campusId, DbType.Int32);
         parameters.Add("p_BoardId", boardId, DbType.Int32);
         parameters.Add("p_AcademicYearId", academicYearId, DbType.Int32);
+        parameters.Add("p_CollegeId", ResolveCollegeId(), DbType.Int32);
 
         try
         {

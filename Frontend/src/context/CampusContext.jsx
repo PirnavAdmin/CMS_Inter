@@ -3,6 +3,7 @@ import * as campusApi from "../api/campusApi.js";
 import { getAuthToken, getAuthUser, saveAuthSession } from "../modules/auth/authStorage.js";
 import apiClient from "../api/axios.js";
 import { apiEndpoints } from "../api/apiEndpoints.js";
+import notificationHubService from "../services/notificationHubService.js";
 
 const CampusContext = createContext(null);
 
@@ -79,8 +80,8 @@ export function CampusProvider({ children }) {
     if (!u) return;
 
     const roleStr = String(u.role || "").trim().toLowerCase();
-    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
-    if (isAdmin) return; // Admins have full access to all campuses
+    const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
+    if (isSuperAdmin) return; // SuperAdmin has access to all campuses across all colleges
 
     if (Array.isArray(u.assignedCampusIds) && u.assignedCampusIds.length > 0) {
       setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
@@ -124,13 +125,27 @@ export function CampusProvider({ children }) {
     try {
       const data = await campusApi.getCampuses();
       if (Array.isArray(data)) {
-        setCampuses(data);
+        const u = getAuthUser();
+        const roleStr = String(u?.role || "").trim().toLowerCase();
+        const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
+        const userCollegeId = Number(u?.collegeId || u?.CollegeId || 0);
+        // Backend /api/v1/campuses is already college-scoped for college admins/users.
+        // Match user's collegeId if present on the campus item, or accept campuses returned by scoped backend
+        const scopedData = (!isSuperAdmin && userCollegeId > 0)
+          ? data.filter((c) => {
+              const cColId = Number(c.collegeId ?? c.CollegeId ?? 0);
+              return cColId === 0 || cColId === userCollegeId;
+            })
+          : data;
+        const finalData = scopedData.length > 0 ? scopedData : data;
+        setCampuses(finalData);
         setSelectedCampusId((prev) => {
-          const exists = data.some(
+          const exists = finalData.some(
             (c) => String(c.id) === String(prev) || String(c.campusId) === String(prev)
           );
           if (exists) return prev;
-          return data[0]?.id ? String(data[0].id) : (data[0]?.campusId ? String(data[0].campusId) : "");
+          const first = finalData.find((c) => c.isHQ) || finalData[0] || data[0];
+          return first?.id ? String(first.id) : (first?.campusId ? String(first.campusId) : "");
         });
       }
     } catch (err) {
@@ -164,11 +179,19 @@ export function CampusProvider({ children }) {
     try {
       if (selectedCampusId != null && selectedCampusId !== "") {
         localStorage.setItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`, String(selectedCampusId));
+        localStorage.setItem(STORAGE_KEY_SELECTED_CAMPUS, String(selectedCampusId));
       } else {
         localStorage.removeItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`);
       }
     } catch (e) {
       console.warn("Failed to persist selected campus id", e);
+    }
+  }, [selectedCampusId]);
+
+  // Keep Notification Hub synchronized with active campus selection
+  useEffect(() => {
+    if (selectedCampusId) {
+      notificationHubService.joinCampus(Number(selectedCampusId));
     }
   }, [selectedCampusId]);
 
@@ -185,10 +208,29 @@ export function CampusProvider({ children }) {
 
     const u = getAuthUser();
     const roleStr = String(u?.role || "").trim().toLowerCase();
-    const isAdmin = roleStr === "admin" || roleStr === "superadmin" || roleStr === "administrator";
+    const isSuperAdmin = roleStr === "superadmin" || roleStr === "super admin";
 
-    if (isAdmin) {
+    if (isSuperAdmin) {
       return allActive;
+    }
+
+    // College scoping for college admins and staff
+    const userCollegeId = Number(u?.collegeId || u?.CollegeId || 0);
+    if (userCollegeId > 0) {
+      const collegeCampuses = allActive.filter((c) => {
+        const cColId = Number(c.collegeId ?? c.CollegeId ?? 0);
+        return cColId === 0 || cColId === userCollegeId;
+      });
+      const assignedIds = principalAssignedCampusIds || 
+        (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0 
+          ? u.assignedCampusIds.map(Number) 
+          : null);
+      if (Array.isArray(assignedIds) && assignedIds.length > 0) {
+        const allowedSet = new Set(assignedIds);
+        const subFiltered = collegeCampuses.filter((c) => allowedSet.has(Number(c.id ?? c.campusId)));
+        if (subFiltered.length > 0) return subFiltered;
+      }
+      return collegeCampuses;
     }
 
     const assignedIds = principalAssignedCampusIds || 
@@ -233,11 +275,14 @@ export function CampusProvider({ children }) {
   useEffect(() => {
     if (activeCampuses.length > 0) {
       const exists = activeCampuses.some((c) => String(c.id) === String(selectedCampusId) || String(c.campusId) === String(selectedCampusId));
-      if (!exists && selectedCampus) {
-        setSelectedCampusId(String(selectedCampus.id ?? selectedCampus.campusId));
+      if (!exists) {
+        const first = activeCampuses.find((c) => c.isHQ) || activeCampuses[0];
+        if (first) {
+          setSelectedCampusId(String(first.id ?? first.campusId));
+        }
       }
     }
-  }, [activeCampuses, selectedCampus, selectedCampusId]);
+  }, [activeCampuses, selectedCampusId]);
 
   // Setter for selected campus (supports object or ID string/number)
   const handleSetSelectedCampus = useCallback((campusOrId) => {

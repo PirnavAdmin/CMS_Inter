@@ -242,7 +242,12 @@ public class TransportRepository : ITransportRepository
                 p_Description = route.Description ?? "",
                 p_Status = route.Status ? (byte)1 : (byte)0,
                 p_CreatedBy = route.CreatedBy,
-                p_CampusId = route.CampusId ?? 1
+                p_CampusId = route.CampusId ?? 1,
+                p_StartLatitude = (decimal?)null,
+                p_StartLongitude = (decimal?)null,
+                p_EndLatitude = (decimal?)null,
+                p_EndLongitude = (decimal?)null,
+                p_RouteGeometryJson = (string?)null
             },
             commandType: CommandType.StoredProcedure);
 

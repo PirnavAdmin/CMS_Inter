@@ -30,10 +30,10 @@ namespace CollegeManagement.API.Services.Implementations
             _cache = cache;
         }
 
-        public async Task<IEnumerable<DesignationResponseDto>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null)
+        public async Task<IEnumerable<DesignationResponseDto>> GetAllAsync(bool includeInactive = false, string? staffType = null, int? departmentId = null, int? campusId = null, int? collegeId = null)
         {
-            string cacheKey = $"lookup:designations:{includeInactive}:{staffType}:{departmentId}:{campusId}";
-            return await _cache.GetOrCreateAsync(cacheKey, () => _designationRepository.GetAllDtosAsync(includeInactive, staffType, departmentId, campusId));
+            string cacheKey = $"lookup:designations:{collegeId}:{includeInactive}:{staffType}:{departmentId}:{campusId}";
+            return await _cache.GetOrCreateAsync(cacheKey, () => _designationRepository.GetAllDtosAsync(includeInactive, staffType, departmentId, campusId, collegeId));
         }
 
         public async Task<DesignationResponseDto?> GetByIdAsync(int id)
@@ -41,7 +41,7 @@ namespace CollegeManagement.API.Services.Implementations
             return await _designationRepository.GetDtoByIdAsync(id);
         }
 
-        public async Task<DesignationResponseDto> CreateAsync(CreateDesignationDto dto, int? campusId = null)
+        public async Task<DesignationResponseDto> CreateAsync(CreateDesignationDto dto, int? campusId = null, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
                 throw new ValidationException("Designation name is required.");
@@ -82,7 +82,8 @@ namespace CollegeManagement.API.Services.Implementations
                 ReportsToDesignationId = (dto.ReportsToDesignationId.HasValue && dto.ReportsToDesignationId.Value > 0) ? dto.ReportsToDesignationId : null,
                 IsActive = dto.IsActive,
                 CreatedAt = DateTime.UtcNow,
-                CampusId = campusId
+                CampusId = campusId ?? dto.CampusId,
+                CollegeId = collegeId ?? dto.CollegeId
             };
 
             var created = await _designationRepository.AddAsync(entity);
@@ -105,7 +106,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<DesignationResponseDto?> UpdateAsync(int id, UpdateDesignationDto dto, int? campusId = null)
+        public async Task<DesignationResponseDto?> UpdateAsync(int id, UpdateDesignationDto dto, int? campusId = null, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(dto.Name))
                 throw new ValidationException("Designation name is required.");
@@ -146,6 +147,8 @@ namespace CollegeManagement.API.Services.Implementations
             existing.StaffType = !string.IsNullOrWhiteSpace(dto.StaffType) ? dto.StaffType.Trim() : "Both";
             existing.ReportsToDesignationId = (dto.ReportsToDesignationId.HasValue && dto.ReportsToDesignationId.Value > 0) ? dto.ReportsToDesignationId : null;
             existing.IsActive = dto.IsActive;
+            if (campusId.HasValue && campusId.Value > 0) existing.CampusId = campusId.Value;
+            if (collegeId.HasValue && collegeId.Value > 0) existing.CollegeId = collegeId.Value;
 
             await _designationRepository.UpdateAsync(existing);
             _cache.RemoveByPrefix("lookup:designations");
@@ -227,9 +230,9 @@ namespace CollegeManagement.API.Services.Implementations
             return res.Success;
         }
 
-        public async Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null)
+        public async Task<DesignationSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null)
         {
-            return await _designationRepository.GetSummaryAsync(campusId);
+            return await _designationRepository.GetSummaryAsync(campusId, collegeId);
         }
 
         public async Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null)
@@ -237,7 +240,7 @@ namespace CollegeManagement.API.Services.Implementations
             return await _designationRepository.IsNameUniqueAsync(name, excludeId, campusId);
         }
 
-        public async Task<MasterImportResultDto> ImportDesignationsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null, int? defaultDepartmentId = null, int? campusId = null)
+        public async Task<MasterImportResultDto> ImportDesignationsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null, int? defaultDepartmentId = null, int? campusId = null, int? collegeId = null)
         {
             if (file == null || file.Length == 0)
                 throw new ValidationException("Please upload a valid Excel file (.xlsx or .xls).");
@@ -283,8 +286,8 @@ namespace CollegeManagement.API.Services.Implementations
             }
 
             result.TotalRowsRead = rows.Count - 1;
-            var departments = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId)).ToList();
-            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId)).ToList();
+            var departments = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
+            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
 
             var seenDesigNamesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var seenDesigCodesInFile = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -495,7 +498,8 @@ namespace CollegeManagement.API.Services.Implementations
                             StaffType = staffType,
                             IsActive = isActive,
                             CreatedAt = DateTime.UtcNow,
-                            CampusId = campusId
+                            CampusId = campusId,
+                            CollegeId = collegeId
                         };
 
                         var created = await _designationRepository.AddAsync(newDesig);
@@ -523,13 +527,13 @@ namespace CollegeManagement.API.Services.Implementations
             return result;
         }
 
-        public async Task<MasterImportResultDto> BulkImportDesignationsAsync(IEnumerable<CreateDesignationDto> dtos, string? defaultStaffType = null, int? campusId = null)
+        public async Task<MasterImportResultDto> BulkImportDesignationsAsync(IEnumerable<CreateDesignationDto> dtos, string? defaultStaffType = null, int? campusId = null, int? collegeId = null)
         {
             var result = new MasterImportResultDto();
             var list = dtos?.ToList() ?? new List<CreateDesignationDto>();
             result.TotalRowsRead = list.Count;
 
-            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId)).ToList();
+            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
             int idx = 0;
 
             foreach (var dto in list)
@@ -559,6 +563,8 @@ namespace CollegeManagement.API.Services.Implementations
                         if (dto.DepartmentId.HasValue && dto.DepartmentId.Value > 0) existing.DepartmentId = dto.DepartmentId.Value;
                         existing.StaffType = staffType;
                         existing.IsActive = dto.IsActive;
+            if (campusId.HasValue && campusId.Value > 0) existing.CampusId = campusId.Value;
+            if (collegeId.HasValue && collegeId.Value > 0) existing.CollegeId = collegeId.Value;
                         existing.UpdatedAt = DateTime.UtcNow;
 
                         await _designationRepository.UpdateAsync(existing);
@@ -574,7 +580,8 @@ namespace CollegeManagement.API.Services.Implementations
                             StaffType = staffType,
                             IsActive = dto.IsActive,
                             CreatedAt = DateTime.UtcNow,
-                            CampusId = campusId
+                            CampusId = campusId,
+                            CollegeId = collegeId
                         });
                         existingDesigs.Add(created);
                         result.SuccessCount++;
@@ -595,7 +602,7 @@ namespace CollegeManagement.API.Services.Implementations
             return result;
         }
 
-        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDesignationTemplateExcelAsync(string? staffType = null, int? campusId = null)
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDesignationTemplateExcelAsync(string? staffType = null, int? campusId = null, int? collegeId = null)
         {
             using var workbook = new ClosedXML.Excel.XLWorkbook();
             var ws = workbook.Worksheets.Add("Designations");
@@ -625,9 +632,9 @@ namespace CollegeManagement.API.Services.Implementations
             return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
-        public async Task<(byte[] Bytes, string ContentType, string FileName)> ExportDesignationsExcelAsync(string? staffType = null, int? departmentId = null, int? campusId = null)
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> ExportDesignationsExcelAsync(string? staffType = null, int? departmentId = null, int? campusId = null, int? collegeId = null)
         {
-            var desigs = (await _designationRepository.GetAllDtosAsync(includeInactive: true, staffType: staffType, departmentId: departmentId, campusId: campusId)).ToList();
+            var desigs = (await _designationRepository.GetAllDtosAsync(includeInactive: true, staffType: staffType, departmentId: departmentId, campusId: campusId, collegeId: collegeId)).ToList();
             using var workbook = new ClosedXML.Excel.XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Designations");
 

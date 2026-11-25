@@ -267,19 +267,13 @@ public class DashboardRepository : IDashboardRepository
                     }
                     else
                     {
-                        int? collegeId = null;
-                        if (campusId.HasValue && campusId.Value > 0)
-                        {
-                            collegeId = await conn.ExecuteScalarAsync<int?>(
-                                "SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId LIMIT 1;",
-                                new { CampusId = campusId.Value });
-                        }
+                        int collegeId = resolvedCollegeId;
 
                         var groupCount = await conn.ExecuteScalarAsync<int?>(@"
                             SELECT COUNT(*)
                             FROM `Groups` g
                             WHERE (g.IsActive = 1 OR g.IsActive IS NULL)
-                              AND (@p_CollegeId IS NULL OR @p_CollegeId = 0 OR g.CollegeId = @p_CollegeId)
+                              AND g.CollegeId = @p_CollegeId
                               AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR g.BoardId = @p_BoardId)
                               AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR g.AcademicYearId = @p_AcademicYearId OR g.AcademicYearId IS NULL);",
                             new { p_CollegeId = collegeId, p_BoardId = boardId, p_AcademicYearId = academicYearId });
@@ -301,13 +295,15 @@ public class DashboardRepository : IDashboardRepository
                     var sectionCount = await conn.ExecuteScalarAsync<int?>(@"
                         SELECT COUNT(*)
                         FROM `Sections` sec
+                        JOIN `Campuses` c ON sec.CampusId = c.CampusId
                         WHERE (sec.IsActive = 1 OR sec.IsActive IS NULL)
+                          AND c.CollegeId = @p_CollegeId
                           AND (@p_CampusId IS NULL OR @p_CampusId = 0 OR sec.CampusId = @p_CampusId)
                           AND (@p_BoardId IS NULL OR @p_BoardId = 0 OR sec.BoardId = @p_BoardId)
                           AND (@p_AcademicYearId IS NULL OR @p_AcademicYearId = 0 OR sec.AcademicYearId = @p_AcademicYearId);",
-                        new { p_CampusId = campusId, p_BoardId = boardId, p_AcademicYearId = academicYearId });
+                        new { p_CollegeId = resolvedCollegeId, p_CampusId = campusId, p_BoardId = boardId, p_AcademicYearId = academicYearId });
 
-                    if (sectionCount.HasValue && sectionCount.Value > 0)
+                    if (sectionCount.HasValue)
                     {
                         summary.TotalSections = sectionCount.Value;
                     }

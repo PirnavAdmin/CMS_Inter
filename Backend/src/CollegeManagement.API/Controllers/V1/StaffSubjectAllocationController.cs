@@ -28,16 +28,20 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IStaffRepository _staffRepository;
         private readonly ISubjectRepository _subjectRepository;
 
+        private readonly IRealtimeEventService? _realtimeEventService;
+
         public StaffSubjectAllocationController(
             IStaffService staffService,
             IDepartmentRepository departmentRepository,
             IStaffRepository staffRepository,
-            ISubjectRepository subjectRepository)
+            ISubjectRepository subjectRepository,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _staffService = staffService;
             _departmentRepository = departmentRepository;
             _staffRepository = staffRepository;
             _subjectRepository = subjectRepository;
+            _realtimeEventService = realtimeEventService;
         }
 
         private static readonly System.Collections.Generic.Dictionary<string, string[]> DepartmentKeywordMap = new(StringComparer.OrdinalIgnoreCase)
@@ -196,6 +200,10 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> AssignSubject([FromBody] AssignStaffSubjectDto dto)
         {
             var result = await _staffService.AssignSubjectAsync(dto);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Subjects", "Assigned", null, dto.StaffId.ToString());
+            }
             return StatusCode(StatusCodes.Status201Created, result);
         }
 
@@ -211,6 +219,10 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> UpdateSubjectAllocation(int id, [FromBody] UpdateStaffSubjectAllocationDto dto)
         {
             var result = await _staffService.UpdateSubjectAllocationAsync(id, dto);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Subjects", "AllocationUpdated", null, id.ToString());
+            }
             return Ok(result);
         }
 
@@ -225,6 +237,10 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> DeleteSubjectAllocation(int id)
         {
             await _staffService.DeleteSubjectAllocationAsync(id);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Subjects", "AllocationDeleted", null, id.ToString());
+            }
             return NoContent();
         }
 
@@ -240,6 +256,10 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? subjectId = null)
         {
             await _staffService.UnassignSubjectAsync(staffId, subjectName, subjectId);
+            if (_realtimeEventService != null)
+            {
+                await _realtimeEventService.PublishDomainChangeAsync("Subjects", "Unassigned", null, staffId.ToString());
+            }
             return NoContent();
         }
 

@@ -2,16 +2,27 @@ using System.Data;
 using Dapper;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations.Hostel
 {
     public class HostelStudentAllocationRepository : IHostelStudentAllocationRepository
     {
         private readonly IDbConnection _dbConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public HostelStudentAllocationRepository(IDbConnection dbConnection)
+        public HostelStudentAllocationRepository(IDbConnection dbConnection, IHttpContextAccessor? httpContextAccessor = null)
         {
             _dbConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         public async Task<IEnumerable<HostelStudentAllocation>> GetAllAsync(
@@ -22,6 +33,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? search = null,
             int? campusId = null)
         {
+            var collegeId = ResolveCollegeId();
             var parameters = new
             {
                 p_HostelId = hostelId,
@@ -29,7 +41,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_StudentId = studentId,
                 p_Status = status,
                 p_Search = search,
-                p_CampusId = campusId
+                p_CampusId = campusId,
+                p_CollegeId = collegeId
             };
 
             return await _dbConnection.QueryAsync<HostelStudentAllocation>(

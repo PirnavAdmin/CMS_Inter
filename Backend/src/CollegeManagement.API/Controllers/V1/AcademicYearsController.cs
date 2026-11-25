@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.AcademicYear;
 using CollegeManagement.API.Helpers;
@@ -23,15 +24,31 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IAcademicYearService _service;
         private readonly AppDbContext _db;
         private readonly IJwtTokenHelper _jwtTokenHelper;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public AcademicYearsController(
             IAcademicYearService service,
             AppDbContext db,
-            IJwtTokenHelper jwtTokenHelper)
+            IJwtTokenHelper jwtTokenHelper,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _db = db;
             _jwtTokenHelper = jwtTokenHelper;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishAcademicYearChange(string action, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "AcademicYears",
+                    Action = action,
+                    EntityId = entityId
+                });
+            }
         }
 
         private async Task<HashSet<int>?> GetTenantOwnedCampusIdsAsync()
@@ -179,7 +196,13 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
+                var collegeId = _jwtTokenHelper.GetCollegeId(User);
+                if (collegeId.HasValue && collegeId.Value > 0)
+                {
+                    dto.CollegeId = collegeId.Value;
+                }
                 var result = await _service.CreateAsync(dto);
+                PublishAcademicYearChange("Created", result.AcademicYearId.ToString());
                 return CreatedAtAction(nameof(GetById), new { id = result.AcademicYearId }, new
                 {
                     Status = true,
@@ -214,6 +237,7 @@ namespace CollegeManagement.API.Controllers.V1
                         Message = $"Academic year with ID {id} not found."
                     });
                 }
+                PublishAcademicYearChange("Updated", id.ToString());
                 return Ok(new
                 {
                     Status = true,
@@ -248,6 +272,7 @@ namespace CollegeManagement.API.Controllers.V1
                         Message = $"Academic year with ID {id} not found."
                     });
                 }
+                PublishAcademicYearChange("Deleted", id.ToString());
                 return Ok(new
                 {
                     Status = true,
@@ -281,6 +306,7 @@ namespace CollegeManagement.API.Controllers.V1
                         Message = $"Academic year with ID {id} not found."
                     });
                 }
+                PublishAcademicYearChange("Activated", id.ToString());
                 return Ok(new
                 {
                     Status = true,
@@ -304,6 +330,7 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> Deactivate(int id)
         {
             var success = await _service.DeactivateAsync(id);
+            PublishAcademicYearChange("Deactivated", id.ToString());
             if (!success)
             {
                 return NotFound(new

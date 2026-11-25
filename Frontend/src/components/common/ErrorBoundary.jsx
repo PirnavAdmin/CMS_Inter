@@ -3,6 +3,7 @@ import { AlertCircle, RefreshCw, Home } from "lucide-react";
 
 function getDashboardUrl() {
   const path = typeof window !== "undefined" ? window.location.pathname || "" : "";
+  if (path.startsWith("/admin-dashboard")) return "/admin-dashboard";
   if (path.startsWith("/student-dashboard")) return "/student-dashboard";
   if (path.startsWith("/parent-dashboard")) return "/parent-dashboard";
   if (path.startsWith("/faculty-dashboard")) return "/faculty-dashboard";
@@ -18,6 +19,7 @@ function getDashboardUrl() {
     const rawUser = localStorage.getItem("auth_user") || localStorage.getItem("user");
     const user = rawUser ? JSON.parse(rawUser) : null;
     const role = (localStorage.getItem("auth_role") || localStorage.getItem("role") || user?.role || user?.staffType || "").toLowerCase();
+    if (role.includes("admin")) return "/admin-dashboard";
     if (role.includes("student")) return "/student-dashboard";
     if (role.includes("parent")) return "/parent-dashboard";
     if (role.includes("faculty") || role.includes("teacher")) return "/faculty-dashboard";
@@ -28,7 +30,7 @@ function getDashboardUrl() {
     if (role.includes("principal")) return "/principal-dashboard";
   } catch {}
 
-  return "/dashboard";
+  return "/admin-dashboard";
 }
 
 export default class ErrorBoundary extends React.Component {

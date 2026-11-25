@@ -80,6 +80,8 @@ public class AuditLog
 
     public int? StaffId { get; set; }
 
+    public int? CollegeId { get; set; }
+
     [MaxLength(30)]
     public string ActorType { get; set; } = "User";
 

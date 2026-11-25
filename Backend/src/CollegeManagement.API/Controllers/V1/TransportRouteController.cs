@@ -15,11 +15,14 @@ namespace CollegeManagement.API.Controllers
     public class TransportRoutesController : ControllerBase
     {
         private readonly ITransportRouteService _service;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public TransportRoutesController(
-            ITransportRouteService service)
+            ITransportRouteService service,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet]
@@ -37,6 +40,63 @@ namespace CollegeManagement.API.Controllers
             {
                 return StatusCode(500, new { success = false, message = "Failed to retrieve transport routes.", error = ex.Message });
             }
+        }
+
+        [HttpGet("calculate-distance")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+        [ProducesResponseType(typeof(DistanceCalculationResultDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> CalculateDistance(
+            [FromQuery] string? origin,
+            [FromQuery] string? destination,
+            [FromQuery] string? startLocation = null,
+            [FromQuery] string? endLocation = null,
+            CancellationToken ct = default)
+        {
+            var orig = !string.IsNullOrWhiteSpace(origin) ? origin : startLocation;
+            var dest = !string.IsNullOrWhiteSpace(destination) ? destination : endLocation;
+
+            if (string.IsNullOrWhiteSpace(orig) || string.IsNullOrWhiteSpace(dest))
+            {
+                return BadRequest(new { success = false, message = "Both origin and destination are required." });
+            }
+
+            var result = await _service.CalculateDistanceAsync(orig, dest, ct);
+            return Ok(result);
+        }
+
+        [HttpGet("route-preview")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+        [ProducesResponseType(typeof(RoutePreviewResultDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> RoutePreviewGet(
+            [FromQuery] double originLat,
+            [FromQuery] double originLng,
+            [FromQuery] double destLat,
+            [FromQuery] double destLng,
+            CancellationToken ct = default)
+        {
+            if (originLat < -90 || originLat > 90 || originLng < -180 || originLng > 180 ||
+                destLat < -90 || destLat > 90 || destLng < -180 || destLng > 180)
+            {
+                return BadRequest(new { success = false, message = "Invalid latitude or longitude coordinates provided." });
+            }
+
+            var result = await _service.PreviewRouteAsync(originLat, originLng, destLat, destLng, ct);
+            return Ok(result);
+        }
+
+        [HttpPost("route-preview")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+        [ProducesResponseType(typeof(RoutePreviewResultDto), StatusCodes.Status200OK)]
+        public async Task<IActionResult> RoutePreviewPost(
+            [FromBody] RoutePreviewRequestDto dto,
+            CancellationToken ct = default)
+        {
+            if (dto == null)
+            {
+                return BadRequest(new { success = false, message = "Request body is required." });
+            }
+
+            return await RoutePreviewGet(dto.OriginLat, dto.OriginLng, dto.DestLat, dto.DestLng, ct);
         }
 
         [HttpGet("{routeIdOrCode}")]
@@ -70,6 +130,7 @@ namespace CollegeManagement.API.Controllers
             try
             {
                 long routeId = await _service.CreateAsync(dto, userId: null);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "create", dto.CampusId, routeId.ToString());
                 TransportRouteDto? result = await _service.GetByIdAsync(routeId);
 
                 return Ok(new
@@ -108,6 +169,7 @@ namespace CollegeManagement.API.Controllers
                     bool updated = await _service.UpdateAsync(existing.RouteId, dto, userId: null);
                     if (updated)
                     {
+                        _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "update", dto.CampusId, existing.RouteId.ToString());
                         var updatedDto = await _service.GetByIdAsync(existing.RouteId);
                         return Ok(new
                         {
@@ -159,6 +221,7 @@ namespace CollegeManagement.API.Controllers
                 if (existing != null)
                 {
                     await _service.DeleteAsync(existing.RouteId, userId: null);
+                    _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "delete", null, existing.RouteId.ToString());
                 }
                 else if (long.TryParse(routeIdOrCode, out long parsedId))
                 {

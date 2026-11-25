@@ -2,16 +2,27 @@ using System.Data;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations.Hostel
 {
     public class HostelBedRepository : IHostelBedRepository
     {
         private readonly IDbConnection _dbConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public HostelBedRepository(IDbConnection dbConnection)
+        public HostelBedRepository(IDbConnection dbConnection, IHttpContextAccessor? httpContextAccessor = null)
         {
             _dbConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         public async Task<IEnumerable<HostelBed>> GetAllAsync(
@@ -22,6 +33,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? search = null,
             int? campusId = null)
         {
+            var collegeId = ResolveCollegeId();
             return await _dbConnection.QueryAsync<HostelBed>(
                 "sp_GetHostelBeds",
                 new
@@ -31,7 +43,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_BedStatus = bedStatus,
                     p_Status = status,
                     p_Search = search,
-                    p_CampusId = campusId
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
         }

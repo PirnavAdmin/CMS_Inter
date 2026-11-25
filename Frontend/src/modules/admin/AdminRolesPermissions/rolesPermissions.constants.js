@@ -345,7 +345,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "dashboard",
     name: "Dashboard",
-    route: "/dashboard",
+    route: "/admin-dashboard",
     section: "Overview",
     icon: LayoutDashboard,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],

@@ -19,6 +19,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import "./MarksEntryPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const PAGE_SIZE = 5;
 const normalizeId = (value) => String(value ?? "");
@@ -1837,6 +1838,16 @@ export default function MarksEntryPage({ embedded = false, initialTab = "entry",
   const entry = useAcademicFilterState(campusBoards.length > 0 ? campusBoards : allBoards, guard, () => setEntryApplied(false), { embedded, routeEnabled: isAdminNavigation && tab === "entry" });
 
   // Helper to load schedules & search evaluations for an examination in Marks Entry
+  useLiveModuleSync({
+    moduleName: "Examinations",
+    campusId: effectiveCampusId,
+    onRefresh: () => {
+      if (entryExamId && entry.filters.section) {
+        loadExamConfigsAndEvaluations(entryExamId, entry.filters.section);
+      }
+    }
+  });
+
   const loadExamConfigsAndEvaluations = async (examId, sectionId, examList = entry.exams, studentList = entryStudents) => {
     if (!examId || !sectionId) return;
     const selectedExam = examList.find((e) => eq(e.id, examId));
