@@ -460,7 +460,7 @@
   border-radius: 16px;
   width: 100%;
   max-width: 520px;
-  max-height: min(88vh, 680px);
+  max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -527,6 +527,9 @@
 .campus-modal-body {
   flex: 1 1 auto;
   overflow-y: auto;
+  max-height: calc(100vh - 170px);
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
   padding: 18px 24px 20px;
   display: flex;
   flex-direction: column;
@@ -760,6 +763,9 @@
   padding: 14px 24px;
   border-top: 1px solid #f0f2f5;
   background: #ffffff;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
   margin-top: 0;
 }
 
@@ -1119,4 +1125,37 @@
 
 .campus-phone-input::placeholder {
   color: #94a3b8;
+}
+
+
+/* Country Code Select in Phone Input */
+.campus-phone-input-wrap {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.campus-country-code-select {
+  height: 40px;
+  background: #f8fafc;
+  border: 1px solid #d1d5db;
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.campus-country-code-select:focus {
+  border-color: var(--cms-primary, #5a6e38);
+}
+
+.campus-phone-input-wrap .campus-phone-input {
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  flex: 1 1 auto;
 }

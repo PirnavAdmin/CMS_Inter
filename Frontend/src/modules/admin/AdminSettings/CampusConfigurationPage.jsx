@@ -107,6 +107,7 @@ export default function CampusConfigurationPage() {
     code: "",
     address: "",
     phone: "",
+    countryCode: "+91",
     email: "",
     boards: ["Board of Intermediate Education, Andhra Pradesh"],
     status: "Active (Displays in Header Selector)",
@@ -174,6 +175,7 @@ export default function CampusConfigurationPage() {
       code: "",
       address: "",
       phone: "",
+      countryCode: "+91",
       email: "",
       boards: ["Board of Intermediate Education, Andhra Pradesh"],
       status: "Active (Displays in Header Selector)",
@@ -248,7 +250,7 @@ export default function CampusConfigurationPage() {
   const handleFormSubmit = async (e) => {
     e.preventDefault();
     setFormError("");
-    const contactError = validatePhone(formData.phone);
+    const contactError = validatePhone(formData.phone, formData.countryCode || "+91");
     setPhoneError(contactError);
     if (contactError) {
       document.getElementById("campusPhone")?.focus();
@@ -311,7 +313,7 @@ export default function CampusConfigurationPage() {
       campusName: formatProperCollegeName(formData.name.trim()),
       campusCode: formData.code.trim().toUpperCase(),
       address: formData.address.trim(),
-      contactPhone: formData.phone.trim(),
+      contactPhone: formData.phone.trim() ? `${formData.countryCode || "+91"} ${formData.phone.trim()}` : "",
       email: formData.email.trim(),
       isHQ: editingCampus ? Boolean(editingCampus.isHQ) : false,
       isActive: formData.status.includes("Active"),

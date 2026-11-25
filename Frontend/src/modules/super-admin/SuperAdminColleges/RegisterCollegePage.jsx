@@ -564,7 +564,7 @@ export default function RegisterCollegePage() {
                 label="College Name"
                 required
                 icon={Building2}
-                badge={profile.name.trim() ? <span className="rcf-auto-badge rcf-auto-success"><Check size={10} strokeWidth={3} /> Valid</span> : null}
+                badge={profile.name.trim() ? (validateCollegeNameCapitalization(profile.name) ? <span className="rcf-auto-badge" style={{ background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca" }}><AlertTriangle size={10} strokeWidth={3} /> Invalid Casing</span> : <span className="rcf-auto-badge rcf-auto-success"><Check size={10} strokeWidth={3} /> Valid</span>) : null}
               >
                 <input
                   type="text"
@@ -577,6 +577,11 @@ export default function RegisterCollegePage() {
                   onBlur={() => setProfile((p) => ({ ...p, name: formatProperCollegeName(p.name || "") }))}
                   autoComplete="off"
                 />
+                {profile.name.trim() && validateCollegeNameCapitalization(profile.name) ? (
+                  <span style={{ display: "block", color: "#dc2626", fontSize: "11.5px", marginTop: "4px", fontWeight: "500" }}>
+                    {validateCollegeNameCapitalization(profile.name)}
+                  </span>
+                ) : null}
               </Field>
 
               {/* Registration Code */}
@@ -648,7 +653,7 @@ export default function RegisterCollegePage() {
                     onChange={(e) => handlePincodeChange(e.target.value)}
                     className={pincodeStatus === "success" ? "is-valid" : ""}
                     autoComplete="off"
-                  />
+                />
                   {pincodeLoading && (
                     <Loader2 size={15} className="rcf-spin rcf-pin-trailing" />
                   )}

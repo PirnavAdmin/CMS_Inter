@@ -211,30 +211,73 @@ namespace CollegeManagement.API.Profiles
             try
             {
                 var payloadItems = JsonSerializer.Deserialize<List<StaffDocumentPayloadItem>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                List<StaffDocumentPayloadItem> items;
                 if (payloadItems != null && payloadItems.Any(p => !string.IsNullOrEmpty(p.type) || !string.IsNullOrEmpty(p.url) || !string.IsNullOrEmpty(p.name)))
                 {
-                    return payloadItems;
+                    items = payloadItems;
                 }
-
-                var docItems = JsonSerializer.Deserialize<List<StaffDocumentItem>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                if (docItems != null && docItems.Any())
+                else
                 {
-                    return docItems.Select(d => new StaffDocumentPayloadItem
+                    var docItems = JsonSerializer.Deserialize<List<StaffDocumentItem>>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    if (docItems != null && docItems.Any())
                     {
-                        id = d.DocumentType,
-                        type = d.DocumentType,
-                        name = !string.IsNullOrEmpty(d.DocumentName) ? d.DocumentName : d.FileName,
-                        url = d.FilePath,
-                        format = d.FileType,
-                        size = d.FileSizeBytes > 0 ? d.FileSizeBytes.ToString() : null
-                    }).ToList();
+                        items = docItems.Select(d => new StaffDocumentPayloadItem
+                        {
+                            id = d.DocumentType,
+                            type = d.DocumentType,
+                            name = !string.IsNullOrEmpty(d.DocumentName) ? d.DocumentName : d.FileName,
+                            url = d.FilePath,
+                            format = d.FileType,
+                            size = d.FileSizeBytes > 0 ? d.FileSizeBytes.ToString() : null
+                        }).ToList();
+                    }
+                    else
+                    {
+                        items = payloadItems ?? new List<StaffDocumentPayloadItem>();
+                    }
                 }
 
-                return payloadItems ?? new List<StaffDocumentPayloadItem>();
+                foreach (var item in items)
+                {
+                    NormalizeDocumentItem(item);
+                }
+                return items;
             }
             catch
             {
                 return new List<StaffDocumentPayloadItem>();
+            }
+        }
+
+        private static void NormalizeDocumentItem(StaffDocumentPayloadItem item)
+        {
+            if (item == null) return;
+            var type = item.type ?? "";
+            bool isImage = type.IndexOf("photo", StringComparison.OrdinalIgnoreCase) >= 0 || type.IndexOf("sign", StringComparison.OrdinalIgnoreCase) >= 0;
+            string defaultExt = isImage ? ".jpg" : ".pdf";
+            string defaultFormat = isImage ? "JPG" : "PDF";
+
+            if (!string.IsNullOrWhiteSpace(item.name))
+            {
+                var trimmedName = item.name.Trim();
+                var ext = Path.GetExtension(trimmedName);
+                if (string.IsNullOrWhiteSpace(ext))
+                {
+                    item.name = $"{trimmedName}{defaultExt}";
+                    item.format = defaultFormat;
+                }
+                else if (string.IsNullOrWhiteSpace(item.format))
+                {
+                    item.format = ext.TrimStart('.').ToUpperInvariant();
+                }
+            }
+            if (string.IsNullOrWhiteSpace(item.format))
+            {
+                item.format = defaultFormat;
+            }
+            if (string.IsNullOrWhiteSpace(item.url) && !string.IsNullOrWhiteSpace(item.name))
+            {
+                item.url = $"/uploads/staff-documents/{item.name}";
             }
         }
 

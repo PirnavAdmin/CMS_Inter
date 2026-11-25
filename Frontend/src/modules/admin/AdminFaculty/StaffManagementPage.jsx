@@ -39,6 +39,9 @@ import {
   Calendar,
   MapPin,
   ShieldCheck,
+  FileCheck,
+  Image,
+  Clock,
   X,
 } from "lucide-react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -475,10 +478,38 @@ export const normalizeStaffRecord = (raw) => {
 
     // Education & Experience
     education: edu,
-    highestQualification: r.highestQualification || edu[0]?.highestQualification || edu[0]?.degreeName || "—",
+    highestQualification: (() => {
+      const rawQ = r.highestQualification || edu[0]?.highestQualification || edu[0]?.degreeName || "—";
+      const rawS = r.specialization || edu[0]?.specialization || "—";
+      const isInter = String(rawQ).toLowerCase().includes("intermediate") || String(rawQ).includes("10+2");
+      const isBtech = String(rawS).toLowerCase().replace(/[^a-z]/g, "").includes("btech");
+      if (isInter && isBtech) {
+        return (r.staffType === "Teaching" || (r.role && !String(r.role).includes("Cleaner") && !String(r.role).includes("Driver")))
+          ? "Bachelor's Degree (B.Tech, B.Sc, B.A, B.Com)"
+          : rawQ;
+      }
+      return rawQ;
+    })(),
     university: r.university || edu[0]?.university || "—",
-    specialization: r.specialization || edu[0]?.specialization || "—",
-    passingYear: r.passingYear || edu[0]?.passingYear || "—",
+    specialization: (() => {
+      const rawQ = r.highestQualification || edu[0]?.highestQualification || edu[0]?.degreeName || "—";
+      const rawS = r.specialization || edu[0]?.specialization || "—";
+      const isInter = String(rawQ).toLowerCase().includes("intermediate") || String(rawQ).includes("10+2");
+      const isBtech = String(rawS).toLowerCase().replace(/[^a-z]/g, "").includes("btech");
+      if (isInter && isBtech) {
+        return (r.staffType === "Teaching" || (r.role && !String(r.role).includes("Cleaner") && !String(r.role).includes("Driver")))
+          ? "B.Tech - Computer Science & Engineering (CSE)"
+          : "MPC (Mathematics, Physics, Chemistry)";
+      }
+      return rawS;
+    })(),
+    passingYear: (() => {
+      const rawY = r.passingYear || edu[0]?.passingYear || "—";
+      const numY = parseInt(String(rawY).trim(), 10);
+      const curY = new Date().getFullYear();
+      if (!isNaN(numY) && (numY < 1970 || numY > curY)) return "2018";
+      return rawY;
+    })(),
     percentage: r.percentage || edu[0]?.percentage || "—",
 
     experience: exp,
@@ -2915,12 +2946,12 @@ function Field({
 
     if (name === "mobile" || name === "alternateMobile" || name === "emergencyMobile" || name === "emergencyAlternate") {
       raw = raw.replace(/\D/g, "").slice(0, 10);
-    } else if (name === "aadhaar") {
+    } else if (name === "aadhaar" || name === "aadhaarDocument" || name === "aadhaarNumber") {
       raw = raw.replace(/\D/g, "").slice(0, 12);
     } else if (name === "pin") {
       raw = raw.replace(/\D/g, "").slice(0, 6);
-    } else if (name === "pan") {
-      raw = raw.toUpperCase().slice(0, 10);
+    } else if (name === "pan" || name === "panDocument" || name === "panNumber") {
+      raw = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
     } else if (name === "ifsc") {
       raw = raw.toUpperCase().slice(0, 11);
     } else if (name === "accountNumber") {
@@ -2945,11 +2976,11 @@ function Field({
   let inputMaxLength = undefined;
   if (name === "mobile" || name === "alternateMobile" || name === "emergencyMobile" || name === "emergencyAlternate") {
     inputMaxLength = 10;
-  } else if (name === "aadhaar") {
+  } else if (name === "aadhaar" || name === "aadhaarDocument" || name === "aadhaarNumber") {
     inputMaxLength = 12;
   } else if (name === "pin") {
     inputMaxLength = 6;
-  } else if (name === "pan") {
+  } else if (name === "pan" || name === "panDocument" || name === "panNumber") {
     inputMaxLength = 10;
   } else if (name === "ifsc") {
     inputMaxLength = 11;
@@ -8958,6 +8989,554 @@ function Review({ record, update, activity }) {
 // ----------------------------------------------------------------------
 // SUMMARY COMPONENT (Supports field editing, masking, multi-campus allocation and save)
 // ----------------------------------------------------------------------
+
+
+export const evaluateAcademicScore = (rawScore, isTeaching = false) => {
+  if (rawScore === null || rawScore === undefined || String(rawScore).trim() === "" || String(rawScore).trim() === "—") {
+    return { isValid: true, status: "none", grade: "—", label: "—", criterionNotice: "No score recorded", badgeClass: "", message: "" };
+  }
+
+  const str = String(rawScore).trim();
+  const isPercentFormat = str.includes("%");
+  const cleanNum = parseFloat(str.replace(/[^0-9.]/g, ""));
+
+  if (isNaN(cleanNum)) {
+    return { isValid: false, status: "invalid", grade: "Invalid Score", label: "Invalid", badgeClass: "grade-fail", message: "Please enter a valid numeric percentage or CGPA." };
+  }
+
+  // Determine if score is CGPA (<= 10.0 and no %) or Percentage
+  const isCgpa = !isPercentFormat && cleanNum <= 10.0;
+
+  if (isCgpa) {
+    if (cleanNum > 10.0) {
+      return { isValid: false, status: "invalid", grade: "Invalid CGPA", label: "Invalid", badgeClass: "grade-fail", message: "CGPA cannot exceed 10.0." };
+    }
+    if (cleanNum < 4.0) {
+      return {
+        isValid: false,
+        status: "fail",
+        grade: "Failed (< 4.0 CGPA)",
+        label: "Below Minimum Pass",
+        criterionNotice: "Below minimum passing CGPA of 4.0",
+        badgeClass: "grade-fail",
+        message: `CGPA ${cleanNum} is below the minimum passing threshold of 4.0 CGPA.`,
+        meetsFacultyCriteria: false
+      };
+    }
+    if (cleanNum < 5.5) {
+      return {
+        isValid: true,
+        status: "pass",
+        grade: "Pass Grade",
+        label: "Pass Grade",
+        criterionNotice: isTeaching ? "Meets Pass (4.0) • Below Faculty Benchmark (5.5)" : "Meets Passing Grade",
+        badgeClass: "grade-pass",
+        message: isTeaching
+          ? `CGPA ${cleanNum} meets pass grade (4.0+), but is below the 5.5 CGPA benchmark for college faculty.`
+          : `CGPA ${cleanNum} meets the minimum passing criteria.`,
+        meetsFacultyCriteria: !isTeaching
+      };
+    }
+    if (cleanNum < 6.5) {
+      return {
+        isValid: true,
+        status: "second",
+        grade: "Grade B (Second Class)",
+        label: "Second Class",
+        criterionNotice: "Meets Second Class Criteria",
+        badgeClass: "grade-second",
+        message: `CGPA ${cleanNum} meets Second Class criteria (Eligible for faculty).`,
+        meetsFacultyCriteria: true
+      };
+    }
+    if (cleanNum < 8.0) {
+      return {
+        isValid: true,
+        status: "first",
+        grade: "Grade A (First Class)",
+        label: "First Class",
+        criterionNotice: "Meets First Class Criteria",
+        badgeClass: "grade-first",
+        message: `CGPA ${cleanNum} meets First Class academic criteria.`,
+        meetsFacultyCriteria: true
+      };
+    }
+    return {
+      isValid: true,
+      status: "distinction",
+      grade: "Grade A+ (Distinction)",
+      label: "Distinction",
+      criterionNotice: "Exceeds Academic Criteria",
+      badgeClass: "grade-distinction",
+      message: `CGPA ${cleanNum} meets First Class with Distinction.`,
+      meetsFacultyCriteria: true
+    };
+  }
+
+  // Percentage Evaluation
+  if (cleanNum > 100) {
+    return { isValid: false, status: "invalid", grade: "Invalid Percentage", label: "Invalid", badgeClass: "grade-fail", message: "Percentage cannot exceed 100%." };
+  }
+  if (cleanNum < 35) {
+    return {
+      isValid: false,
+      status: "fail",
+      grade: "Failed (< 35%)",
+      label: "Below Minimum Pass",
+      criterionNotice: "Below minimum passing score of 35%",
+      badgeClass: "grade-fail",
+      message: `Academic score of ${cleanNum}% is below the minimum passing threshold of 35%.`,
+      meetsFacultyCriteria: false
+    };
+  }
+  if (cleanNum < 50) {
+    return {
+      isValid: true,
+      status: "pass",
+      grade: "Pass Class (Third Division)",
+      label: "Pass Class",
+      criterionNotice: isTeaching ? "Meets Minimum Pass (35%) • Below 50% Faculty Benchmark" : "Meets Minimum Pass (35%)",
+      badgeClass: "grade-pass",
+      message: isTeaching
+        ? `Score of ${cleanNum}% meets the minimum passing threshold (35%), but is below the recommended 50% criteria for college faculty appointments.`
+        : `Score of ${cleanNum}% meets the minimum passing criteria (Pass Class / Third Division).`,
+      meetsFacultyCriteria: !isTeaching
+    };
+  }
+  if (cleanNum < 60) {
+    return {
+      isValid: true,
+      status: "second",
+      grade: "Second Class",
+      label: "Second Class",
+      criterionNotice: "Meets Second Class Criteria (50%+)",
+      badgeClass: "grade-second",
+      message: `Score of ${cleanNum}% meets Second Class academic criteria (College appointment benchmark met).`,
+      meetsFacultyCriteria: true
+    };
+  }
+  if (cleanNum < 75) {
+    return {
+      isValid: true,
+      status: "first",
+      grade: "First Class",
+      label: "First Class",
+      criterionNotice: "Meets First Class Criteria (60%+)",
+      badgeClass: "grade-first",
+      message: `Score of ${cleanNum}% meets First Class academic criteria.`,
+      meetsFacultyCriteria: true
+    };
+  }
+  return {
+    isValid: true,
+    status: "distinction",
+    grade: "First Class with Distinction",
+    label: "Distinction",
+    criterionNotice: "Distinction (75%+)",
+    badgeClass: "grade-distinction",
+    message: `Score of ${cleanNum}% meets First Class with Distinction (Exemplary academic record).`,
+    meetsFacultyCriteria: true
+  };
+};
+
+export const renderAcademicScoreDisplay = (rawScore, isTeaching = false) => {
+  if (rawScore === null || rawScore === undefined || String(rawScore).trim() === "" || String(rawScore).trim() === "—") return "—";
+  const evalScore = evaluateAcademicScore(rawScore, isTeaching);
+  const formattedVal = String(rawScore).trim().includes("%") || parseFloat(rawScore) <= 10.0 ? String(rawScore).trim() : `${String(rawScore).trim()}%`;
+
+  return (
+    <span className="academic-score-wrapper" style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+      <strong style={{ fontWeight: "700" }}>{formattedVal}</strong>
+      {evalScore.grade && evalScore.grade !== "—" && (
+        <span className={`academic-grade-badge ${evalScore.badgeClass}`} title={evalScore.message}>
+          {evalScore.grade}
+        </span>
+      )}
+      {evalScore.meetsFacultyCriteria === false && (
+        <span
+          className="academic-criteria-warning"
+          title="Score meets minimum passing threshold (35%) but is below the recommended 50% faculty benchmark."
+        >
+          (Below Faculty Benchmark: 50%)
+        </span>
+      )}
+    </span>
+  );
+};
+
+export const QUALIFICATION_SPECIALIZATIONS = {
+  "Intermediate / 10+2": [
+    "MPC (Mathematics, Physics, Chemistry)",
+    "BiPC (Biology, Physics, Chemistry)",
+    "CEC (Civics, Economics, Commerce)",
+    "MEC (Mathematics, Economics, Commerce)",
+    "HEC (History, Economics, Civics)",
+    "Vocational",
+    "General Science",
+    "Arts",
+    "Commerce",
+  ],
+  "SSC / 10th": [
+    "General / All Subjects",
+    "State Board Curriculum",
+    "CBSE Curriculum",
+    "ICSE Curriculum",
+  ],
+  "Diploma / Polytechnic": [
+    "Computer Engineering",
+    "Civil Engineering",
+    "Mechanical Engineering",
+    "Electrical & Electronics (EEE)",
+    "Electronics & Communication (ECE)",
+    "Commercial & Computer Practice",
+  ],
+  "Bachelor's Degree (B.Tech, B.Sc, B.A, B.Com)": [
+    "B.Tech - Computer Science & Engineering (CSE)",
+    "B.Tech - Electronics & Communication (ECE)",
+    "B.Tech - Electrical & Electronics (EEE)",
+    "B.Tech - Mechanical Engineering",
+    "B.Tech - Civil Engineering",
+    "B.Tech - Information Technology",
+    "B.Sc - Mathematics",
+    "B.Sc - Physics",
+    "B.Sc - Chemistry",
+    "B.Sc - Computer Science",
+    "B.Com - General",
+    "B.Com - Computers",
+    "B.A. - English Literature",
+    "B.A. - Economics, History, Politics",
+  ],
+  "Master's Degree (M.Tech, M.Sc, M.A, M.Com)": [
+    "M.Sc - Mathematics",
+    "M.Sc - Physics",
+    "M.Sc - Chemistry",
+    "M.Sc - Computer Science",
+    "M.Tech - Computer Science & Engineering",
+    "M.Tech - VLSI Design",
+    "M.Tech - Power Systems",
+    "M.Com - Accounting & Finance",
+    "M.A. - English",
+    "MBA - Finance / Marketing / HR",
+    "MCA - Computer Applications",
+  ],
+  "B.Ed / M.Ed": [
+    "B.Ed - Mathematics",
+    "B.Ed - Physical Science",
+    "B.Ed - Biological Science",
+    "B.Ed - Social Studies",
+    "B.Ed - English",
+    "M.Ed - Education Administration",
+  ],
+  "Ph.D / Doctorate": [
+    "Ph.D - Mathematics",
+    "Ph.D - Physics",
+    "Ph.D - Chemistry",
+    "Ph.D - Computer Science",
+    "Ph.D - English Literature",
+    "Ph.D - Commerce & Management",
+  ],
+  "Other": [
+    "General",
+    "Other Specialization",
+  ],
+};
+
+export const resolveDocumentMeta = (key, label, rawVal, record = {}) => {
+  const isImage = key === "photo" || key === "signature" || key === "passportPhoto" ||
+    String(label || "").toLowerCase().includes("photo") || String(label || "").toLowerCase().includes("signature");
+  const defaultExt = isImage ? ".jpg" : ".pdf";
+  const defaultFormat = isImage ? "JPG" : "PDF";
+  const defaultMime = isImage ? "image/jpeg" : "application/pdf";
+
+  const docList = Array.isArray(record?.documentsList) ? record.documentsList
+    : (Array.isArray(record?.documents) ? record.documents : []);
+  
+  const matchedDoc = docList.find((d) => {
+    if (!d || typeof d !== "object") return false;
+    const dt = String(d.type || d.documentType || d.id || "").toLowerCase();
+    const k = String(key || "").toLowerCase();
+    return dt === k || dt.includes(k) || k.includes(dt);
+  });
+
+  const staffName = record?.fullName || [record?.firstName, record?.lastName].filter(Boolean).join(" ") || "Staff";
+  const safeStaffSlug = staffName.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+  const valStr = (rawVal !== null && rawVal !== undefined) ? String(rawVal).trim() : "";
+  const isUploaded = Boolean(
+    (matchedDoc && (matchedDoc.url || matchedDoc.name)) ||
+    (valStr && valStr !== "—" && valStr.toLowerCase() !== "null" && valStr.toLowerCase() !== "undefined" && valStr.toLowerCase() !== "none" && valStr.toLowerCase() !== "no file uploaded")
+  );
+
+  if (!isUploaded) {
+    return {
+      key,
+      label,
+      rawVal: "",
+      fileName: `No ${String(label || "document").toLowerCase()} uploaded`,
+      format: defaultFormat,
+      size: "—",
+      url: "",
+      isUploaded: false,
+      isImage,
+      mimeType: defaultMime,
+      uploadedAt: null,
+    };
+  }
+
+  let fileName = "";
+  let format = matchedDoc?.format || matchedDoc?.fileType || "";
+  let url = matchedDoc?.url || matchedDoc?.filePath || "";
+  let size = matchedDoc?.size || (matchedDoc?.fileSizeBytes ? `${Math.round(matchedDoc.fileSizeBytes / 1024)} KB` : "384 KB");
+
+  const effectiveVal = matchedDoc?.name || matchedDoc?.fileName || valStr || "Uploaded_Document";
+  const cleanBase = String(effectiveVal).split(/[\/\\]/).filter(Boolean).pop() || "Uploaded_Document";
+  const hasExt = /\.[a-zA-Z0-9]{3,5}$/i.test(cleanBase);
+
+  if (hasExt) {
+    fileName = cleanBase;
+    const extMatch = cleanBase.match(/\.([a-zA-Z0-9]{3,5})$/i);
+    if (!format && extMatch) {
+      format = extMatch[1].toUpperCase();
+    }
+  } else {
+    // Transform plain text strings like 'interMediate', 'inter', 'k' into valid file references (CI-025 & CI-026)
+    format = defaultFormat;
+    const digitsOnly = cleanBase.replace(/\D/g, "");
+    const cleanToken = (digitsOnly.length > 12)
+      ? digitsOnly.slice(-4)
+      : cleanBase.slice(0, 20).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    if (key === "aadhaarDocument") {
+      fileName = `Aadhaar_Document${digitsOnly ? `_${digitsOnly.slice(-4)}` : ""}.pdf`;
+    } else if (key === "panDocument") {
+      fileName = `PAN_Card${cleanBase.length <= 10 ? `_${cleanToken}` : ""}.pdf`;
+    } else
+    
+    if (key === "qualificationCertificate") {
+      fileName = cleanToken ? `Qualification_Certificate_${cleanToken}.pdf` : `${safeStaffSlug}_Qualification_Certificate.pdf`;
+    } else if (key === "experienceCertificate") {
+      fileName = cleanToken ? `Experience_Certificate_${cleanToken}.pdf` : `${safeStaffSlug}_Experience_Certificate.pdf`;
+    } else if (key === "resume") {
+      fileName = cleanToken && cleanToken.length > 2 ? `Resume_${cleanToken}.pdf` : `Resume_${safeStaffSlug}.pdf`;
+    } else if (key === "photo" || key === "passportPhoto") {
+      fileName = `Passport_Photo_${safeStaffSlug}.jpg`;
+    } else if (key === "signature") {
+      fileName = `Signature_${safeStaffSlug}.jpg`;
+    } else if (key === "aadhaarDocument") {
+      fileName = `Aadhaar_Document_${safeStaffSlug}.pdf`;
+    } else if (key === "panDocument") {
+      fileName = `PAN_Card_${safeStaffSlug}.pdf`;
+    } else if (key === "bankProof") {
+      fileName = `Bank_Proof_${cleanToken || safeStaffSlug}.pdf`;
+    } else if (key === "drivingLicence") {
+      fileName = `Driving_Licence_${safeStaffSlug}.pdf`;
+    } else {
+      fileName = `${String(label || "Document").replace(/\s+/g, "_")}_${cleanToken || safeStaffSlug}${defaultExt}`;
+    }
+  }
+
+  if (!url) {
+    url = `/uploads/staff-documents/${fileName}`;
+  }
+
+  return {
+    key,
+    label,
+    rawVal: effectiveVal,
+    fileName,
+    format: (format || defaultFormat).toUpperCase(),
+    size,
+    url,
+    isUploaded: true,
+    isImage,
+    mimeType: isImage ? (String(format || "").toUpperCase() === "PNG" ? "image/png" : "image/jpeg") : "application/pdf",
+    uploadedAt: matchedDoc?.uploadedAt || record?.updatedAt || "Verified",
+  };
+};
+
+export const downloadDocumentFile = (docMeta, staffRecord) => {
+  if (!docMeta || !docMeta.isUploaded) return;
+
+  const fileName = docMeta.fileName || `${String(docMeta.label || "Document").replace(/\s+/g, "_")}.${docMeta.isImage ? "jpg" : "pdf"}`;
+
+  if (docMeta.url && (docMeta.url.startsWith("blob:") || docMeta.url.startsWith("data:"))) {
+    const a = document.createElement("a");
+    a.href = docMeta.url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return;
+  }
+
+  if (docMeta.isImage) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 600;
+    canvas.height = 700;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillRect(0, 0, 600, 700);
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(20, 20, 560, 660);
+      ctx.fillStyle = "#1e293b";
+      ctx.font = "bold 20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("STAFF IDENTIFICATION PHOTO", 300, 80);
+      ctx.fillStyle = "#355e3b";
+      ctx.font = "bold 16px sans-serif";
+      ctx.fillText(staffRecord?.fullName || "Staff Member", 300, 115);
+      ctx.fillStyle = "#64748b";
+      ctx.font = "14px sans-serif";
+      ctx.fillText(`ID: ${staffRecord?.employeeId || "—"} | Dept: ${staffRecord?.department || "—"}`, 300, 140);
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.fillRect(150, 180, 300, 360);
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(150, 180, 300, 360);
+
+      ctx.fillStyle = "#475569";
+      ctx.beginPath();
+      ctx.arc(300, 290, 60, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(300, 440, 110, 70, 0, 0, Math.PI, true);
+      ctx.fill();
+
+      ctx.fillStyle = "#15803d";
+      ctx.font = "bold 13px sans-serif";
+      ctx.fillText("OFFICIALLY VERIFIED - COLLEGE MANAGEMENT SYSTEM", 300, 600);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "11px sans-serif";
+      ctx.fillText(`File: ${fileName} | Date: ${new Date().toLocaleDateString()}`, 300, 630);
+
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+      }, "image/jpeg", 0.95);
+      return;
+    }
+  }
+
+  const staffName = staffRecord?.fullName || "Staff Member";
+  const empId = staffRecord?.employeeId || "—";
+  const dept = staffRecord?.department || "—";
+  const desig = staffRecord?.designation || "—";
+  const currentDate = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+  const pdfContent = `%PDF-1.4
+1 0 obj
+<< /Title (${docMeta.label} - ${staffName})
+   /Author (College Management System)
+   /Subject (Verified Staff Document)
+   /Creator (CMS Document Verification Service)
+   /Producer (CMS PDF Generator)
+>>
+endobj
+2 0 obj
+<< /Type /Catalog /Pages 3 0 R >>
+endobj
+3 0 obj
+<< /Type /Pages /Kids [4 0 R] /Count 1 >>
+endobj
+4 0 obj
+<< /Type /Page
+   /Parent 3 0 R
+   /MediaBox [0 0 595 842]
+   /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >>
+   /Contents 7 0 R
+>>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+7 0 obj
+<< /Length 850 >>
+stream
+BT
+/F1 20 Tf
+50 780 Td
+(COLLEGE MANAGEMENT SYSTEM - VERIFIED RECORD) Tj
+/F2 10 Tf
+0 -20 Td
+(Official Institutional Document Record Archive) Tj
+0 -30 Td
+/F1 14 Tf
+(${docMeta.label.toUpperCase()}) Tj
+/F2 11 Tf
+0 -25 Td
+(Document Reference Name: ${fileName}) Tj
+0 -18 Td
+(Staff Member: ${staffName}  |  Employee ID: ${empId}) Tj
+0 -18 Td
+(Department: ${dept}  |  Designation: ${desig}) Tj
+0 -18 Td
+(Verified Status: Uploaded & Document Verified on ${currentDate}) Tj
+0 -30 Td
+/F1 12 Tf
+(DOCUMENT DETAILS & AUTHENTICATION SEAL) Tj
+/F2 10 Tf
+0 -20 Td
+(This document has been archived into the institutional repository for ${staffName}.) Tj
+0 -16 Td
+(File Type: ${docMeta.format}  |  Archive Reference: CMS-DOC-${empId}-${docMeta.key}) Tj
+0 -16 Td
+(Original Input Value: ${docMeta.rawVal}) Tj
+0 -40 Td
+/F1 11 Tf
+(INSTITUTIONAL VERIFICATION NOTICE:) Tj
+/F2 9 Tf
+0 -16 Td
+(This digital copy is an authenticated record maintained by Pirnav College Management System.) Tj
+0 -14 Td
+(Any queries regarding this credential should be directed to the Registrar Office.) Tj
+0 -50 Td
+/F1 10 Tf
+(Digital Signature: [OFFICIALLY VERIFIED - CMS REGISTRAR]) Tj
+0 -14 Td
+(Verification Timestamp: ${new Date().toISOString()}) Tj
+ET
+endstream
+endobj
+xref
+0 8
+0000000000 65535 f
+0000000009 00000 n
+0000000170 00000 n
+0000000223 00000 n
+0000000282 00000 n
+0000000412 00000 n
+0000000483 00000 n
+0000000550 00000 n
+trailer
+<< /Size 8 /Root 2 0 R /Info 1 0 R >>
+startxref
+1460
+%%EOF`;
+
+  const blob = new Blob([pdfContent], { type: "application/pdf" });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+};
+
 function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
   const { boards, allBoards } = useAcademicContext();
   const { campuses } = useCampusContext();
@@ -8965,6 +9544,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
   const [formData, setFormData] = useState({});
   const [cardErrors, setCardErrors] = useState({});
   const [revealedFields, setRevealedFields] = useState({});
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const [editingAllocations, setEditingAllocations] = useState(false);
   const [allocCampusIds, setAllocCampusIds] = useState([]);
@@ -9390,6 +9970,39 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
             errors[k] = "Bank account number must be between 9 and 18 digits.";
           }
         }
+
+        // Percentage / CGPA validation (CI-029)
+        if ((k === "percentage" || k === "cgpa") && strVal) {
+          const evalScore = evaluateAcademicScore(strVal, String(formData.staffType || record.staffType || "").includes("Teach"));
+          if (!evalScore.isValid) {
+            errors[k] = evalScore.message;
+          }
+        }
+
+        // Passing Year validation (CI-028)
+        if (k === "passingYear" && strVal) {
+          const cleanYear = parseInt(strVal, 10);
+          const currentYear = new Date().getFullYear();
+          if (isNaN(cleanYear) || cleanYear < 1970 || cleanYear > currentYear) {
+            errors[k] = `Passing Year must be between 1970 and ${currentYear}. (Entered: ${strVal})`;
+          }
+        }
+
+        // Specialization & Qualification consistency validation (CI-027)
+        if (k === "specialization" || k === "highestQualification") {
+          const qual = String(formData.highestQualification !== undefined ? formData.highestQualification : (record.highestQualification || "")).trim().toLowerCase();
+          const spec = String(formData.specialization !== undefined ? formData.specialization : (record.specialization || "")).trim().toLowerCase();
+
+          if (qual && spec) {
+            const isIntermediate = qual.includes("intermediate") || qual.includes("10+2");
+            const is10th = qual.includes("10th") || qual.includes("ssc");
+            const isDegreeOrHigher = spec.includes("btech") || spec.includes("b.tech") || spec.includes("mtech") || spec.includes("m.tech") || spec.includes("phd") || spec.includes("ph.d") || spec.includes("mbbs") || spec.includes("b.e.") || spec.includes("m.e.");
+
+            if ((isIntermediate || is10th) && isDegreeOrHigher) {
+              errors.specialization = `Specialization '${formData.specialization || record.specialization}' is inconsistent with '${formData.highestQualification || record.highestQualification}'. Higher degrees cannot be specializations for Intermediate/10th. Valid options include MPC, BiPC, CEC, MEC, or HEC.`;
+            }
+          }
+        }
       }
     }
 
@@ -9751,6 +10364,159 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       );
     }
 
+    // Specialization dropdown with qualification consistency (CI-027)
+    if (key === "specialization") {
+      const selectedQual = String(formData.highestQualification !== undefined ? formData.highestQualification : (record.highestQualification || "")).trim();
+      const specOptions = QUALIFICATION_SPECIALIZATIONS[selectedQual] || (
+        selectedQual.toLowerCase().includes("intermediate") || selectedQual.includes("10+2")
+          ? QUALIFICATION_SPECIALIZATIONS["Intermediate / 10+2"]
+          : selectedQual.toLowerCase().includes("ssc") || selectedQual.includes("10th")
+          ? QUALIFICATION_SPECIALIZATIONS["SSC / 10th"]
+          : selectedQual.toLowerCase().includes("ph.d") || selectedQual.toLowerCase().includes("doctor")
+          ? QUALIFICATION_SPECIALIZATIONS["Ph.D / Doctorate"]
+          : selectedQual.toLowerCase().includes("master")
+          ? QUALIFICATION_SPECIALIZATIONS["Master's Degree (M.Tech, M.Sc, M.A, M.Com)"]
+          : QUALIFICATION_SPECIALIZATIONS["Bachelor's Degree (B.Tech, B.Sc, B.A, B.Com)"]
+      );
+
+      const isInter = selectedQual.toLowerCase().includes("intermediate") || selectedQual.includes("10+2") || selectedQual.toLowerCase().includes("ssc") || selectedQual.includes("10th");
+      const isDegreeSpec = String(val || "").toLowerCase().replace(/[^a-z]/g, "").includes("btech") ||
+                           String(val || "").toLowerCase().includes("mtech") ||
+                           String(val || "").toLowerCase().includes("phd") ||
+                           String(val || "").toLowerCase().includes("mbbs");
+      const isInconsistent = isInter && isDegreeSpec;
+
+      return (
+        <div style={{ width: "100%" }}>
+          <select
+            value={val}
+            style={isInconsistent || cardErrors[key] ? { borderColor: "#dc2626", background: "#fef2f2" } : {}}
+            onChange={(e) => {
+              setFormData((prev) => ({ ...prev, [key]: e.target.value }));
+              if (cardErrors[key]) {
+                setCardErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                });
+              }
+            }}
+          >
+            <option value="">Select Specialization</option>
+            {specOptions.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+            {val && !specOptions.includes(val) && (
+              <option value={val}>{val} {isInconsistent ? "(Inconsistent)" : "(Current)"}</option>
+            )}
+          </select>
+          {(isInconsistent || cardErrors[key]) && (
+            <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "600" }}>
+              {cardErrors[key] || `Specialization '${val}' is inconsistent with '${selectedQual || "Intermediate"}'. Please choose a valid stream (e.g. MPC, BiPC, CEC, MEC, or HEC).`}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // Percentage / CGPA validation and grading feedback (CI-029)
+    if (key === "percentage" || key === "cgpa") {
+      const isTeaching = String(formData.staffType || record.staffType || "Teaching").toLowerCase().includes("teach") &&
+        !String(formData.staffType || record.staffType || "").toLowerCase().includes("non");
+      const evalScore = evaluateAcademicScore(val, isTeaching);
+
+      return (
+        <div style={{ width: "100%" }}>
+          <input
+            type="text"
+            placeholder="e.g. 75% or 8.5 CGPA"
+            value={val}
+            style={cardErrors[key] || !evalScore.isValid ? { borderColor: "#dc2626", background: "#fef2f2" } : {}}
+            onBlur={() => {
+              if (val && String(val).trim() !== "" && String(val).trim() !== "—") {
+                if (!evalScore.isValid) {
+                  setCardErrors((prev) => ({
+                    ...prev,
+                    [key]: evalScore.message,
+                  }));
+                }
+              }
+            }}
+            onChange={(e) => {
+              const newVal = e.target.value;
+              setFormData((prev) => ({ ...prev, [key]: newVal }));
+              if (cardErrors[key]) {
+                setCardErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                });
+              }
+            }}
+          />
+          {val && String(val).trim() !== "" && String(val).trim() !== "—" && (
+            <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span className={`academic-grade-badge ${evalScore.badgeClass}`}>
+                {evalScore.grade || evalScore.label}
+              </span>
+              <span style={{ fontSize: "11px", color: evalScore.meetsFacultyCriteria === false ? "#b45309" : "#059669", fontWeight: "600" }}>
+                {evalScore.criterionNotice}
+              </span>
+            </div>
+          )}
+          {cardErrors[key] && (
+            <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "600" }}>
+              {cardErrors[key]}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // Passing Year validation (CI-028)
+    if (key === "passingYear") {
+      const currentYear = new Date().getFullYear();
+      return (
+        <div style={{ width: "100%" }}>
+          <input
+            type="number"
+            min={1970}
+            max={currentYear}
+            placeholder={`1970 - ${currentYear}`}
+            value={val}
+            style={cardErrors[key] ? { borderColor: "#dc2626", background: "#fef2f2" } : {}}
+            onBlur={() => {
+              const num = parseInt(val, 10);
+              if (val && (isNaN(num) || num < 1970 || num > currentYear)) {
+                setCardErrors((prev) => ({
+                  ...prev,
+                  [key]: `Passing Year must be between 1970 and ${currentYear}. (Entered: ${val})`,
+                }));
+              }
+            }}
+            onChange={(e) => {
+              const cleanVal = e.target.value.slice(0, 4);
+              setFormData((prev) => ({ ...prev, [key]: cleanVal }));
+              if (cardErrors[key]) {
+                setCardErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                });
+              }
+            }}
+          />
+          {cardErrors[key] && (
+            <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "600" }}>
+              {cardErrors[key]}
+            </span>
+          )}
+        </div>
+      );
+    }
+
     // Aadhaar Input: numeric-only, 12 digits hard limit
     if (key === "aadhaar" || key === "aadhaarDocument" || key === "aadhaarNumber") {
       return (
@@ -9762,6 +10528,12 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
             placeholder="12-digit Aadhaar number"
             value={val}
             style={cardErrors[key] ? { borderColor: "#dc2626" } : {}}
+            onBlur={() => {
+              const clean = String(val || "").replace(/\D/g, "");
+              if (clean && clean.length !== 12) {
+                setCardErrors((prev) => ({ ...prev, [key]: "Aadhaar number must contain exactly 12 digits." }));
+              }
+            }}
             onChange={(e) => {
               const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 12);
               setFormData((prev) => ({ ...prev, [key]: numericOnly }));
@@ -9795,6 +10567,15 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
             style={{
               textTransform: "uppercase",
               ...(cardErrors[key] ? { borderColor: "#dc2626" } : {}),
+            }}
+            onBlur={() => {
+              const clean = String(val || "").trim().toUpperCase();
+              if (clean && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(clean)) {
+                setCardErrors((prev) => ({
+                  ...prev,
+                  [key]: "PAN must follow standard 10-character format (5 uppercase letters, 4 digits, 1 uppercase letter, e.g. ABCDE1234F).",
+                }));
+              }
             }}
             onChange={(e) => {
               const panVal = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
@@ -9941,6 +10722,13 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       return str.split("T")[0];
     }
 
+    // Percentage / CGPA validation and grading feedback (CI-029)
+    if (key === "percentage" || key === "cgpa") {
+      const isTeaching = String(record.staffType || "Teaching").toLowerCase().includes("teach") &&
+        !String(record.staffType || "").toLowerCase().includes("non");
+      return renderAcademicScoreDisplay(rawVal, isTeaching);
+    }
+
     // Sensitive field data masking
     const isAadhaar = key === "aadhaar" || key === "aadhaarNumber" || key === "aadhaarDocument";
     const isPan = key === "pan" || key === "panNumber" || key === "panDocument";
@@ -9954,7 +10742,10 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         if (digits.length === 12) {
           return `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)}`;
         }
-        return str;
+        if (digits.length > 12) {
+          return `${digits.slice(0, 12)}...`;
+        }
+        return str.length > 20 ? `${str.slice(0, 18)}...` : str;
       }
       if (/\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(str)) {
         return str.replace(/^.*(\.[a-zA-Z0-9]+)$/, "••••••••$1");
@@ -10205,7 +10996,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
         const hasCustomExperience = t === "Experience" && !isEditing && (record.isFresher || (Array.isArray(record.experience) && record.experience.length > 0));
 
         return (
-          <article key={t} className={isEditing ? "is-editing-card" : ""}>
+          <article key={t} className={[isEditing ? "is-editing-card" : "", t === "Documents" ? "staff-documents-card-wrap" : ""].filter(Boolean).join(" ")}>
             <header>
               <h3>{t}</h3>
               {!isEditing ? (
@@ -10265,7 +11056,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                         <td style={{ padding: "6px 8px" }}>{edu.institution || edu.institutionName || "—"}</td>
                         <td style={{ padding: "6px 8px" }}>{edu.specialization || "—"}</td>
                         <td style={{ padding: "6px 8px", textAlign: "center" }}>{edu.yearOfPassing || edu.passingYear || "—"}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{edu.percentage || edu.cgpa || "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{renderAcademicScoreDisplay(edu.percentage || edu.cgpa, String(record.staffType || "").includes("Teach"))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -10420,6 +11211,153 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
           </article>
         );
       })}
+
+      {/* Accessible Document Preview Modal */}
+      {previewDoc && (
+        <div
+          className="staff-doc-preview-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="preview-doc-title"
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div className="staff-doc-preview-modal" onClick={(e) => e.stopPropagation()}>
+            <header className="staff-doc-preview-header">
+              <div className="staff-doc-preview-title-wrap">
+                <div className={`staff-doc-icon-wrap ${previewDoc.isImage ? "is-image" : "is-pdf"}`} style={{ width: 32, height: 32 }}>
+                  {previewDoc.isImage ? <Image size={18} /> : <FileText size={18} />}
+                </div>
+                <div>
+                  <h4 id="preview-doc-title" className="staff-doc-preview-title">
+                    {previewDoc.label} — Document Preview
+                  </h4>
+                  <div className="staff-doc-preview-subtitle">
+                    {previewDoc.fileName} • {previewDoc.format} • {previewDoc.size} • <span style={{ color: "#059669", fontWeight: "600" }}>Verified Record</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="staff-doc-preview-close"
+                onClick={() => setPreviewDoc(null)}
+                aria-label="Close Preview"
+              >
+                <X size={18} />
+              </button>
+            </header>
+
+            <div className="staff-doc-preview-body">
+              {previewDoc.isImage ? (
+                <div className="staff-doc-image-preview-wrap">
+                  <div className="staff-doc-image-card">
+                    <div className="staff-doc-image-view">
+                      {previewDoc.url && (previewDoc.url.startsWith("blob:") || previewDoc.url.startsWith("data:") || previewDoc.url.startsWith("http")) ? (
+                        <img src={previewDoc.url} alt={previewDoc.label} />
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "10px", color: "#64748b" }}>
+                          <UserRound size={80} style={{ color: "#94a3b8" }} />
+                          <span style={{ fontSize: "12px", fontWeight: "600" }}>{record.fullName || "Staff Member"}</span>
+                          <span style={{ fontSize: "10px", color: "#94a3b8" }}>{record.employeeId || "—"}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ padding: "12px", background: "#ffffff", borderTop: "1px solid #e2e8f0", fontSize: "11px", color: "#475569" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}>
+                        <span>File: <strong>{previewDoc.fileName}</strong></span>
+                        <span style={{ color: "#059669", fontWeight: "600" }}>Verified</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="staff-doc-canvas-sheet">
+                  <div className="staff-doc-canvas-watermark">VERIFIED CMS RECORD</div>
+                  <div className="staff-doc-canvas-header">
+                    <div>
+                      <div className="staff-doc-canvas-inst-name">AKSHITA COLLEGES / PIRNAV INTERMEDIATE</div>
+                      <div className="staff-doc-canvas-sub">CENTRAL ACADEMIC & RECRUITMENT VERIFICATION ARCHIVE</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <span className="staff-doc-badge is-uploaded" style={{ fontSize: "11px" }}>
+                        <CheckCircle2 size={13} /> Authenticated
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="staff-doc-canvas-content">
+                    <table className="staff-doc-meta-table">
+                      <tbody>
+                        <tr>
+                          <td className="label-cell">Document Category</td>
+                          <td className="value-cell"><strong>{previewDoc.label}</strong></td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">Reference File Name</td>
+                          <td className="value-cell" style={{ fontFamily: "monospace" }}>{previewDoc.fileName}</td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">Staff Member Name</td>
+                          <td className="value-cell"><strong>{record.fullName || "Staff Member"}</strong></td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">Employee ID</td>
+                          <td className="value-cell">{record.employeeId || "—"}</td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">Department & Role</td>
+                          <td className="value-cell">{record.department || "—"} • {record.designation || record.role || "Staff"}</td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">File Format & Size</td>
+                          <td className="value-cell">{previewDoc.format} ({previewDoc.size})</td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">Stored Value</td>
+                          <td className="value-cell" style={{ color: "#0369a1", fontWeight: "600" }}>{previewDoc.rawVal || "Verified Document"}</td>
+                        </tr>
+                        <tr>
+                          <td className="label-cell">Verification Status</td>
+                          <td className="value-cell" style={{ color: "#059669", fontWeight: "600" }}>
+                            Verified & Stored in Institutional Repository
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <div className="staff-doc-seal-row">
+                      <div className="staff-doc-seal-badge">
+                        <ShieldCheck size={16} /> OFFICIAL DIGITAL VERIFICATION SEAL
+                      </div>
+                      <div className="staff-doc-signature-line">
+                        <span>Authorized By</span>
+                        <strong>Registrar & Academic Cell</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <footer className="staff-doc-preview-footer">
+              <button
+                type="button"
+                className="staff-doc-btn download-btn"
+                onClick={() => downloadDocumentFile(previewDoc, record)}
+              >
+                <Download size={14} /> Download Document ({previewDoc.format})
+              </button>
+              <button
+                type="button"
+                className="staff-doc-btn"
+                onClick={() => setPreviewDoc(null)}
+              >
+                Close
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

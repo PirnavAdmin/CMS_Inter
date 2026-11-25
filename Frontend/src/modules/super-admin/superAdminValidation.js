@@ -40,7 +40,8 @@ export const formatProperCollegeName = (value) => {
 
 /**
  * Validates whether a college or campus name has irregular capitalization,
- * such as uppercase letters in the middle of words (e.g. "MeDha", "ColLege").
+ * such as uppercase letters in the middle of words (e.g. "MeDha", "ColLege"),
+ * or words starting with lowercase letters (e.g. "narayana", "junior college").
  */
 export const validateCollegeNameCapitalization = (value) => {
   const str = String(value ?? "").trim();
@@ -51,5 +52,24 @@ export const validateCollegeNameCapitalization = (value) => {
   if (/[a-z][A-Z]/.test(str)) {
     return "College name cannot contain uppercase letters in the middle of words (e.g., use 'Medha Junior College' instead of 'MeDha Junior ColLege').";
   }
+
+  // Tokenize into individual words separated by spaces or hyphens
+  const words = str.split(/[\s-]+/).filter(Boolean);
+  const minorWords = new Set(["and", "of", "the", "for", "in", "at", "to", "by", "&"]);
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    // Check if word contains uppercase letter in the middle
+    if (/^[A-Z][a-z]+[A-Z]/.test(w) || /[a-z]+[A-Z]/.test(w)) {
+      return `Word "${w}" contains uppercase letters in the middle. Please use standard capitalization (e.g., "${w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()}").`;
+    }
+    // Check if the first word or any non-minor word starts with lowercase
+    if (i === 0 || !minorWords.has(w.toLowerCase())) {
+      if (/^[a-z]/.test(w)) {
+        return `Each word in the college name must start with a capital letter (e.g., "${w.charAt(0).toUpperCase() + w.slice(1)}" instead of "${w}").`;
+      }
+    }
+  }
+
   return "";
 };

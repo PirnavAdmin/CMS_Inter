@@ -6,6 +6,7 @@ import {
   FiPlus,
   FiDownload,
   FiEye,
+  FiEyeOff,
   FiPrinter,
   FiTrash2,
   FiUser,
@@ -156,6 +157,7 @@ const StaffList = () => {
   // View Details Modal
   const [viewingStaff, setViewingStaff] = useState(null);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [revealViewAadhaar, setRevealViewAadhaar] = useState(false);
 
   // Delete Confirmation Modal
   const [deletingStaff, setDeletingStaff] = useState(null);
@@ -534,7 +536,7 @@ const StaffList = () => {
           `"${s.designation || ""}"`,
           `"${s.gender || ""}"`,
           `"${s.dateOfBirth ? s.dateOfBirth.split("T")[0] : ""}"`,
-          `"${s.aadhaar || ""}"`,
+          `"${s.aadhaar ? "XXXX XXXX " + s.aadhaar.replace(/\D/g, "").slice(-4) : ""}"`,
           `"${s.mobile || ""}"`,
           `"${s.email || ""}"`,
           `"${s.bloodGroup || ""}"`,
@@ -624,7 +626,7 @@ const StaffList = () => {
               </div>
               <div className="print-row">
                 <span className="print-label">Aadhaar Number:</span>
-                <span>{printingStaff.aadhaar || "—"}</span>
+                <span>{printingStaff.aadhaar ? `XXXX XXXX ${printingStaff.aadhaar.replace(/\D/g, "").slice(-4)}` : "—"}</span>
               </div>
             </div>
 
@@ -1505,7 +1507,33 @@ const StaffList = () => {
                   </div>
                   <div className="staff-review-item">
                     <label>Aadhaar Number</label>
-                    <p>{viewingStaff.aadhaar || "—"}</p>
+                    <p style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      <span>
+                        {viewingStaff.aadhaar
+                          ? revealViewAadhaar
+                            ? viewingStaff.aadhaar
+                            : `XXXX XXXX ${viewingStaff.aadhaar.replace(/\D/g, "").slice(-4)}`
+                          : "—"}
+                      </span>
+                      {viewingStaff.aadhaar ? (
+                        <button
+                          type="button"
+                          onClick={() => setRevealViewAadhaar((v) => !v)}
+                          title={revealViewAadhaar ? "Hide Aadhaar" : "Reveal Aadhaar"}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            padding: "2px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            color: revealViewAadhaar ? "var(--staff-primary, #355e3b)" : "#94a3b8"
+                          }}
+                        >
+                          {revealViewAadhaar ? <FiEyeOff size={14} /> : <FiEye size={14} />}
+                        </button>
+                      ) : null}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1563,7 +1591,7 @@ const StaffList = () => {
               <button
                 className="staff-btn staff-btn-outline"
                 onClick={() => {
-                  setShowViewModal(false);
+                  setShowViewModal(false); setRevealViewAadhaar(false);
                   handlePrint(viewingStaff);
                 }}
               >

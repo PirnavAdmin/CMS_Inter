@@ -1,5 +1,6 @@
 import PaginatedTable from "../common/PaginatedTable.jsx";
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { 
   Building2, 
@@ -106,6 +107,7 @@ export default function CampusConfigurationPage() {
     code: "",
     address: "",
     phone: "",
+    countryCode: "+91",
     email: "",
     boards: ["Board of Intermediate Education, Andhra Pradesh"],
     status: "Active (Displays in Header Selector)",
@@ -168,6 +170,7 @@ export default function CampusConfigurationPage() {
       code: "",
       address: "",
       phone: "",
+      countryCode: "+91",
       email: "",
       boards: ["Board of Intermediate Education, Andhra Pradesh"],
       status: "Active (Displays in Header Selector)",
@@ -242,7 +245,7 @@ export default function CampusConfigurationPage() {
     e.preventDefault();
     setFormError("");
 
-    const contactError = validatePhone(formData.phone);
+    const contactError = validatePhone(formData.phone, formData.countryCode || "+91");
     setPhoneError(contactError);
     if (contactError) {
       document.getElementById("campusPhone")?.focus();
@@ -279,7 +282,7 @@ export default function CampusConfigurationPage() {
       campusName: formatProperCollegeName(formData.name.trim()),
       campusCode: formData.code.trim().toUpperCase(),
       address: formData.address.trim(),
-      contactPhone: formData.phone.trim(),
+      contactPhone: formData.phone.trim() ? `${formData.countryCode || "+91"} ${formData.phone.trim()}` : "",
       email: formData.email.trim(),
       isHQ: editingCampus ? Boolean(editingCampus.isHQ) : false,
       isActive: formData.status.includes("Active"),
@@ -614,7 +617,7 @@ export default function CampusConfigurationPage() {
         </div>
 
         {/* Modal matching Image 1 with Board Multi-Select */}
-        {modalOpen && (
+        {modalOpen && createPortal(
           <div className="campus-modal-overlay" onClick={() => setModalOpen(false)}>
             <div className="campus-modal-card" onClick={(e) => e.stopPropagation()}>
               <div className="campus-modal-header">
@@ -828,7 +831,8 @@ export default function CampusConfigurationPage() {
                 </div>
               </form>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Custom In-App Delete Confirmation Modal Matching Image 1 */}
