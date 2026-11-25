@@ -236,7 +236,7 @@ const StaffSubjectAllocation = () => {
 
       {/* Breadcrumbs */}
       <div className="ssa-breadcrumb">
-        <Link to="/dashboard">Home</Link>
+        <Link to="/admin-dashboard">Home</Link>
         <span className="sep">&gt;</span>
         <Link to="/dashboard/staff-management">Staff Management</Link>
         <span className="sep">&gt;</span>

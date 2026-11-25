@@ -36,7 +36,7 @@ export const SCREEN_PREVIEWS = {
   // 1. Dashboard
   "dashboard:overview": {
     title: "Overview & Metrics",
-    route: "/dashboard",
+    route: "/admin-dashboard",
     section: "Overview",
     description: "Executive summary with live enrollment, fee collection, and attendance metrics.",
     layoutType: "analytics",

@@ -116,7 +116,7 @@ const listSlugs = Object.keys(moduleConfigs);
 
 function ModuleListRoute({ slug }) {
   const config = moduleConfigs[slug];
-  if (!config) return <Navigate to="/dashboard" replace />;
+  if (!config) return <Navigate to="/admin-dashboard" replace />;
   return <ListPage slug={slug} config={config} />;
 }
 
@@ -138,7 +138,7 @@ function ModuleFormRoute({ slug }) {
   const [searchParams] = useSearchParams();
   const secondary = searchParams.get("section") === "secondary";
   const config = moduleConfigs[slug];
-  if (!config) return <Navigate to="/dashboard" replace />;
+  if (!config) return <Navigate to="/admin-dashboard" replace />;
   return <FormPage slug={slug} config={config} id={id || null} secondary={secondary} listPath={`/dashboard/${slug}`} />;
 }
 
@@ -232,7 +232,8 @@ export default function AppRoutes() {
       </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/admin-dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<Navigate to="/admin-dashboard" replace />} />
         <Route element={<ProtectedRoute requiredModule="timetable" />}>
           <Route path="/dashboard/academic-calendar" element={<AcademicCalendarPage />} />
         </Route>

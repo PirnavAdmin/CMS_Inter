@@ -158,7 +158,7 @@ export const menu = [
   {
     section: "Overview",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" },
+      { to: "/admin-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" },
     ],
   },
   {
@@ -434,8 +434,8 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
   const consider = (to, labels, icon) => {
     const [path] = to.split("?");
     let matches = false;
-    if (path === "/dashboard") {
-      matches = pathname === "/dashboard";
+    if (path === "/admin-dashboard" || path === "/dashboard") {
+      matches = pathname === "/admin-dashboard" || pathname === "/dashboard";
     } else if (path === "/parent-dashboard") {
       matches = pathname === "/parent-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
@@ -887,6 +887,7 @@ export default function DashboardLayout({
     let highestScore = -1;
 
     const DASHBOARD_ROOTS = [
+      "/admin-dashboard",
       "/dashboard",
       "/warden-dashboard",
       "/principal-dashboard",

@@ -187,7 +187,7 @@ export const menu = [
   {
     section: "Overview",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" },
+      { to: "/admin-dashboard", label: "Dashboard", icon: dashboardIcon, moduleKey: "dashboard" },
     ],
   },
   {
@@ -473,8 +473,8 @@ const menuBreadcrumbForPath = (pathname, sourceMenu = menu) => {
   const consider = (to, labels, icon) => {
     const [path] = to.split("?");
     let matches = false;
-    if (path === "/dashboard") {
-      matches = pathname === "/dashboard";
+    if (path === "/admin-dashboard" || path === "/dashboard") {
+      matches = pathname === "/admin-dashboard" || pathname === "/dashboard";
     } else if (path === "/parent-dashboard") {
       matches = pathname === "/parent-dashboard";
     } else if (path === "/dashboard/attendance" || path === "/dashboard/attendance/student") {
@@ -974,7 +974,7 @@ export default function DashboardLayout({
 
   const isActive = (to) => {
     const [basePath, searchStr] = to.split("?");
-    if (basePath === "/dashboard") return pathname === "/dashboard";
+    if (basePath === "/admin-dashboard" || basePath === "/dashboard") return pathname === "/admin-dashboard" || pathname === "/dashboard";
     if (basePath === "/accountant-dashboard") return pathname === "/accountant-dashboard";
     if (basePath === "/accountant-dashboard/payroll") return pathname === basePath || pathname === `${basePath}/`;
     if (basePath === "/parent-dashboard") return pathname === "/parent-dashboard";
