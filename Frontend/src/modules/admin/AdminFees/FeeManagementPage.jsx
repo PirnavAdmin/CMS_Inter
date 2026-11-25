@@ -4945,8 +4945,15 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       loading: false,
       error: hostelError,
     });
+    const authUser = getAuthUser();
+    const userCollegeId = Number(authUser?.collegeId || authUser?.CollegeId || 0);
+
     if (fineRulesResult.status === "fulfilled") {
-      setFineRules(normalizeFineRuleRows(getCollection(fineRulesResult.value.data)));
+      const rawRules = getCollection(fineRulesResult.value.data);
+      const scopedRules = userCollegeId > 0
+        ? rawRules.filter((r) => !r.collegeId || Number(r.collegeId) === userCollegeId)
+        : rawRules;
+      setFineRules(normalizeFineRuleRows(scopedRules));
       setFineRuleState({ loading: false, error: "" });
     } else {
       setFineRules([]);
@@ -5024,7 +5031,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       setStructureError(getApiErrorMessage(structuresResult.reason));
     }
     if (scholarshipsResult.status === "fulfilled") {
-      setScholarships(normalizeScholarshipRows(getCollection(scholarshipsResult.value.data)));
+      const rawSch = getCollection(scholarshipsResult.value.data);
+      const scopedSch = userCollegeId > 0
+        ? rawSch.filter((s) => !s.collegeId || Number(s.collegeId) === userCollegeId)
+        : rawSch;
+      setScholarships(normalizeScholarshipRows(scopedSch));
     }
     setMasters((current) => ({
       boards: contextBoardOptions,

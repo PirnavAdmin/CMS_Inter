@@ -85,10 +85,11 @@ public class FeeRepository : IFeeRepository
             {
                 p_FeeTypeName = request.FeeTypeName,
                 p_Category = request.Category,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -128,10 +129,11 @@ public class FeeRepository : IFeeRepository
                 p_FeeTypeId = id,
                 p_FeeTypeName = request.FeeTypeName,
                 p_Category = request.Category,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -329,10 +331,11 @@ public class FeeRepository : IFeeRepository
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
                 p_Description = request.Description,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -346,7 +349,8 @@ public class FeeRepository : IFeeRepository
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -372,10 +376,11 @@ public class FeeRepository : IFeeRepository
                 p_DiscountType = request.DiscountType,
                 p_DiscountValue = request.DiscountValue,
                 p_Description = request.Description,
-                p_CampusId = (int?)null,
-                p_BoardId = (int?)null,
-                p_AcademicYearId = (int?)null,
-                p_IsActive = request.IsActive
+                p_CampusId = request.CampusId,
+                p_BoardId = request.BoardId,
+                p_AcademicYearId = request.AcademicYearId,
+                p_IsActive = request.IsActive,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -534,6 +539,7 @@ public class FeeRepository : IFeeRepository
         int? boardId = null)
     {
         var c = Connection();
+        var collegeId = ResolveCollegeId();
         return await c.QueryAsync<StudentFeeLedgerResponse>(
             "sp_StudentFee_GetLedger",
             new
@@ -545,7 +551,8 @@ public class FeeRepository : IFeeRepository
                 p_PaymentPlan = paymentPlan,
                 p_Status = status,
                 p_Search = search,
-                p_BoardId = boardId
+                p_BoardId = boardId,
+                p_CollegeId = collegeId
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -916,7 +923,8 @@ public class FeeRepository : IFeeRepository
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
     }
@@ -930,7 +938,8 @@ public class FeeRepository : IFeeRepository
             {
                 p_CampusId = campusId,
                 p_BoardId = boardId,
-                p_AcademicYearId = academicYearId
+                p_AcademicYearId = academicYearId,
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure);
 

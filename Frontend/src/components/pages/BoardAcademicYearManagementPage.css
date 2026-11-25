@@ -144,25 +144,28 @@
 }
 .bay-table-wrap th {
   box-sizing: border-box;
-  padding: clamp(7px, 0.5vw, 9px) clamp(6px, 0.6vw, 9px);
+  padding: 10px 14px;
   text-align: left;
   background: var(--cms-subtle);
   color: var(--cms-muted);
-  font-size: clamp(11px, 0.8vw, 12.5px);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
   line-height: 1.3;
   text-transform: uppercase;
 }
 .bay-table-wrap td {
   box-sizing: border-box;
   min-width: 0;
-  padding: clamp(7px, 0.5vw, 9px) clamp(6px, 0.6vw, 9px);
+  padding: 10px 14px;
   border-top: 1px solid var(--cms-border);
   color: var(--cms-muted);
-  font-size: clamp(11.5px, 0.82vw, 13px);
+  font-size: 13px;
   line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: middle;
 }
 .bay-table-wrap td:nth-child(1) {
   overflow: visible;
@@ -279,24 +282,30 @@
   border-top: 1px solid var(--cms-border);
   background: var(--cms-subtle);
   color: var(--cms-muted);
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 500;
 }
 .bay-card > footer nav {
   display: flex;
-  gap: 7px;
+  align-items: center;
+  gap: 8px;
 }
 .bay-card > footer button {
-  min-width: 36px;
-  height: 36px;
-  padding: 0 9px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
   border: 1px solid var(--cms-border);
   border-radius: 9px;
-  background: #fff;
+  background: var(--cms-surface, #fff);
   color: var(--cms-text);
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.18s ease;
+}
+.bay-card > footer button:hover:not(:disabled) {
+  border-color: var(--cms-primary-border);
+  color: var(--cms-primary);
 }
 .bay-card > footer button.active {
   background: var(--cms-primary);
@@ -304,9 +313,8 @@
   color: #fff;
 }
 .bay-card > footer button:disabled {
-  color: #9aa5b5;
+  opacity: 0.45;
   cursor: not-allowed;
-  opacity: 0.72;
 }
 .bay-bottom {
   display: block;
@@ -944,27 +952,31 @@
 }
 
 .ay-list-card {
-  display: flex;
-  min-height: calc(100dvh - 225px);
-  flex-direction: column;
+  display: block;
+  min-height: auto;
+  height: auto;
 }
 
 .ay-list-card .bay-table-wrap {
-  display: flex;
-  flex: 1;
+  display: block;
+  flex: none;
+  height: auto;
+  min-height: auto;
 }
 
 .ay-list-card .bay-table-wrap table {
-  height: 100%;
+  height: auto;
 }
 
 .ay-list-card .bay-table-wrap th {
-  font-size: 12.5px;
+  font-size: 11.5px;
+  padding: 10px 14px;
 }
 
 .ay-list-card .bay-table-wrap td,
 .ay-list-card .bay-table-wrap td strong {
   font-size: 13px;
+  padding: 10px 14px;
 }
 .bay-board-list-card tbody tr {
   background: #fff;
@@ -975,27 +987,31 @@
 }
 
 .bay-board-list-card {
-  display: flex;
-  min-height: calc(100dvh - 225px);
-  flex-direction: column;
+  display: block;
+  min-height: auto;
+  height: auto;
 }
 
 .bay-board-list-card .bay-table-wrap {
-  display: flex;
-  flex: 1;
+  display: block;
+  flex: none;
+  height: auto;
+  min-height: auto;
 }
 
 .bay-board-list-card .bay-table-wrap table {
-  height: 100%;
+  height: auto;
 }
 
 .bay-board-list-card .bay-table-wrap th {
-  font-size: 12.5px;
+  font-size: 11.5px;
+  padding: 10px 14px;
 }
 
 .bay-board-list-card .bay-table-wrap td,
 .bay-board-list-card .bay-table-wrap td strong {
   font-size: 13px;
+  padding: 10px 14px;
 }
 .ay-list-card .bay-table-wrap th:nth-child(1) {
   width: 14%;

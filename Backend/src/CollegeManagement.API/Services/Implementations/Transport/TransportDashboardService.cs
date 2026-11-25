@@ -1,6 +1,7 @@
 using CollegeManagement.API.Dtos.Transport.Dashboard;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using System.Threading.Tasks;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -14,9 +15,9 @@ namespace CollegeManagement.API.Services.Implementations
             _repository = repository;
         }
 
-        public async Task<TransportDashboardResponseDto> GetDashboardAsync()
+        public async Task<TransportDashboardResponseDto> GetDashboardAsync(int? collegeId = null, int? campusId = null)
         {
-            return await _repository.GetDashboardAsync();
+            return await _repository.GetDashboardAsync(collegeId, campusId);
         }
 
         public async Task<OperationDetailsDto?> GetOperationDetailsAsync(long assignmentId)

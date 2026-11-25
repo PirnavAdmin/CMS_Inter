@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 using CollegeManagement.API.Data;
@@ -18,15 +19,34 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class AssignmentRepository : IAssignmentRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
         private IDbConnection Connection =>
             _context.Database.GetDbConnection();
 
-        public AssignmentRepository(AppDbContext context)
+        public AssignmentRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
+        private int ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return 1;
+        }
+
+        private int ResolveCampusId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CampusId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("campusId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            if (_httpContextAccessor?.HttpContext?.Request.Headers.TryGetValue("X-Campus-Id", out var h) == true &&
+                int.TryParse(h.FirstOrDefault(), out int hid) && hid > 0) return hid;
+            return 0;
+        }
 
         // =========================================================
         // GET ALL ASSIGNMENTS
@@ -37,6 +57,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var result = await Connection.QueryAsync<Assignment>(
                 "sp_GetAllAssignments",
+                new
+                {
+                    p_CollegeId = ResolveCollegeId(),
+                    p_CampusId = ResolveCampusId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result.ToList();
@@ -85,6 +110,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var result = await Connection.QueryAsync<Assignment>(
                 "sp_GetPublishedAssignments",
+                new
+                {
+                    p_CollegeId = ResolveCollegeId(),
+                    p_CampusId = ResolveCampusId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result.ToList();
@@ -97,6 +127,9 @@ namespace CollegeManagement.API.Repositories.Implementations
 
         public async Task AddAsync(Assignment assignment)
         {
+            int collegeId = ResolveCollegeId();
+            int campusId = ResolveCampusId();
+
             var result = await Connection.QueryFirstOrDefaultAsync<Assignment>(
                 "sp_CreateAssignment",
                 new
@@ -111,30 +144,20 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartDate = assignment.StartDate,
                     p_DueDate = assignment.DueDate,
                     p_Attachment = assignment.Attachment,
-                    p_MaximumMarks = assignment.MaximumMarks
+                    p_MaximumMarks = assignment.MaximumMarks,
+                    p_CollegeId = collegeId,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
 
-            // Copy returned database values back into the object
-            // so that the service can return the created assignment.
             if (result != null)
             {
                 assignment.AssignmentId = result.AssignmentId;
-
-                assignment.AcademicYearName =
-                    result.AcademicYearName;
-
-                assignment.GroupName =
-                    result.GroupName;
-
-                assignment.SubjectName =
-                    result.SubjectName;
-
-                assignment.FacultyName =
-                    result.FacultyName;
-
-                assignment.CreatedByType =
-                    result.CreatedByType;
+                assignment.AcademicYearName = result.AcademicYearName;
+                assignment.GroupName = result.GroupName;
+                assignment.SubjectName = result.SubjectName;
+                assignment.FacultyName = result.FacultyName;
+                assignment.CreatedByType = result.CreatedByType;
             }
         }
 
@@ -189,6 +212,9 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<Assignment?> CreateAdminAssignmentAsync(
             Assignment assignment)
         {
+            int collegeId = ResolveCollegeId();
+            int campusId = ResolveCampusId();
+
             var result = await Connection.QueryFirstOrDefaultAsync<Assignment>(
                 "sp_CreateAdminAssignment",
                 new
@@ -202,7 +228,9 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartDate = assignment.StartDate,
                     p_DueDate = assignment.DueDate,
                     p_Attachment = assignment.Attachment,
-                    p_MaximumMarks = assignment.MaximumMarks
+                    p_MaximumMarks = assignment.MaximumMarks,
+                    p_CollegeId = collegeId,
+                    p_CampusId = campusId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -218,6 +246,11 @@ namespace CollegeManagement.API.Repositories.Implementations
         {
             var result = await Connection.QueryAsync<Assignment>(
                 "sp_GetAdminAssignments",
+                new
+                {
+                    p_CollegeId = ResolveCollegeId(),
+                    p_CampusId = ResolveCampusId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result.ToList();
@@ -256,21 +289,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await
             (
                 from allocation in _context.FacultySubjectAllocations
-
                 join faculty in _context.Faculties
                     on allocation.FacultyId equals faculty.Id
-
                 where allocation.SubjectId == subjectId
-
                 select new FacultyDropdownDto
                 {
                     Id = faculty.Id,
-
-                    FullName =
-                        faculty.FirstName + " " +
-                        faculty.LastName
+                    FullName = faculty.FirstName + " " + faculty.LastName
                 }
-
             ).ToListAsync();
         }
     }

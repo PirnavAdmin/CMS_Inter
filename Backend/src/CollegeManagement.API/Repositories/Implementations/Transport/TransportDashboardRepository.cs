@@ -2,6 +2,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Dashboard;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System;
@@ -14,19 +15,47 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class TransportDashboardRepository : ITransportDashboardRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public TransportDashboardRepository(AppDbContext context)
+        public TransportDashboardRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        public async Task<TransportDashboardResponseDto> GetDashboardAsync()
+        private int ResolveCollegeId()
         {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return 1;
+        }
+
+        private int ResolveCampusId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CampusId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("campusId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            if (_httpContextAccessor?.HttpContext?.Request.Headers.TryGetValue("X-Campus-Id", out var h) == true &&
+                int.TryParse(h.FirstOrDefault(), out int hid) && hid > 0) return hid;
+            return 0;
+        }
+
+        public async Task<TransportDashboardResponseDto> GetDashboardAsync(int? collegeId = null, int? campusId = null)
+        {
+            int effectiveCollegeId = collegeId.HasValue && collegeId.Value > 0 ? collegeId.Value : ResolveCollegeId();
+            int effectiveCampusId = campusId.HasValue && campusId.Value > 0 ? campusId.Value : ResolveCampusId();
+
             var c = Connection;
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDashboard",
+                new
+                {
+                    p_CollegeId = effectiveCollegeId,
+                    p_CampusId = effectiveCampusId
+                },
                 commandType: CommandType.StoredProcedure);
 
             var kpi = await multi.ReadFirstOrDefaultAsync<dynamic>();

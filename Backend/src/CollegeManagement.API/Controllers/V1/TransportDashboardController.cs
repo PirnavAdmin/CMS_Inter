@@ -1,3 +1,6 @@
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Services.Interfaces;
@@ -19,11 +22,14 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet]
         [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> GetDashboard()
+        public async Task<IActionResult> GetDashboard([FromQuery] int? campusId = null)
         {
             try
             {
-                var result = await _service.GetDashboardAsync();
+                var collegeClaim = User.FindFirst("CollegeId")?.Value ?? User.FindFirst("collegeId")?.Value;
+                int? collegeId = int.TryParse(collegeClaim, out int cid) ? cid : null;
+
+                var result = await _service.GetDashboardAsync(collegeId, campusId);
 
                 return Ok(new
                 {
@@ -51,7 +57,11 @@ namespace CollegeManagement.API.Controllers.V1
                 var result = await _service.GetOperationDetailsAsync(assignmentId);
                 if (result == null)
                 {
-                    return NotFound(new { success = false, message = "Operation details not found." });
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = $"No operation details found for assignment ID {assignmentId}."
+                    });
                 }
 
                 return Ok(new
@@ -65,7 +75,7 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "Failed to retrieve operation details.",
+                    message = "An error occurred while retrieving operation details.",
                     error = ex.Message
                 });
             }
