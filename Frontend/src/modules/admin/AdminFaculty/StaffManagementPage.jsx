@@ -14,6 +14,7 @@ import {
   Clock3,
   Copy,
   Eye,
+  EyeOff,
   FileSpreadsheet,
   GraduationCap,
   Loader2,
@@ -2523,18 +2524,24 @@ function validateStepFields(fieldsList = [], values = {}, activeBoardName = "") 
       }
 
       // Aadhaar
-      if (name === "aadhaar") {
-        const cleanAadhaar = strVal.replace(/\s|-/g, "");
-        if (!/^\d{12}$/.test(cleanAadhaar)) {
-          newErrors[name] = "Aadhaar number must be exactly 12 digits";
+      if (name === "aadhaar" || name === "aadhaarDocument" || name === "aadhaarNumber") {
+        const isFile = typeof val === "object" || (typeof val === "string" && /\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(val));
+        if (!isFile && strVal) {
+          const cleanAadhaar = strVal.replace(/\D/g, "");
+          if (cleanAadhaar.length !== 12) {
+            newErrors[name] = "Aadhaar number must contain exactly 12 digits";
+          }
         }
       }
 
       // PAN
-      if (name === "pan") {
-        const cleanPan = strVal.toUpperCase().replace(/\s/g, "");
-        if (cleanPan.length > 0 && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
-          newErrors[name] = "PAN must be in valid format (e.g. ABCDE1234F)";
+      if (name === "pan" || name === "panDocument" || name === "panNumber") {
+        const isFile = typeof val === "object" || (typeof val === "string" && /\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(val));
+        if (!isFile && strVal) {
+          const cleanPan = strVal.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+            newErrors[name] = "PAN must follow standard format (e.g. ABCDE1234F)";
+          }
         }
       }
 
@@ -8956,6 +8963,8 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
   const { campuses } = useCampusContext();
   const [editingGroup, setEditingGroup] = useState(null);
   const [formData, setFormData] = useState({});
+  const [cardErrors, setCardErrors] = useState({});
+  const [revealedFields, setRevealedFields] = useState({});
 
   const [editingAllocations, setEditingAllocations] = useState(false);
   const [allocCampusIds, setAllocCampusIds] = useState([]);
@@ -9340,10 +9349,56 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     initData.boardId = existingBoardIds[0] || record.boardId;
 
     setFormData(initData);
+    setCardErrors({});
     setEditingGroup(groupIndex);
   };
 
   const handleSave = () => {
+    const errors = {};
+    const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+
+    if (editingGroup !== null) {
+      const currentGroup = groups[editingGroup];
+      const fields = currentGroup ? currentGroup[1] : [];
+
+      for (const f of fields) {
+        const k = f[0];
+        const val = formData[k] !== undefined ? formData[k] : record[k];
+        const strVal = val === null || val === undefined ? "" : String(val).trim();
+        const isFile = typeof val === "object" || (typeof val === "string" && /\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(val));
+
+        // Aadhaar validation: exactly 12 digits
+        if ((k === "aadhaar" || k === "aadhaarDocument" || k === "aadhaarNumber") && strVal && !isFile) {
+          const cleanAadhaar = strVal.replace(/\D/g, "");
+          if (cleanAadhaar.length !== 12) {
+            errors[k] = "Aadhaar number must contain exactly 12 digits.";
+          }
+        }
+
+        // PAN validation: standard Indian format
+        if ((k === "pan" || k === "panDocument" || k === "panNumber") && strVal && !isFile) {
+          const cleanPan = strVal.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          if (!PAN_REGEX.test(cleanPan)) {
+            errors[k] = "PAN must follow standard 10-character format (5 uppercase letters, 4 digits, 1 uppercase letter, e.g. ABCDE1234F).";
+          }
+        }
+
+        // Account number validation
+        if (k === "accountNumber" && strVal && !isFile) {
+          const cleanAcc = strVal.replace(/\D/g, "");
+          if (cleanAcc.length < 9 || cleanAcc.length > 18) {
+            errors[k] = "Bank account number must be between 9 and 18 digits.";
+          }
+        }
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setCardErrors(errors);
+      return;
+    }
+
+    setCardErrors({});
     if (onSave) {
       onSave({ ...record, ...formData });
     }
@@ -9687,25 +9742,143 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
     }
     if (type === "textarea") {
       return (
-        <textarea
-          value={val}
-          onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
-        />
+        <div style={{ width: "100%" }}>
+          <textarea
+            value={val}
+            onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
+          />
+        </div>
       );
     }
+
+    // Aadhaar Input: numeric-only, 12 digits hard limit
+    if (key === "aadhaar" || key === "aadhaarDocument" || key === "aadhaarNumber") {
+      return (
+        <div style={{ width: "100%" }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={12}
+            placeholder="12-digit Aadhaar number"
+            value={val}
+            style={cardErrors[key] ? { borderColor: "#dc2626" } : {}}
+            onChange={(e) => {
+              const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 12);
+              setFormData((prev) => ({ ...prev, [key]: numericOnly }));
+              if (cardErrors[key]) {
+                setCardErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                });
+              }
+            }}
+          />
+          {cardErrors[key] && (
+            <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "500" }}>
+              {cardErrors[key]}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // PAN Input: uppercase alphanumeric, 10 characters limit
+    if (key === "pan" || key === "panDocument" || key === "panNumber") {
+      return (
+        <div style={{ width: "100%" }}>
+          <input
+            type="text"
+            maxLength={10}
+            placeholder="e.g. ABCDE1234F"
+            value={val}
+            style={{
+              textTransform: "uppercase",
+              ...(cardErrors[key] ? { borderColor: "#dc2626" } : {}),
+            }}
+            onChange={(e) => {
+              const panVal = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+              setFormData((prev) => ({ ...prev, [key]: panVal }));
+              if (cardErrors[key]) {
+                setCardErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                });
+              }
+            }}
+          />
+          {cardErrors[key] && (
+            <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "500" }}>
+              {cardErrors[key]}
+            </span>
+          )}
+        </div>
+      );
+    }
+
+    // Account Number: numeric-only
+    if (key === "accountNumber") {
+      return (
+        <div style={{ width: "100%" }}>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={18}
+            placeholder="Bank Account Number"
+            value={val}
+            style={cardErrors[key] ? { borderColor: "#dc2626" } : {}}
+            onChange={(e) => {
+              const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 18);
+              setFormData((prev) => ({ ...prev, [key]: numericOnly }));
+              if (cardErrors[key]) {
+                setCardErrors((prev) => {
+                  const copy = { ...prev };
+                  delete copy[key];
+                  return copy;
+                });
+              }
+            }}
+          />
+          {cardErrors[key] && (
+            <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "500" }}>
+              {cardErrors[key]}
+            </span>
+          )}
+        </div>
+      );
+    }
+
     const inputVal = type === "date" && val ? String(val).split("T")[0] : val;
     return (
-      <input
-        type={type === "date" ? "date" : type === "email" ? "email" : "text"}
-        value={inputVal}
-        readOnly={key === "employeeId"}
-        onChange={(e) => setFormData((prev) => ({ ...prev, [key]: e.target.value }))}
-      />
+      <div style={{ width: "100%" }}>
+        <input
+          type={type === "date" ? "date" : type === "email" ? "email" : "text"}
+          value={inputVal}
+          readOnly={key === "employeeId"}
+          style={cardErrors[key] ? { borderColor: "#dc2626" } : {}}
+          onChange={(e) => {
+            setFormData((prev) => ({ ...prev, [key]: e.target.value }));
+            if (cardErrors[key]) {
+              setCardErrors((prev) => {
+                const copy = { ...prev };
+                delete copy[key];
+                return copy;
+              });
+            }
+          }}
+        />
+        {cardErrors[key] && (
+          <span style={{ display: "block", color: "#dc2626", fontSize: "11px", marginTop: "4px", fontWeight: "500" }}>
+            {cardErrors[key]}
+          </span>
+        )}
+      </div>
     );
   };
 
   // Helper for formatting and masking sensitive values
-  const formatDisplayValue = (key, rawVal) => {
+  const formatDisplayValue = (key, rawVal, isRevealed = false) => {
     if (key === "assignedCampusesDisplay" || key === "assignedCampuses" || (key === "campusName" && isPrincipalRecord)) {
       if (resolvedCampusList && resolvedCampusList.length > 0) {
         return resolvedCampusList.map((c) => c.name + (c.code ? ` (${c.code})` : "")).join(", ");
@@ -9760,20 +9933,142 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
       }
       return "—";
     }
-    if (rawVal === null || rawVal === undefined || String(rawVal).trim() === "") return "—";
+    if (rawVal === null || rawVal === undefined || String(rawVal).trim() === "" || String(rawVal).trim() === "—") return "—";
     const str = String(rawVal).trim();
     if (str.includes("T") && /^\d{4}-\d{2}-\d{2}T/.test(str)) {
       const parts = str.split("T")[0].split("-");
       if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
       return str.split("T")[0];
     }
-    if (key === "aadhaar" && str.length >= 12) {
-      return `XXXX XXXX ${str.slice(-4)}`;
+
+    // Sensitive field data masking
+    const isAadhaar = key === "aadhaar" || key === "aadhaarNumber" || key === "aadhaarDocument";
+    const isPan = key === "pan" || key === "panNumber" || key === "panDocument";
+    const isAccount = key === "accountNumber";
+    const isBankProof = key === "bankProof";
+    const isStatutory = key === "pfNumber" || key === "esiNumber" || key === "uanNumber";
+
+    if (isAadhaar) {
+      if (isRevealed) {
+        const digits = str.replace(/\D/g, "");
+        if (digits.length === 12) {
+          return `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)}`;
+        }
+        return str;
+      }
+      if (/\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(str)) {
+        return str.replace(/^.*(\.[a-zA-Z0-9]+)$/, "••••••••$1");
+      }
+      const digits = str.replace(/\D/g, "");
+      if (digits.length >= 4) {
+        return `XXXX XXXX ${digits.slice(-4)}`;
+      }
+      return "XXXX XXXX XXXX";
     }
-    if (key === "accountNumber" && str.length >= 4) {
-      return `••••••${str.slice(-4)}`;
+
+    if (isPan) {
+      if (isRevealed) {
+        return str.toUpperCase();
+      }
+      if (/\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(str)) {
+        return str.replace(/^.*(\.[a-zA-Z0-9]+)$/, "••••••••$1");
+      }
+      const clean = str.toUpperCase().trim();
+      if (clean.length >= 4) {
+        return `••••••${clean.slice(-4)}`;
+      }
+      return "••••••••••";
     }
+
+    if (isAccount) {
+      if (isRevealed) return str;
+      const digits = str.replace(/\D/g, "");
+      if (digits.length >= 4) {
+        return `••••••••${digits.slice(-4)}`;
+      }
+      return "••••••••••••";
+    }
+
+    if (isBankProof) {
+      if (isRevealed) return str;
+      if (/\.(pdf|jpe?g|png|webp|doc|docx)$/i.test(str)) {
+        return str.replace(/^.*(\.[a-zA-Z0-9]+)$/, "••••••••$1");
+      }
+      const digits = str.replace(/\D/g, "");
+      if (digits.length >= 4) {
+        return `••••••••${digits.slice(-4)}`;
+      }
+      if (str.length >= 4) {
+        return `••••••••${str.slice(-4)}`;
+      }
+      return "••••••••••••";
+    }
+
+    if (isStatutory) {
+      if (isRevealed) return str;
+      if (str.length >= 4) {
+        return `••••••••${str.slice(-4)}`;
+      }
+      return "••••••••••••";
+    }
+
     return str;
+  };
+
+  const renderFieldValue = (key, label, val) => {
+    const isSensitive = [
+      "aadhaar",
+      "aadhaarNumber",
+      "aadhaarDocument",
+      "pan",
+      "panNumber",
+      "panDocument",
+      "accountNumber",
+      "bankProof",
+      "pfNumber",
+      "esiNumber",
+      "uanNumber",
+    ].includes(key);
+
+    const isRevealed = Boolean(revealedFields[key]);
+    const displayVal = formatDisplayValue(key, val, isRevealed);
+
+    if (isSensitive) {
+      const hasValue = val !== null && val !== undefined && String(val).trim() !== "" && String(val).trim() !== "—";
+      return (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+          <span>{displayVal}</span>
+          {hasValue && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setRevealedFields((prev) => ({ ...prev, [key]: !prev[key] }));
+              }}
+              title={isRevealed ? `Hide ${label}` : `Reveal ${label}`}
+              aria-label={isRevealed ? `Hide ${label}` : `Reveal ${label}`}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "2px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: isRevealed ? "var(--cms-primary, #355e3b)" : "var(--cms-muted, #94a3b8)",
+                borderRadius: "4px",
+                transition: "color 0.15s ease",
+              }}
+            >
+              {isRevealed ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          )}
+        </span>
+      );
+    }
+
+    return displayVal;
   };
 
   return (
@@ -9926,6 +10221,31 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
               ) : null}
             </header>
 
+            {isEditing && Object.keys(cardErrors).length > 0 && (
+              <div
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: "6px",
+                  padding: "8px 12px",
+                  margin: "8px 0 12px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px",
+                  color: "#b91c1c",
+                  fontSize: "12px",
+                  lineHeight: "1.4",
+                }}
+              >
+                <AlertCircle size={16} style={{ flexShrink: 0, marginTop: "1px" }} />
+                <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                  {Object.values(cardErrors).map((msg, i) => (
+                    <span key={i}>{msg}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {hasCustomEducation ? (
               <div style={{ overflowX: "auto", margin: "8px 0" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
@@ -10070,7 +10390,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                             ))}
                           </div>
                         ) : (
-                          formatDisplayValue(key, record[key])
+                          renderFieldValue(key, label, record[key])
                         )}
                       </strong>
                     )}
@@ -10084,7 +10404,7 @@ function Summary({ record, groups: suppliedGroups, onEdit, onPrint, onSave }) {
                 <button
                   type="button"
                   className="cms-btn cms-btn-ghost"
-                  onClick={() => setEditingGroup(null)}
+                  onClick={() => { setEditingGroup(null); setCardErrors({}); }}
                 >
                   Cancel
                 </button>

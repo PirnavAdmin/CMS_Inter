@@ -84,6 +84,14 @@ namespace CollegeManagement.API.Validators.StaffValidators
                 .NotEmpty().WithMessage("Status is required.")
                 .Must(s => s == "Active" || s == "Inactive")
                 .WithMessage("Status must be 'Active' or 'Inactive'.");
+
+            RuleFor(x => x.Aadhaar)
+                .Must(a => string.IsNullOrWhiteSpace(a) || Regex.IsMatch(Regex.Replace(a, @"\D", ""), @"^\d{12}$"))
+                .WithMessage("Aadhaar number must contain exactly 12 digits.");
+
+            RuleFor(x => x.PanNumber)
+                .Must(p => string.IsNullOrWhiteSpace(p) || Regex.IsMatch(p.Trim().ToUpperInvariant(), @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"))
+                .WithMessage("PAN must follow standard 10-character format (5 uppercase letters, 4 digits, 1 uppercase letter, e.g. ABCDE1234F).");
         }
     }
 }

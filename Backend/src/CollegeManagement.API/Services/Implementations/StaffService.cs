@@ -894,8 +894,22 @@ namespace CollegeManagement.API.Services.Implementations
             var cleanOldAadhaar = existingStaff.Aadhaar?.Trim() ?? string.Empty;
             bool aadhaarChanged = !string.IsNullOrWhiteSpace(cleanNewAadhaar) && !string.Equals(cleanNewAadhaar, cleanOldAadhaar, StringComparison.OrdinalIgnoreCase);
 
+            if (!string.IsNullOrWhiteSpace(cleanNewAadhaar))
+            {
+                var aadhaarDigits = Regex.Replace(cleanNewAadhaar, @"\D", "");
+                if (aadhaarDigits.Length != 12)
+                    throw new ValidationException("Aadhaar number must contain exactly 12 digits.");
+            }
+
             if (aadhaarChanged && !await _staffRepository.IsAadhaarUniqueAsync(cleanNewAadhaar, id))
                 throw new ConflictException($"Aadhaar number '{dto.Aadhaar}' is already registered to another staff member.");
+
+            var cleanPan = (dto.PanNumber ?? dto.Pan)?.Trim().ToUpperInvariant() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(cleanPan))
+            {
+                if (!Regex.IsMatch(cleanPan, @"^[A-Z]{5}[0-9]{4}[A-Z]{1}$"))
+                    throw new ValidationException("PAN must follow standard 10-character format (5 uppercase letters, 4 digits, 1 uppercase letter, e.g. ABCDE1234F).");
+            }
 
             // Department resolution - prioritize explicitly provided department name if changed
             int? resolvedDepartmentId = dto.DepartmentId;
