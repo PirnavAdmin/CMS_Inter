@@ -6,7 +6,14 @@ import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SUPPLEMENTAL_EXAMINATIONS, CANONICAL_MASTER_GROUPS, CANONICAL_GROUPS, CANONICAL_SECTIONS } from "./src/modules/exam-cell/services/examCellMasterData.js";
+import {
+  SUPPLEMENTAL_EXAMINATIONS,
+  CANONICAL_MASTER_GROUPS,
+  CANONICAL_GROUPS,
+  CANONICAL_SECTIONS,
+  CANONICAL_SUBJECTS,
+  CANONICAL_HOLIDAYS,
+} from "./src/modules/exam-cell/services/examCellMasterData.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,6 +22,38 @@ let memoryThemePolicy = {
   adminPalette: "olive",
   adminCustomColor: "",
   adminDarkMode: "light",
+};
+
+let memoryUserPreferences = {
+  themeMode: "light",
+  palette: "purple",
+  customColor: null,
+  updatedAt: new Date().toISOString(),
+};
+
+let memoryLandingPageConfig = {
+  headerBrandVariant: "default",
+  dashboardTitle: "PIRNAV JUNIOR COLLEGE",
+  dashboardSubtitle: "Knowledge • Discipline • Excellence",
+  dashboardTagline: "CAMPUS ROAD, JUBILEE HILLS, HYDERABAD - 500033",
+  dashboardLogo: null,
+  dashboardLogoSize: 42,
+  dashboardTitleSize: 18,
+  dashboardSubtitleSize: 11,
+  dashboardTaglineSize: 10,
+  dashboardTitleWeight: "800",
+  dashboardSubtitleWeight: "600",
+  dashboardTaglineWeight: "500",
+  dashboardTitleAlign: "left",
+  dashboardSubtitleAlign: "left",
+  dashboardTaglineAlign: "left",
+  heroTitle: "Welcome to Pirnav Junior College",
+  heroSubtitle: "Knowledge • Discipline • Excellence",
+  heroImages: [],
+  aboutText: "Pirnav Junior College is committed to academic excellence and student success.",
+  contactEmail: "info@pirnavcollege.edu",
+  contactPhone: "+91 9876543210",
+  contactAddress: "Campus Road, Jubilee Hills, Hyderabad - 500033",
 };
 
 
@@ -48,16 +87,20 @@ function examCellShieldPlugin(apiBaseUrl) {
 
         // Only intercept endpoints that may return 403, 404, or unhandled errors for Exam Cell
         const isThemePolicy = urlStr.includes("/api/v1/settings/theme-policy");
+        const isUserPreferences = urlStr.startsWith("/api/v1/user-preferences");
+        const isLandingPageConfig = urlStr.startsWith("/api/v1/landing-page/config") || urlStr.startsWith("/api/v1/landing-page/public") || urlStr.startsWith("/api/v1/landing-page-config");
         const isSupplementalExam = /^\/api\/v1\/examinations\/5\d\d/.test(urlStr);
-        const isMasterGroups = false;
-        const isGroups = false;
-        const isSections = false;
+        const isMasterGroups = urlStr.startsWith("/api/v1/master-groups");
+        const isGroups = urlStr.startsWith("/api/v1/groups");
+        const isSections = urlStr.startsWith("/api/v1/sections") && !urlStr.startsWith("/api/v1/reports/filters/sections");
         const isPromotions = urlStr.startsWith("/api/v1/promotions");
         const isCampusTransfers = urlStr.startsWith("/api/v1/campus-transfers");
         const isExamSettings = urlStr.startsWith("/api/v1/examinations/settings");
         const isYearlyOverview = urlStr.includes("/yearly-overview");
         const isAttendanceDefaulters = urlStr.startsWith("/api/v1/attendance/defaulters");
-        const isSubjectsContext = false;
+        const isSubjects = urlStr.startsWith("/api/v1/subjects");
+        const isSubjectsContext = urlStr.startsWith("/api/v1/subjects/context");
+        const isHolidays = urlStr.startsWith("/api/v1/holidays");
         const isCertStudentsDropdown = urlStr.startsWith("/api/v1/certificates/students-dropdown");
         const isAttendanceTimingEffective = urlStr.startsWith("/api/v1/attendance-timing-config/effective");
         const isResultsGenerateOrProcess = urlStr.startsWith("/api/v1/results/generate") || urlStr.startsWith("/api/v1/results/process");
@@ -77,10 +120,14 @@ function examCellShieldPlugin(apiBaseUrl) {
 
         if (
           !isThemePolicy &&
+          !isUserPreferences &&
+          !isLandingPageConfig &&
           !isSupplementalExam &&
           !isMasterGroups &&
           !isGroups &&
           !isSections &&
+          !isSubjects &&
+          !isHolidays &&
           !isPromotions &&
           !isCampusTransfers &&
           !isExamSettings &&
@@ -143,6 +190,84 @@ function examCellShieldPlugin(apiBaseUrl) {
             return res.end(JSON.stringify({
               success: true,
               data: memoryThemePolicy,
+            }));
+          }
+
+          if (isUserPreferences) {
+            if (req.method === "OPTIONS") {
+              res.writeHead(200, {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Campus-Id",
+              });
+              return res.end();
+            }
+            if (req.method === "PUT" || req.method === "POST") {
+              try {
+                let bodyBuffer = undefined;
+                const chunks = [];
+                for await (const chunk of req) chunks.push(chunk);
+                if (chunks.length) bodyBuffer = Buffer.concat(chunks);
+                if (bodyBuffer) {
+                  const parsed = JSON.parse(bodyBuffer.toString("utf-8"));
+                  memoryUserPreferences = {
+                    ...memoryUserPreferences,
+                    ...parsed,
+                    updatedAt: new Date().toISOString(),
+                  };
+                }
+              } catch {
+                // Keep the existing user preferences on invalid body
+              }
+            }
+            res.writeHead(200, {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Campus-Id",
+            });
+            return res.end(JSON.stringify({
+              success: true,
+              data: memoryUserPreferences,
+            }));
+          }
+
+          if (isLandingPageConfig) {
+            if (req.method === "OPTIONS") {
+              res.writeHead(200, {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Campus-Id",
+              });
+              return res.end();
+            }
+            if (req.method === "PUT" || req.method === "POST") {
+              try {
+                let bodyBuffer = undefined;
+                const chunks = [];
+                for await (const chunk of req) chunks.push(chunk);
+                if (chunks.length) bodyBuffer = Buffer.concat(chunks);
+                if (bodyBuffer) {
+                  const parsed = JSON.parse(bodyBuffer.toString("utf-8"));
+                  memoryLandingPageConfig = {
+                    ...memoryLandingPageConfig,
+                    ...parsed,
+                    updatedAt: new Date().toISOString(),
+                  };
+                }
+              } catch {
+                // Keep existing landing page config on invalid body
+              }
+            }
+            res.writeHead(200, {
+              "Content-Type": "application/json",
+              "Access-Control-Allow-Origin": "*",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Campus-Id",
+            });
+            return res.end(JSON.stringify({
+              success: true,
+              data: memoryLandingPageConfig,
             }));
           }
 
@@ -306,21 +431,89 @@ function examCellShieldPlugin(apiBaseUrl) {
           if (isMasterGroups) {
             return res.end(JSON.stringify({
               success: true,
-              data: hasAuth ? [] : CANONICAL_MASTER_GROUPS,
+              data: CANONICAL_MASTER_GROUPS,
+              items: CANONICAL_MASTER_GROUPS,
+              totalCount: CANONICAL_MASTER_GROUPS.length,
             }));
           }
 
           if (isGroups) {
+            const urlObj = new URL(urlStr, "http://localhost");
+            const boardId = urlObj.searchParams.get("boardId") || urlStr.match(/\/board\/(\d+)/)?.[1];
+            let list = CANONICAL_GROUPS;
+            if (boardId) {
+              const matched = list.filter((g) => !g.boardId || String(g.boardId) === String(boardId));
+              if (matched.length > 0) list = matched;
+            }
             return res.end(JSON.stringify({
               success: true,
-              data: hasAuth ? [] : CANONICAL_GROUPS,
+              data: list,
+              items: list,
+              totalCount: list.length,
             }));
           }
 
           if (isSections) {
+            const urlObj = new URL(urlStr, "http://localhost");
+            const levelId = urlObj.searchParams.get("academicLevelId") || urlObj.searchParams.get("levelId");
+            const groupId = urlObj.searchParams.get("groupId");
+            let list = CANONICAL_SECTIONS;
+            if (levelId) {
+              const matched = list.filter((s) => !s.academicLevelId || String(s.academicLevelId) === String(levelId));
+              if (matched.length > 0) list = matched;
+            }
+            if (groupId) {
+              const matched = list.filter((s) => !s.groupId || String(s.groupId) === String(groupId));
+              if (matched.length > 0) list = matched;
+            }
             return res.end(JSON.stringify({
               success: true,
-              data: hasAuth ? [] : CANONICAL_SECTIONS,
+              data: list,
+              items: list,
+              totalCount: list.length,
+            }));
+          }
+
+          if (isSubjects) {
+            const urlObj = new URL(urlStr, "http://localhost");
+            const levelId = urlObj.searchParams.get("academicLevelId") || urlObj.searchParams.get("levelId");
+            const groupId = urlObj.searchParams.get("groupId");
+            let list = CANONICAL_SUBJECTS;
+            if (levelId) {
+              list = list.filter((s) => !s.academicLevelIds || s.academicLevelIds.map(String).includes(String(levelId)));
+            }
+            if (groupId) {
+              list = list.filter((s) => !s.groupIds || s.groupIds.map(String).includes(String(groupId)));
+            }
+            return res.end(JSON.stringify({
+              success: true,
+              data: list,
+              items: list,
+              totalCount: list.length,
+            }));
+          }
+
+          if (isHolidays) {
+            if (urlStr.includes("/summary")) {
+              return res.end(JSON.stringify({
+                success: true,
+                data: {
+                  total: CANONICAL_HOLIDAYS.length,
+                  national: CANONICAL_HOLIDAYS.filter((h) => h.holidayType === "National Holiday").length,
+                  festival: CANONICAL_HOLIDAYS.filter((h) => h.holidayType === "Festival Holiday").length,
+                  upcoming: CANONICAL_HOLIDAYS.filter((h) => h.lifecycleStatus === "Upcoming").length,
+                  completed: CANONICAL_HOLIDAYS.filter((h) => h.lifecycleStatus === "Completed").length,
+                },
+              }));
+            }
+            return res.end(JSON.stringify({
+              success: true,
+              data: CANONICAL_HOLIDAYS,
+              items: CANONICAL_HOLIDAYS,
+              total: CANONICAL_HOLIDAYS.length,
+              totalPages: 1,
+              page: 1,
+              pageSize: 20,
             }));
           }
 
