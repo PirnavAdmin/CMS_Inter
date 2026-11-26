@@ -236,6 +236,9 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
   const cleanedUser = cleanUserObject(user);
   storage.setItem("user", JSON.stringify(cleanedUser));
   storage.setItem("role", String(role ?? cleanedUser?.role ?? ""));
+  try {
+    window.dispatchEvent(new Event("cms-auth-login"));
+  } catch { /* Event dispatch unavailable */ }
 };
 
 export const updateAuthToken = (token) => {

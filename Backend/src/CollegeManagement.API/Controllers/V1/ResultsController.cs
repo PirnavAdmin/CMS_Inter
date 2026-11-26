@@ -43,6 +43,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="resultService">The result service instance handling calculation and business logic.</param>
         /// <param name="logger">The logger instance.</param>
         /// <param name="notificationService">The notification service instance.</param>
+        /// <param name="realtimeEventService">Optional real-time event publisher service.</param>
         public ResultController(
             IResultService resultService,
             ILogger<ResultController> logger,
@@ -143,6 +144,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         /// <param name="sectionId">The Section ID to retrieve results for.</param>
         /// <param name="examId">The Examination ID.</param>
+        /// <param name="examinationId">Optional alternate Examination ID query parameter.</param>
         /// <response code="200">Returns student marks, total marks, percentages, grades, PASS/FAIL results, and section ranks.</response>
         /// <response code="400">Returned when sectionId or examId is invalid.</response>
         /// <response code="404">Returned when no results are found for the section.</response>
@@ -178,6 +180,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         /// <param name="sectionId">Optional section ID from route.</param>
         /// <param name="examId">Optional examination ID from query.</param>
+        /// <param name="examinationId">Optional alternate examination ID from query.</param>
         /// <param name="request">Optional request payload with sectionId, examId, and publishDate.</param>
         /// <response code="200">Section results successfully published.</response>
         /// <response code="400">Failed to publish section results.</response>
@@ -248,6 +251,8 @@ namespace CollegeManagement.API.Controllers.V1
         /// Publishes examination results for all sections across a group or a specific section.
         /// </summary>
         /// <param name="request">Payload containing ExamId, GroupId, optional SectionId, and optional PublishDate.</param>
+        /// <param name="examId">Optional examination ID from query.</param>
+        /// <param name="examinationId">Optional alternate examination ID from query.</param>
         /// <response code="200">Results successfully published.</response>
         /// <response code="400">Failed to publish results.</response>
         [HttpPost("publish")]
@@ -472,6 +477,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="groupId">Optional Group ID filter.</param>
         /// <param name="programId">Optional Program ID filter.</param>
         /// <param name="examId">Optional Examination ID filter.</param>
+        /// <param name="examinationId">Optional alternate Examination ID filter.</param>
         /// <param name="campusId">Optional Campus ID filter.</param>
         /// <response code="200">Returns KPI metrics, failed student details, and subject statistics.</response>
         [HttpGet("analytics")]

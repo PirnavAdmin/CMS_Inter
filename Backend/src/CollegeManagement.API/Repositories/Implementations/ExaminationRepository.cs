@@ -928,7 +928,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 examStatus = Convert.ToString(GetVal("ExamStatus")) ?? string.Empty;
                 isCancelled = string.Equals(examStatus, "Cancelled", StringComparison.OrdinalIgnoreCase);
 
-                if (false)
+                if (isCancelled)
                 {
                     dutyStatus = "Cancelled";
                 }

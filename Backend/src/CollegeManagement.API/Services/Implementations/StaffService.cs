@@ -380,7 +380,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (resolvedDepartmentId.HasValue && resolvedDepartmentId.Value > 0)
             {
-                var depts = await _departmentRepository.GetDepartmentsAsync();
+                var depts = await _departmentRepository.GetDepartmentsAsync(campusId: dto.CampusId);
                 var found = depts.FirstOrDefault(d => d.DepartmentId == resolvedDepartmentId.Value);
                 if (found != null)
                 {
@@ -389,7 +389,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
             else if (!string.IsNullOrWhiteSpace(deptName))
             {
-                var depts = await _departmentRepository.GetDepartmentsAsync();
+                var depts = await _departmentRepository.GetDepartmentsAsync(campusId: dto.CampusId);
                 var dept = depts?.FirstOrDefault(d =>
                     string.Equals(d.DepartmentName, deptName, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(d.DepartmentCode, deptName, StringComparison.OrdinalIgnoreCase));
@@ -406,6 +406,7 @@ namespace CollegeManagement.API.Services.Implementations
                         DepartmentName = deptName,
                         DepartmentCode = $"DEP_{deptName.Substring(0, Math.Min(8, deptName.Length)).ToUpper().Replace(" ", "")}",
                         StaffType = staffType,
+                        CampusId = dto.CampusId,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -416,7 +417,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (!resolvedDepartmentId.HasValue || resolvedDepartmentId.Value <= 0)
             {
-                var depts = (await _departmentRepository.GetDepartmentsAsync()).ToList();
+                var depts = (await _departmentRepository.GetDepartmentsAsync(campusId: dto.CampusId)).ToList();
                 var defaultDept = depts.FirstOrDefault(d => string.Equals(d.StaffType, staffType, StringComparison.OrdinalIgnoreCase)) ?? depts.FirstOrDefault();
                 if (defaultDept != null)
                 {
@@ -439,7 +440,7 @@ namespace CollegeManagement.API.Services.Implementations
             }
             else if (!string.IsNullOrWhiteSpace(resolvedDesignationName))
             {
-                var desig = await _designationRepository.GetByNameAsync(resolvedDesignationName);
+                var desig = await _designationRepository.GetByNameAsync(resolvedDesignationName, dto.CampusId);
                 if (desig != null)
                 {
                     resolvedDesignationId = desig.Id;
@@ -450,7 +451,9 @@ namespace CollegeManagement.API.Services.Implementations
                     var newDesig = new Designation
                     {
                         Name = resolvedDesignationName,
+                        DepartmentId = resolvedDepartmentId,
                         StaffType = staffType,
+                        CampusId = dto.CampusId,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow
                     };
@@ -946,7 +949,7 @@ namespace CollegeManagement.API.Services.Implementations
             string resolvedDesignationName = dto.Designation?.Trim() ?? string.Empty;
 
             var desigByName = !string.IsNullOrWhiteSpace(resolvedDesignationName)
-                ? await _designationRepository.GetByNameAsync(resolvedDesignationName)
+                ? await _designationRepository.GetByNameAsync(resolvedDesignationName, dto.CampusId ?? existingStaff.CampusId)
                 : null;
 
             if (desigByName != null)

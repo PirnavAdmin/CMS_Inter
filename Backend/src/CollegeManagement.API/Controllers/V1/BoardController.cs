@@ -42,6 +42,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// <param name="logger">The controller logger dependency.</param>
         /// <param name="db">The database context.</param>
         /// <param name="jwtTokenHelper">The JWT token helper.</param>
+        /// <param name="realtimeEventService">Optional real-time event publisher service.</param>
         public BoardController(
             IBoardService boardService,
             ILogger<BoardController> logger,

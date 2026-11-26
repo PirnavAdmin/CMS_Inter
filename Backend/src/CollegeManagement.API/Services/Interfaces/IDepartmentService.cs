@@ -14,8 +14,8 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<DepartmentResponseDto?> UpdateDepartmentAsync(int id, UpdateDepartmentDto dto, int? campusId = null, int? collegeId = null);
         Task<(bool Success, string Message)> DeleteDepartmentAsync(int id);
         Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null);
-        Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null);
-        Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null);
+        Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null, int? collegeId = null);
+        Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null, int? collegeId = null);
         Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null, int? campusId = null, int? collegeId = null);
         Task<MasterImportResultDto> ImportDepartmentsAndDesignationsFromExcelAsync(Microsoft.AspNetCore.Http.IFormFile file, string? defaultStaffType = null, int? campusId = null, int? collegeId = null);
         Task<MasterImportResultDto> BulkImportDepartmentsAsync(IEnumerable<CreateDepartmentDto> dtos, string? defaultStaffType = null, int? campusId = null, int? collegeId = null);
