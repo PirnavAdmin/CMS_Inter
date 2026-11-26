@@ -798,8 +798,8 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.Category).IsRequired().HasMaxLength(50);
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
-                entity.HasIndex(x => x.FeeTypeCode).IsUnique();
-                entity.HasIndex(x => x.FeeTypeName).IsUnique();
+                entity.HasIndex(x => new { x.CollegeId, x.FeeTypeCode }).IsUnique();
+                entity.HasIndex(x => new { x.CollegeId, x.FeeTypeName }).IsUnique();
                 entity.HasIndex(x => x.Category);
             });
 
@@ -838,7 +838,7 @@ namespace CollegeManagement.API.Data
                 entity.Property(x => x.DiscountValue).HasColumnType("decimal(18,2)");
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
                 entity.Property(x => x.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP(6)");
-                entity.HasIndex(x => x.ScholarshipName).IsUnique();
+                entity.HasIndex(x => new { x.CollegeId, x.ScholarshipName }).IsUnique();
             });
             // ============================================================
             // STUDENT FEE

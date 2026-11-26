@@ -19,6 +19,20 @@ SET @colcheck = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCH
 SET @sql = IF(@colcheck = 0, 'ALTER TABLE `room_type_configs` ADD COLUMN `CampusId` INT NULL AFTER `CollegeId`;', 'SELECT 1;');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- Backfill CampusId/CollegeId on legacy rows so they belong to their existing campus instead of NULL
+UPDATE `room_type_configs` rtc
+LEFT JOIN (
+    SELECT rm.`RoomTypeId`, MIN(hb.`CampusId`) AS DerivedCampusId
+    FROM `room_masters` rm
+    INNER JOIN `hostel_blocks` hb ON hb.`HostelId` = rm.`HostelId`
+    WHERE hb.`CampusId` IS NOT NULL AND hb.`CampusId` > 0
+    GROUP BY rm.`RoomTypeId`
+) linked ON linked.`RoomTypeId` = rtc.`RoomTypeId`
+LEFT JOIN `Campuses` c ON c.`CampusId` = COALESCE(rtc.`CampusId`, linked.`DerivedCampusId`, 1)
+SET rtc.`CampusId` = COALESCE(rtc.`CampusId`, linked.`DerivedCampusId`, 1),
+    rtc.`CollegeId` = COALESCE(c.`CollegeId`, rtc.`CollegeId`, 1)
+WHERE rtc.`CampusId` IS NULL OR rtc.`CampusId` = 0;
+
 -- Replace global unique index on RoomTypeSpecification with tenant-scoped unique index
 SET @old_uq = (
     SELECT INDEX_NAME
@@ -66,7 +80,7 @@ BEGIN
         rtc.`CreatedAt`
     FROM `room_type_configs` rtc
     WHERE (p_CollegeId IS NULL OR p_CollegeId <= 0 OR rtc.`CollegeId` = p_CollegeId)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` IS NULL OR rtc.`CampusId` = p_CampusId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` = p_CampusId)
       AND (p_Search IS NULL OR p_Search = '' OR
            rtc.`RoomTypeSpecification` LIKE CONCAT('%', TRIM(p_Search), '%') OR
            rtc.`AcType` LIKE CONCAT('%', TRIM(p_Search), '%'))
@@ -118,7 +132,7 @@ BEGIN
     FROM `room_type_configs` rtc
     WHERE LOWER(rtc.`RoomTypeSpecification`) = LOWER(TRIM(p_RoomTypeSpecification))
       AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR rtc.`CollegeId` = p_CollegeId)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` IS NULL OR rtc.`CampusId` = p_CampusId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` = p_CampusId)
     LIMIT 1;
 END //
 DELIMITER ;

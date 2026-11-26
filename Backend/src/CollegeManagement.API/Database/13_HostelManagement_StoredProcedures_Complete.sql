@@ -214,7 +214,7 @@ BEGIN
         rtc.`CreatedAt`
     FROM `room_type_configs` rtc
     WHERE (p_CollegeId IS NULL OR p_CollegeId <= 0 OR rtc.`CollegeId` = p_CollegeId)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` IS NULL OR rtc.`CampusId` = p_CampusId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` = p_CampusId)
       AND (p_Search IS NULL OR p_Search = '' OR
            rtc.`RoomTypeSpecification` LIKE CONCAT('%', TRIM(p_Search), '%') OR
            rtc.`AcType` LIKE CONCAT('%', TRIM(p_Search), '%'))
@@ -264,7 +264,7 @@ BEGIN
     FROM `room_type_configs` rtc
     WHERE LOWER(rtc.`RoomTypeSpecification`) = LOWER(TRIM(p_RoomTypeSpecification))
       AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR rtc.`CollegeId` = p_CollegeId)
-      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` IS NULL OR rtc.`CampusId` = p_CampusId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` = p_CampusId)
     LIMIT 1;
 END //
 

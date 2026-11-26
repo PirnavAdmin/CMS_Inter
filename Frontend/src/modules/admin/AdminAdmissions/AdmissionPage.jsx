@@ -3881,10 +3881,10 @@ export default function AdmissionPage() {
           : Promise.resolve({ skipped: true }),
         apiClient.get(`${apiEndpoints.transport.vehicles}?PageNumber=1&PageSize=1000`),
         apiClient.get(`${apiEndpoints.transport.vehicleAssignments}?PageNumber=1&PageSize=1000`),
-        hostelApi.getHostelBlocks(),
-        hostelApi.getRoomTypes(),
-        hostelApi.getRooms(),
-        apiClient.get("/api/v1/hostel/fees"),
+        hostelApi.getHostelBlocks(hasValidCampusId ? { campusId } : undefined),
+        hostelApi.getRoomTypes(hasValidCampusId ? { campusId } : undefined),
+        hostelApi.getRooms(hasValidCampusId ? { campusId } : undefined),
+        apiClient.get("/api/v1/hostel/fees", hasValidCampusId ? { params: { campusId } } : undefined),
       ]);
       if (cancelled) return;
       const nextData = {

@@ -1017,6 +1017,38 @@ try
         app.Logger.LogWarning(ex, "Failed aligning NumberSeriesConfigurations schema on startup.");
     }
 
+    // 1b. Scope FeeTypes and Scholarships unique indexes by CollegeId instead of global uniqueness
+    try
+    {
+        var feeTypeIndexes = await dbContext.Database.SqlQueryRaw<string>(@"
+            SELECT DISTINCT INDEX_NAME AS `Value`
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = 'FeeTypes'").ToListAsync();
+
+        if (feeTypeIndexes.Any(i => string.Equals(i, "UX_FeeTypes_Name", StringComparison.OrdinalIgnoreCase)))
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeeTypes` DROP INDEX `UX_FeeTypes_Name`;");
+        if (feeTypeIndexes.Any(i => string.Equals(i, "UX_FeeTypes_Code", StringComparison.OrdinalIgnoreCase)))
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeeTypes` DROP INDEX `UX_FeeTypes_Code`;");
+        if (!feeTypeIndexes.Any(i => string.Equals(i, "UX_FeeTypes_College_Name", StringComparison.OrdinalIgnoreCase)))
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeeTypes` ADD UNIQUE KEY `UX_FeeTypes_College_Name` (`CollegeId`, `FeeTypeName`);");
+        if (!feeTypeIndexes.Any(i => string.Equals(i, "UX_FeeTypes_College_Code", StringComparison.OrdinalIgnoreCase)))
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `FeeTypes` ADD UNIQUE KEY `UX_FeeTypes_College_Code` (`CollegeId`, `FeeTypeCode`);");
+
+        var scholarshipIndexes = await dbContext.Database.SqlQueryRaw<string>(@"
+            SELECT DISTINCT INDEX_NAME AS `Value`
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = 'Scholarships'").ToListAsync();
+
+        if (scholarshipIndexes.Any(i => string.Equals(i, "UX_Scholarships_Name", StringComparison.OrdinalIgnoreCase)))
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Scholarships` DROP INDEX `UX_Scholarships_Name`;");
+        if (!scholarshipIndexes.Any(i => string.Equals(i, "UX_Scholarships_College_Name", StringComparison.OrdinalIgnoreCase)))
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `Scholarships` ADD UNIQUE KEY `UX_Scholarships_College_Name` (`CollegeId`, `ScholarshipName`);");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Failed aligning FeeTypes/Scholarships unique indexes on startup.");
+    }
+
     var allRollNoConfigs = dbContext.NumberSeriesConfigurations
         .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
         .ToList();

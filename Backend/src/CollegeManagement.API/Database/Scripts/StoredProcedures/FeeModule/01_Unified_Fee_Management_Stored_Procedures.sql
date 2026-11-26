@@ -20,26 +20,52 @@ ALTER TABLE FeeStructures ADD COLUMN IF NOT EXISTS PairedStructureId INT NULL;
 DROP PROCEDURE IF EXISTS sp_CreateFeeType;
 DROP PROCEDURE IF EXISTS sp_FeeType_Create;
 DELIMITER //
-DELIMITER //
 CREATE PROCEDURE sp_FeeType_Create(
     IN p_FeeTypeName VARCHAR(100),
     IN p_Category VARCHAR(50),
     IN p_CampusId INT,
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_IsActive BOOLEAN
+    IN p_IsActive BOOLEAN,
+    IN p_CollegeId INT
 )
 BEGIN
     DECLARE v_Code VARCHAR(30);
     DECLARE v_NewId INT;
+    DECLARE v_CollegeId INT;
+    DECLARE v_TrimmedName VARCHAR(100);
+    DECLARE v_Attempt INT DEFAULT 0;
 
-    SET v_Code = UPPER(CONCAT(
-        SUBSTRING(REGEXP_REPLACE(p_Category, '[^a-zA-Z0-9]', ''), 1, 4),
-        '-',
-        FLOOR(1000 + (RAND() * 9000))
-    ));
+    SET v_TrimmedName = TRIM(p_FeeTypeName);
+    SET v_CollegeId = COALESCE(
+        NULLIF(p_CollegeId, 0),
+        (SELECT CollegeId FROM Campuses WHERE CampusId = NULLIF(p_CampusId, 0) LIMIT 1),
+        1
+    );
+
+    IF EXISTS (
+        SELECT 1
+        FROM FeeTypes
+        WHERE CollegeId = v_CollegeId
+          AND LOWER(FeeTypeName) = LOWER(v_TrimmedName)
+    ) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CONFLICT: A fee type with this name already exists.';
+    END IF;
+
+    REPEAT
+        SET v_Attempt = v_Attempt + 1;
+        SET v_Code = UPPER(CONCAT(
+            COALESCE(NULLIF(SUBSTRING(REGEXP_REPLACE(p_Category, '[^a-zA-Z0-9]', ''), 1, 4), ''), 'FEE'),
+            '-',
+            FLOOR(1000 + (RAND() * 9000))
+        ));
+    UNTIL v_Attempt >= 10 OR NOT EXISTS (
+        SELECT 1 FROM FeeTypes WHERE CollegeId = v_CollegeId AND FeeTypeCode = v_Code
+    )
+    END REPEAT;
 
     INSERT INTO FeeTypes (
+        CollegeId,
         FeeTypeCode,
         FeeTypeName,
         Category,
@@ -50,8 +76,9 @@ BEGIN
         CreatedAt
     )
     VALUES (
+        v_CollegeId,
         v_Code,
-        TRIM(p_FeeTypeName),
+        v_TrimmedName,
         TRIM(p_Category),
         NULLIF(p_CampusId, 0),
         NULLIF(p_BoardId, 0),
@@ -64,6 +91,7 @@ BEGIN
 
     SELECT 
         FeeTypeId,
+        CollegeId,
         FeeTypeCode,
         FeeTypeName,
         Category,
@@ -85,7 +113,7 @@ CREATE PROCEDURE sp_CreateFeeType(
     IN p_IsActive BOOLEAN
 )
 BEGIN
-    CALL sp_FeeType_Create(p_FeeTypeName, p_Category, NULL, NULL, NULL, p_IsActive);
+    CALL sp_FeeType_Create(p_FeeTypeName, p_Category, NULL, NULL, NULL, p_IsActive, 1);
 END //
 DELIMITER ;
 
@@ -161,8 +189,8 @@ END //
 DELIMITER ;
 
 DROP PROCEDURE IF EXISTS sp_UpdateFeeType;
+DROP PROCEDURE IF EXISTS sp_UpdateFeeType;
 DROP PROCEDURE IF EXISTS sp_FeeType_Update;
-DELIMITER //
 DELIMITER //
 CREATE PROCEDURE sp_FeeType_Update(
     IN p_FeeTypeId INT,
@@ -171,22 +199,49 @@ CREATE PROCEDURE sp_FeeType_Update(
     IN p_CampusId INT,
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_IsActive BOOLEAN
+    IN p_IsActive BOOLEAN,
+    IN p_CollegeId INT
 )
 BEGIN
+    DECLARE v_CollegeId INT;
+    DECLARE v_TrimmedName VARCHAR(100);
+
+    SET v_TrimmedName = TRIM(p_FeeTypeName);
+    SELECT CollegeId INTO v_CollegeId FROM FeeTypes WHERE FeeTypeId = p_FeeTypeId LIMIT 1;
+
+    IF v_CollegeId IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fee type not found.';
+    END IF;
+
+    IF p_CollegeId IS NOT NULL AND p_CollegeId > 0 AND v_CollegeId <> p_CollegeId THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Fee type does not belong to the active college.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM FeeTypes
+        WHERE CollegeId = v_CollegeId
+          AND FeeTypeId <> p_FeeTypeId
+          AND LOWER(FeeTypeName) = LOWER(v_TrimmedName)
+    ) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CONFLICT: A fee type with this name already exists.';
+    END IF;
+
     UPDATE FeeTypes
     SET 
-        FeeTypeName = TRIM(p_FeeTypeName),
+        FeeTypeName = v_TrimmedName,
         Category = TRIM(p_Category),
         CampusId = NULLIF(p_CampusId, 0),
         BoardId = NULLIF(p_BoardId, 0),
         AcademicYearId = NULLIF(p_AcademicYearId, 0),
         IsActive = COALESCE(p_IsActive, IsActive),
         UpdatedAt = CURRENT_TIMESTAMP(6)
-    WHERE FeeTypeId = p_FeeTypeId;
+    WHERE FeeTypeId = p_FeeTypeId
+      AND CollegeId = v_CollegeId;
 
     SELECT 
         FeeTypeId,
+        CollegeId,
         FeeTypeCode,
         FeeTypeName,
         Category,
@@ -209,7 +264,7 @@ CREATE PROCEDURE sp_UpdateFeeType(
     IN p_IsActive BOOLEAN
 )
 BEGIN
-    CALL sp_FeeType_Update(p_FeeTypeId, p_FeeTypeName, p_Category, NULL, NULL, NULL, p_IsActive);
+    CALL sp_FeeType_Update(p_FeeTypeId, p_FeeTypeName, p_Category, NULL, NULL, NULL, p_IsActive, NULL);
 END //
 DELIMITER ;
 
@@ -1521,7 +1576,6 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS sp_UpdateScholarship;
 DROP PROCEDURE IF EXISTS sp_Scholarship_Update;
 DELIMITER //
-DELIMITER //
 CREATE PROCEDURE sp_Scholarship_Update(
     IN p_ScholarshipId INT,
     IN p_ScholarshipName VARCHAR(100),
@@ -1531,12 +1585,37 @@ CREATE PROCEDURE sp_Scholarship_Update(
     IN p_CampusId INT,
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_IsActive BOOLEAN
+    IN p_IsActive BOOLEAN,
+    IN p_CollegeId INT
 )
 BEGIN
+    DECLARE v_CollegeId INT;
+    DECLARE v_TrimmedName VARCHAR(100);
+
+    SET v_TrimmedName = TRIM(p_ScholarshipName);
+    SELECT CollegeId INTO v_CollegeId FROM Scholarships WHERE ScholarshipId = p_ScholarshipId LIMIT 1;
+
+    IF v_CollegeId IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Scholarship not found.';
+    END IF;
+
+    IF p_CollegeId IS NOT NULL AND p_CollegeId > 0 AND v_CollegeId <> p_CollegeId THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Scholarship does not belong to the active college.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM Scholarships
+        WHERE CollegeId = v_CollegeId
+          AND ScholarshipId <> p_ScholarshipId
+          AND LOWER(ScholarshipName) = LOWER(v_TrimmedName)
+    ) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CONFLICT: A scholarship with this name already exists.';
+    END IF;
+
     UPDATE Scholarships
     SET 
-        ScholarshipName = TRIM(p_ScholarshipName),
+        ScholarshipName = v_TrimmedName,
         DiscountType = TRIM(p_DiscountType),
         DiscountValue = p_DiscountValue,
         Description = p_Description,
@@ -1545,7 +1624,8 @@ BEGIN
         AcademicYearId = NULLIF(p_AcademicYearId, 0),
         IsActive = COALESCE(p_IsActive, IsActive),
         UpdatedAt = CURRENT_TIMESTAMP(6)
-    WHERE ScholarshipId = p_ScholarshipId;
+    WHERE ScholarshipId = p_ScholarshipId
+      AND CollegeId = v_CollegeId;
 
     CALL sp_Scholarship_GetById(p_ScholarshipId);
 END //
@@ -1561,7 +1641,7 @@ CREATE PROCEDURE sp_UpdateScholarship(
     IN p_IsActive BOOLEAN
 )
 BEGIN
-    CALL sp_Scholarship_Update(p_ScholarshipId, p_ScholarshipName, p_DiscountType, p_DiscountValue, p_Description, NULL, NULL, NULL, p_IsActive);
+    CALL sp_Scholarship_Update(p_ScholarshipId, p_ScholarshipName, p_DiscountType, p_DiscountValue, p_Description, NULL, NULL, NULL, p_IsActive, NULL);
 END //
 DELIMITER ;
 
