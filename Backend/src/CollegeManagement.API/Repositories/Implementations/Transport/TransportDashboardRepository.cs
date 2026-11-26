@@ -53,8 +53,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 "sp_GetTransportDashboard",
                 new
                 {
-                    p_CollegeId = effectiveCollegeId,
-                    p_CampusId = effectiveCampusId
+                    p_CampusId = effectiveCampusId > 0 ? effectiveCampusId : (int?)null,
+                    p_CollegeId = effectiveCollegeId > 0 ? effectiveCollegeId : (int?)null
                 },
                 commandType: CommandType.StoredProcedure);
 

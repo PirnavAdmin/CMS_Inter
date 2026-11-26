@@ -296,7 +296,7 @@ export default function AdminProfilePage() {
       subtitle="Manage your personal details, profile picture, contact information and account security."
       breadcrumb={["Home", "Settings", "My Profile"]}
       backLink={
-        <Link to="/dashboard/settings" className="admin-profile-back-btn">
+        <Link to="/admin-dashboard/settings" className="admin-profile-back-btn">
           <ArrowLeft size={16} /> Back to Settings
         </Link>
       }

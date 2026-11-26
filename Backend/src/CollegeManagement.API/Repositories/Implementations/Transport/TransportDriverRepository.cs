@@ -14,10 +14,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class TransportDriverRepository : ITransportDriverRepository
     {
         private readonly AppDbContext _context;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
-        public TransportDriverRepository(AppDbContext context)
+        public TransportDriverRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
@@ -25,6 +35,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportDriverDto>> GetAllAsync(TransportDriverFilterDto filter)
         {
             var c = Connection;
+            var collegeId = filter.CollegeId ?? ResolveCollegeId();
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDrivers",
                 new
@@ -32,6 +43,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Search = filter.Search ?? "",
                     p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
                     p_CampusId = filter.CampusId,
+                    p_CollegeId = collegeId,
                     p_PageNumber = filter.PageNumber > 0 ? filter.PageNumber : 1,
                     p_PageSize = filter.PageSize > 0 ? filter.PageSize : 20
                 },

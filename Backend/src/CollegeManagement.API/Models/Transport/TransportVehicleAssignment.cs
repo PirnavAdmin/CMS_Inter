@@ -45,6 +45,8 @@ namespace CollegeManagement.API.Models
 
         public bool Status { get; set; } = true;
 
+        public bool IsActive { get; set; } = true;
+
         public bool IsDeleted { get; set; }
 
         [System.ComponentModel.DataAnnotations.Schema.NotMapped]

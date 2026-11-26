@@ -1,4 +1,4 @@
-import HostelPage from "@/components/pages/HostelPage.jsx";
+import HostelPage from "@/modules/admin/AdminHostel/HostelPage.jsx";
 
 export {
   HostelPage as HostelDashboard,

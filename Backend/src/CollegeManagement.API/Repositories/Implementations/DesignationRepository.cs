@@ -150,14 +150,15 @@ namespace CollegeManagement.API.Repositories.Implementations
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<bool> IsNameUniqueAsync(string name, int? excludeId = null, int? campusId = null)
+        public async Task<bool> IsNameUniqueAsync(string name, int? excludeId = null, int? campusId = null, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return true;
 
             var conn = await GetOpenConnectionAsync();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var count = await conn.ExecuteScalarAsync<int>(
                 "sp_ValidateDesignationNameUnique",
-                new { p_Name = name.Trim(), p_ExcludeId = excludeId, p_CampusId = campusId },
+                new { p_Name = name.Trim(), p_ExcludeId = excludeId, p_CampusId = campusId, p_CollegeId = resolvedCollegeId },
                 commandType: CommandType.StoredProcedure);
 
             return count == 0;

@@ -61,7 +61,7 @@ namespace CollegeManagement.API.Controllers.V1
             return null;
         }
 
-        private async Task<int> ResolveStaffIdAsync()
+        private async Task<int?> TryResolveStaffIdAsync()
         {
             var staffId = _jwtTokenHelper.GetStaffId(User);
             if (staffId.HasValue && staffId.Value > 0)
@@ -70,9 +70,28 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var userId = _jwtTokenHelper.GetUserId(User);
-            if (userId.HasValue && userId.Value > 0)
+            if (userId.HasValue && userId.Value > 0 && _staffAttendanceService != null)
             {
-                return await _staffAttendanceService.ResolveStaffIdByUserIdAsync(userId.Value);
+                try
+                {
+                    var resolved = await _staffAttendanceService.ResolveStaffIdByUserIdAsync(userId.Value);
+                    if (resolved > 0) return resolved;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            return null;
+        }
+
+        private async Task<int> ResolveStaffIdAsync()
+        {
+            var staffId = await TryResolveStaffIdAsync();
+            if (staffId.HasValue && staffId.Value > 0)
+            {
+                return staffId.Value;
             }
 
             throw new CollegeManagement.API.Exceptions.UnauthorizedException("Logged in user is not associated with an active staff or faculty record.");
@@ -87,9 +106,38 @@ namespace CollegeManagement.API.Controllers.V1
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         public async Task<IActionResult> GetMyStaffLeaveHistory()
         {
-            var staffId = await ResolveStaffIdAsync();
-            var result = await _service.GetStaffLeaveHistoryAsync(staffId);
-            return Ok(new { Status = true, Message = "Personal staff leave history retrieved successfully.", Data = result });
+            var staffId = await TryResolveStaffIdAsync();
+            if (staffId.HasValue && staffId.Value > 0)
+            {
+                try
+                {
+                    var result = await _service.GetStaffLeaveHistoryAsync(staffId.Value);
+                    return Ok(new { Status = true, Message = "Personal staff leave history retrieved successfully.", Data = result });
+                }
+                catch (CollegeManagement.API.Exceptions.NotFoundException) when (IsCurrentUserAdmin())
+                {
+                    // Fall through to empty admin history when linked staff record is absent
+                }
+            }
+
+            if (IsCurrentUserAdmin())
+            {
+                return Ok(new
+                {
+                    Status = true,
+                    Message = "No personal staff leave history found for this admin account.",
+                    Data = new CollegeManagement.API.DTOs.StaffAttendance.Responses.StaffLeaveHistoryDto
+                    {
+                        StaffId = 0,
+                        StaffName = User.Identity?.Name ?? "Admin",
+                        StaffType = "Admin",
+                        Balance = new CollegeManagement.API.DTOs.StaffAttendance.Responses.LeaveBalanceDto(),
+                        History = new System.Collections.Generic.List<CollegeManagement.API.DTOs.StaffAttendance.Responses.StaffLeaveResponse>()
+                    }
+                });
+            }
+
+            throw new CollegeManagement.API.Exceptions.UnauthorizedException("Logged in user is not associated with an active staff or faculty record.");
         }
 
         /// <summary>
@@ -291,6 +339,6 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new { Status = true, Message = "Staff leave history retrieved successfully.", Data = result });
         }
 
-        private bool IsCurrentUserAdmin() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
+        private bool IsCurrentUserAdmin() => User.IsInRole("Admin") || User.IsInRole("College Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal");
     }
 }

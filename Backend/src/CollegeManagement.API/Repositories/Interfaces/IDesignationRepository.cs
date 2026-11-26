@@ -12,7 +12,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<Designation?> GetByIdAsync(int id);
         Task<DesignationResponseDto?> GetDtoByIdAsync(int id);
         Task<Designation?> GetByNameAsync(string name, int? campusId = null);
-        Task<bool> IsNameUniqueAsync(string name, int? excludeId = null, int? campusId = null);
+        Task<bool> IsNameUniqueAsync(string name, int? excludeId = null, int? campusId = null, int? collegeId = null);
         Task<bool> IsAssignedToFacultyAsync(int designationId);
         Task<bool> IsAssignedToStaffAsync(int designationId);
         Task<Designation> AddAsync(Designation designation);

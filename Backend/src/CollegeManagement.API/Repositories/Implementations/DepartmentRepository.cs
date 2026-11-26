@@ -218,29 +218,31 @@ namespace CollegeManagement.API.Repositories.Implementations
             return (designationCount > 0 || staffCount > 0, designationCount, staffCount);
         }
 
-        public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null)
+        public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(code)) return true;
             var normalized = code.Trim().ToUpper();
 
             var conn = await GetOpenConnectionAsync();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var count = await conn.ExecuteScalarAsync<int>(
                 "sp_ValidateDepartmentCode",
-                new { p_Code = normalized, p_ExcludeId = excludeId, p_CampusId = campusId },
+                new { p_Code = normalized, p_ExcludeId = excludeId, p_CampusId = campusId, p_CollegeId = resolvedCollegeId },
                 commandType: CommandType.StoredProcedure);
 
             return count == 0;
         }
 
-        public async Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null)
+        public async Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(name)) return true;
             var normalized = name.Trim().ToUpper();
 
             var conn = await GetOpenConnectionAsync();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var count = await conn.ExecuteScalarAsync<int>(
                 "sp_ValidateDepartmentName",
-                new { p_Name = normalized, p_ExcludeId = excludeId, p_CampusId = campusId },
+                new { p_Name = normalized, p_ExcludeId = excludeId, p_CampusId = campusId, p_CollegeId = resolvedCollegeId },
                 commandType: CommandType.StoredProcedure);
 
             return count == 0;

@@ -8,6 +8,8 @@ namespace CollegeManagement.API.Dtos.Transport.Attendant
 
         public int? CampusId { get; set; }
 
+        public int? CollegeId { get; set; }
+
         public int? BoardId { get; set; }
 
         public int? AcademicYearId { get; set; }

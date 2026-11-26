@@ -8,7 +8,7 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleAssignment
         public long AssignmentId { get; set; }
 
         [JsonPropertyName("collegeId")]
-        public int CollegeId { get; set; }
+        public int? CollegeId { get; set; }
 
         [JsonPropertyName("campusId")]
         public int? CampusId { get; set; }
@@ -90,8 +90,45 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleAssignment
         [JsonPropertyName("remarks")]
         public string? Remarks { get; set; }
 
+        private string _status = "Active";
+
         [JsonPropertyName("status")]
-        public bool Status { get; set; }
+        public object? Status
+        {
+            get => _status;
+            set
+            {
+                if (value is null)
+                {
+                    _status = "Inactive";
+                }
+                else if (value is bool b)
+                {
+                    _status = b ? "Active" : "Inactive";
+                }
+                else if (value is byte or sbyte or short or int or long)
+                {
+                    _status = Convert.ToInt64(value) == 1 ? "Active" : "Inactive";
+                }
+                else
+                {
+                    var s = value.ToString()?.Trim();
+                    if (string.Equals(s, "1") ||
+                        string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(s, "active", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _status = "Active";
+                    }
+                    else
+                    {
+                        _status = "Inactive";
+                    }
+                }
+            }
+        }
+
+        [JsonPropertyName("isActive")]
+        public bool IsActive => string.Equals(_status, "Active", StringComparison.OrdinalIgnoreCase);
 
         [JsonPropertyName("createdAt")]
         public DateTime CreatedAt { get; set; }

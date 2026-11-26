@@ -807,7 +807,7 @@ const withDepartmentContext = (path, params) => {
 export default function DepartmentManagementPage() {
   const navigate = useNavigate();
   const [routeParams, setRouteParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const { selectedCampus } = useCampusContext();
   const { selectedBoard } = useAcademicContext();
 
@@ -1339,7 +1339,7 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  onClick={() => navigate(withDepartmentContext("/dashboard/departments/import", routeParams))}
+                  onClick={() => navigate(withDepartmentContext("/admin-dashboard/departments/import", routeParams))}
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
@@ -1400,7 +1400,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-view"
                                 title={`View ${item.name}`}
                                 aria-label={`View ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${item.id}/view`, routeParams), { state: { department: item } })}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/departments/${item.id}/view`, routeParams), { state: { department: item } })}
                               >
                                 <Eye size={12} />
                               </button>
@@ -1409,7 +1409,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-edit"
                                 title={`Edit ${item.name}`}
                                 aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${item.id}/edit`, routeParams))}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/departments/${item.id}/edit`, routeParams))}
                               >
                                 <Pencil size={12} />
                               </button>
@@ -1472,7 +1472,7 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  onClick={() => navigate(withDepartmentContext("/dashboard/designations/import", routeParams))}
+                  onClick={() => navigate(withDepartmentContext("/admin-dashboard/designations/import", routeParams))}
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
@@ -1539,7 +1539,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-view"
                                 title={`View ${item.name}`}
                                 aria-label={`View ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${item.id}/view`, routeParams), { state: { designation: item } })}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/designations/${item.id}/view`, routeParams), { state: { designation: item } })}
                               >
                                 <Eye size={12} />
                               </button>
@@ -1548,7 +1548,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-edit"
                                 title={`Edit ${item.name}`}
                                 aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${item.id}/edit`, routeParams))}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/designations/${item.id}/edit`, routeParams))}
                               >
                                 <Pencil size={12} />
                               </button>
@@ -1672,7 +1672,7 @@ export default function DepartmentManagementPage() {
 export function DepartmentDetailsPage() {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const location = useLocation();
   const { id } = useParams();
   const [department, setDepartment] = useState(location.state?.department || null);
@@ -1761,7 +1761,7 @@ export function DepartmentDetailsPage() {
         department ? (
           <button
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${department.id}/edit`, routeParams))}
+            onClick={() => navigate(withDepartmentContext(`/admin-dashboard/departments/${department.id}/edit`, routeParams))}
           >
             <Pencil /> Edit Department
           </button>
@@ -1826,7 +1826,7 @@ export function DepartmentDetailsPage() {
                     type="button"
                     className="cms-btn secondary"
                     style={{ height: 32, fontSize: "12px", padding: "0 10px" }}
-                    onClick={() => navigate(withDepartmentContext("/dashboard/designations/add", routeParams))}
+                    onClick={() => navigate(withDepartmentContext("/admin-dashboard/designations/add", routeParams))}
                   >
                     + Add Designation
                   </button>
@@ -1881,7 +1881,7 @@ export function DepartmentDetailsPage() {
 export function DesignationDetailsPage() {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const location = useLocation();
   const { id } = useParams();
   const [designation, setDesignation] = useState(location.state?.designation || null);
@@ -1919,7 +1919,7 @@ export function DesignationDetailsPage() {
         designation ? (
           <button
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${id}/edit`, routeParams))}
+            onClick={() => navigate(withDepartmentContext(`/admin-dashboard/designations/${id}/edit`, routeParams))}
           >
             <Pencil /> Edit Designation
           </button>
@@ -1988,7 +1988,7 @@ export function DesignationDetailsPage() {
 export function MasterFormPage({ kind }) {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const { id } = useParams();
   const edit = Boolean(id);
   const label = kind === "department" ? "Department" : "Designation";
@@ -2332,7 +2332,7 @@ const importColumns = {
 export function MasterImportPage({ kind = "department" }) {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const [rows, setRows] = useState([]);
   const [rawFile, setRawFile] = useState(null);
   const [parsing, setParsing] = useState(false);

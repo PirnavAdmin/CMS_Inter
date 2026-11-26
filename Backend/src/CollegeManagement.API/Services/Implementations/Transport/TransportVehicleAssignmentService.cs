@@ -90,23 +90,25 @@ namespace CollegeManagement.API.Services.Implementations
 
             // Deactivate conflicting active vehicle or driver assignments to allow seamless reassignment
             var conflictingVehicleAssignments = await _context.TransportVehicleAssignments
-                .Where(x => !x.IsDeleted && x.Status && x.VehicleId == dto.VehicleId)
+                .Where(x => !x.IsDeleted && (x.Status || x.IsActive) && x.VehicleId == dto.VehicleId)
                 .ToListAsync();
 
             foreach (var va in conflictingVehicleAssignments)
             {
                 va.Status = false;
-                va.EffectiveTo = DateTime.UtcNow;
+                va.IsActive = false;
+                va.EffectiveTo = dto.EffectiveFrom != default ? dto.EffectiveFrom : DateTime.UtcNow;
             }
 
             var conflictingDriverAssignments = await _context.TransportVehicleAssignments
-                .Where(x => !x.IsDeleted && x.Status && x.DriverId == dto.DriverId)
+                .Where(x => !x.IsDeleted && (x.Status || x.IsActive) && x.DriverId == dto.DriverId)
                 .ToListAsync();
 
             foreach (var da in conflictingDriverAssignments)
             {
                 da.Status = false;
-                da.EffectiveTo = DateTime.UtcNow;
+                da.IsActive = false;
+                da.EffectiveTo = dto.EffectiveFrom != default ? dto.EffectiveFrom : DateTime.UtcNow;
             }
 
             if (conflictingVehicleAssignments.Any() || conflictingDriverAssignments.Any())
@@ -187,23 +189,25 @@ namespace CollegeManagement.API.Services.Implementations
 
             // Deactivate conflicting active vehicle or driver assignments to allow seamless reassignment/editing
             var conflictingVehicleAssignments = await _context.TransportVehicleAssignments
-                .Where(x => !x.IsDeleted && x.Status && x.VehicleId == dto.VehicleId && x.AssignmentId != assignmentId)
+                .Where(x => !x.IsDeleted && (x.Status || x.IsActive) && x.VehicleId == dto.VehicleId && x.AssignmentId != assignmentId)
                 .ToListAsync();
 
             foreach (var va in conflictingVehicleAssignments)
             {
                 va.Status = false;
-                va.EffectiveTo = DateTime.UtcNow;
+                va.IsActive = false;
+                va.EffectiveTo = dto.EffectiveFrom != default ? dto.EffectiveFrom : DateTime.UtcNow;
             }
 
             var conflictingDriverAssignments = await _context.TransportVehicleAssignments
-                .Where(x => !x.IsDeleted && x.Status && x.DriverId == dto.DriverId && x.AssignmentId != assignmentId)
+                .Where(x => !x.IsDeleted && (x.Status || x.IsActive) && x.DriverId == dto.DriverId && x.AssignmentId != assignmentId)
                 .ToListAsync();
 
             foreach (var da in conflictingDriverAssignments)
             {
                 da.Status = false;
-                da.EffectiveTo = DateTime.UtcNow;
+                da.IsActive = false;
+                da.EffectiveTo = dto.EffectiveFrom != default ? dto.EffectiveFrom : DateTime.UtcNow;
             }
 
             if (conflictingVehicleAssignments.Any() || conflictingDriverAssignments.Any())

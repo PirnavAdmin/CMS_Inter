@@ -17,7 +17,7 @@ namespace CollegeManagement.API.Repositories.Interfaces
         Task<bool> DeleteDepartmentAsync(int id);
         Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null);
         Task<(bool HasDependencies, int DesignationCount, int StaffCount)> GetDependenciesAsync(int departmentId);
-        Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null);
-        Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null);
+        Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null, int? collegeId = null);
+        Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null, int? collegeId = null);
     }
 }

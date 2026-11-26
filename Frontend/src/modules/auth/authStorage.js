@@ -55,14 +55,14 @@ export const getAuthToken = () => {
   if (isParent) {
     if (
       !token ||
+      token === BACKEND_PARENT_JWT ||
       token.startsWith("mock-") ||
       token.startsWith("demo-") ||
       token.startsWith("parent-") ||
       token === "null" ||
       token === "undefined"
     ) {
-      updateAuthToken(BACKEND_PARENT_JWT);
-      return BACKEND_PARENT_JWT;
+      return "";
     }
     return token;
   }
@@ -178,13 +178,16 @@ export const getAuthUser = () => {
 
     const roleLower = String(cleaned.role || "").toLowerCase();
     if (roleLower.includes("exam") || roleLower.includes("examination")) {
+      const hasMultiTenantCollege = Boolean(cleaned.collegeId && Number(cleaned.collegeId) !== 1);
       return {
         ...cleaned,
         id: cleaned.id || 890,
         userId: cleaned.userId || 890,
-        staffId: cleaned.staffId || 1109,
-        campusId: cleaned.campusId || 1,
-        assignedCampusIds: Array.isArray(cleaned.assignedCampusIds) && cleaned.assignedCampusIds.length > 0 ? cleaned.assignedCampusIds : [1],
+        staffId: cleaned.staffId || (hasMultiTenantCollege ? null : 1109),
+        campusId: cleaned.campusId || (hasMultiTenantCollege ? null : 1),
+        assignedCampusIds: Array.isArray(cleaned.assignedCampusIds) && cleaned.assignedCampusIds.length > 0
+          ? cleaned.assignedCampusIds
+          : (hasMultiTenantCollege ? [] : [1]),
       };
     }
 
@@ -236,6 +239,9 @@ export const saveAuthSession = ({ token, user, role }, persistent) => {
   const cleanedUser = cleanUserObject(user);
   storage.setItem("user", JSON.stringify(cleanedUser));
   storage.setItem("role", String(role ?? cleanedUser?.role ?? ""));
+  try {
+    window.dispatchEvent(new Event("cms-auth-login"));
+  } catch { /* Event dispatch unavailable */ }
 };
 
 export const updateAuthToken = (token) => {

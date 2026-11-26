@@ -193,6 +193,8 @@ export function isNonTeachingRole(role, user) {
   if (isInventoryRole(role, user)) return false;
   if (isDriverRole(role, user)) return false;
   if (isDeanRole(role, user)) return false;
+  if (isParentRole(role) || (user && isParentRole(user.role)) || user?.roleType === "parent") return false;
+  if (isStudentRole(role) || (user && isStudentRole(user.role)) || user?.roleType === "student") return false;
 
   const check = (val) => {
     if (!val) return false;

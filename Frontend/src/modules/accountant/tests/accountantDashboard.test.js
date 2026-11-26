@@ -16,7 +16,7 @@ await describe("Fee Management - data access", async () => {
 
 const server = await createServer({ server: { middlewareMode: true }, appType: "custom" });
 after(() => server.close());
-const { rowsOf, unwrap, loadSections, loadPaymentHistory, loadScopedLedger, requestError } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+const { rowsOf, unwrap, loadSections, loadPaymentHistory, loadScopedLedger, requestError } = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
 
 test("normalizes report details, serialized collections, and attendance rows", () => {
@@ -105,7 +105,7 @@ test("canceled context stops issuing history requests", async () => {
 });
 
 test("display adapters use backend payroll and fee fields without inventing missing values", async () => {
-  const { normalizePayment, normalizeDue, normalizePayroll, formatMoney } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/pages/AccountantPages.jsx");
+  const { normalizePayment, normalizeDue, normalizePayroll, formatMoney } = await server.ssrLoadModule("/src/modules/accountant/pages/AccountantPages.jsx");
   assert.equal(normalizePayment({ PaidAmount: 0, Collected: 45 }).amount, 45);
   assert.equal(normalizePayment({ Amount: 0, PaidAmount: 45 }).amount, 0);
   assert.equal(normalizePayment({ TransactionReference: "test-ref" }).transaction, "test-ref");
@@ -123,9 +123,9 @@ await describe("Fee Management - ledger", async () => {
 
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => server.close());
-const { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+const { ledgerDetailEndpoint, ledgerPage, loadLedgerDetails } = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
-const { FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantUI.jsx");
+const { FeePagination } = await server.ssrLoadModule("/src/modules/accountant/components/AccountantUI.jsx");
 const withAdapter = async (adapter, work) => {
   const original = client.defaults.adapter;
   client.defaults.adapter = adapter;
@@ -241,7 +241,7 @@ await describe("Fee Management - requests", async () => {
 const { pageOf } = feeView;
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => server.close());
-const { checkedFeeRows, loadSetupRecords, loadFeeOverview } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+const { checkedFeeRows, loadSetupRecords, loadFeeOverview } = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
 
 const withAdapter = async (adapter, work) => {
@@ -328,7 +328,7 @@ test("overview reports unsuccessful dashboard envelopes rather than inventing to
 });
 
 test("fee table and pagination render the Admin classes with ten rows and correct boundaries", async () => {
-  const { FeeTable, FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantUI.jsx");
+  const { FeeTable, FeePagination } = await server.ssrLoadModule("/src/modules/accountant/components/AccountantUI.jsx");
   const records = Array.from({ length: 23 }, (_, index) => ({ studentName: `Test Student ${index + 1}` }));
   const first = pageOf(records, 1);
   const html = renderToStaticMarkup(createElement(FeeTable, { rows: first.rows, columns: [{ label: "Student", value: (row) => row.studentName }] }));
@@ -345,7 +345,7 @@ test("fee table and pagination render the Admin classes with ten rows and correc
 });
 
 test("loading, permission errors, and empty results render distinct table states", async () => {
-  const { FeeTable } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantUI.jsx");
+  const { FeeTable } = await server.ssrLoadModule("/src/modules/accountant/components/AccountantUI.jsx");
   const props = { rows: [], columns: [{ label: "Name", value: () => "" }], empty: "No fee types found." };
   const loading = renderToStaticMarkup(createElement(FeeTable, { ...props, loading: true }));
   assert.match(loading, /accountant-fee-skeleton/);
@@ -357,7 +357,7 @@ test("loading, permission errors, and empty results render distinct table states
 });
 
 test("overview renders Admin summary, chart and tabs without zero-filled missing metrics", async () => {
-  const { default: Overview } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantFeeOverview.jsx");
+  const { default: Overview } = await server.ssrLoadModule("/src/modules/accountant/components/AccountantFeeOverview.jsx");
   const html = renderToStaticMarkup(createElement(Overview, { params: {} }));
   assert.equal((html.match(/class="cms-fee-stat-value">-</g) || []).length, 4);
   for (const label of ["Group-wise Collection", "Fee Management Overview", "Overdue Fees", "Upcoming Fee Schedules", "Recent Payments"]) assert.ok(html.includes(label), label);
@@ -371,7 +371,7 @@ await describe("Fee Management - setup", async () => {
 
 const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
 after(() => server.close());
-const setup = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+const setup = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
 const { can } = await server.ssrLoadModule("/src/features/rolesPermissions/permissionUtils.jsx");
 const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
 const permissions = (matrix) => ({ loading: false, error: "", canView: (module, screen) => can(module, "view", matrix, { role: "Accountant" }, screen), canDo: (module, action, screen) => can(module, action, matrix, { role: "Accountant" }, screen) });
@@ -488,7 +488,7 @@ test("five-record fee pages filter before paging and clamp after data changes", 
 });
 
 test("numbered fee navigation supports direct selection and correct boundaries", async () => {
-  const { FeePagination } = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/components/AccountantUI.jsx");
+  const { FeePagination } = await server.ssrLoadModule("/src/modules/accountant/components/AccountantUI.jsx");
   const nodes = node => node && typeof node === "object" ? [node, ...[node.props?.children].flat(Infinity).flatMap(nodes)] : [];
   const records = Array.from({ length: 23 }, () => ({}));
   let selected = 1;
@@ -784,7 +784,7 @@ test("new fee views only read data and gate access using existing permissions", 
 await describe("Fee Management - collection", async () => {
   const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
   after(() => server.close());
-  const service = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+  const service = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
   const { default: client } = await server.ssrLoadModule("/src/api/axios.js");
   const account = { studentId: 10, studentFeeId: 100, studentName: "Actual Student", admissionNumber: "ADM10", outstandingBalance: 1000, schedules: [{ feeInstallmentId: 7, balanceAmount: 400, feeSchedule: "First", dueDate: "2026-10-25" }] };
   const draft = { target: "schedules", feeInstallmentIds: [7], amount: "200", discount: "10", fine: "5", paymentDate: "2026-10-25", paymentMode: "UPI", transactionReference: "REAL-REFERENCE", note: "Partial installment" };
@@ -1553,7 +1553,7 @@ test("personal attendance never queries the student or administrative staff regi
 await describe("Accountant homepage", async () => {
   const server = await createServer({ server: { middlewareMode: true, hmr: false }, appType: "custom", optimizeDeps: { noDiscovery: true, include: [] } });
   after(() => server.close());
-  const service = await server.ssrLoadModule("/src/Dashboard/AccountantDashboard/services/accountantService.js");
+  const service = await server.ssrLoadModule("/src/modules/accountant/services/accountantService.js");
   const source = await readFile(new URL("../AccountantDashboard.jsx", import.meta.url), "utf8");
   const helpers = source.slice(source.indexOf("export function accountantGreeting"), source.indexOf("function useAccountantLoader")).replaceAll("export ", "");
   const fixture = { Id: 12, FirstName: "Actual", LastName: "Accountant", EmployeeId: "EMP-12", StaffType: "Non-Teaching" };
@@ -1646,7 +1646,7 @@ await describe("Accountant homepage", async () => {
   test("homepage renders real identity, zero values, finance totals, generated icons and authorized actions", async () => {
     const React = await import("react");
     const components = {};
-    for (const name of ["StudentCard", "StudentDataTable", "StudentSummaryCard"]) components[name] = (await server.ssrLoadModule(`/src/Dashboard/StudentDashboard/components/${name}.jsx`)).default;
+    for (const name of ["StudentCard", "StudentDataTable", "StudentSummaryCard"]) components[name] = (await server.ssrLoadModule(`/src/modules/student/components/${name}.jsx`)).default;
     let homeSource = source.replace(/^import .*;\r?\n/gm, "").replaceAll("export default ", "").replaceAll("export ", "");
     const start = homeSource.indexOf("function useAccountantLoader");
     homeSource = homeSource.slice(0, start) + homeSource.slice(homeSource.indexOf("function HomeIcon", start));

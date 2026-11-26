@@ -5,6 +5,56 @@ namespace CollegeManagement.API.Helpers;
 
 public static class CampusContextResolver
 {
+    public static int? ResolveCollegeId(ClaimsPrincipal? user, Microsoft.AspNetCore.Http.HttpRequest? request = null)
+    {
+        if (request != null && request.Headers.TryGetValue("X-College-Id", out var xCol) &&
+            int.TryParse(xCol.FirstOrDefault(), out int headerColId) && headerColId > 0)
+        {
+            return headerColId;
+        }
+
+        if (user != null)
+        {
+            var claim = user.FindFirst("CollegeId")?.Value
+                     ?? user.FindFirst("collegeId")?.Value
+                     ?? user.FindFirst("college_id")?.Value;
+            if (int.TryParse(claim, out int colId) && colId > 0)
+            {
+                return colId;
+            }
+        }
+
+        return null;
+    }
+
+    public static int? ResolveCampusId(ClaimsPrincipal? user, Microsoft.AspNetCore.Http.HttpRequest? request = null, int? requestedCampusId = null)
+    {
+        if (requestedCampusId.HasValue && requestedCampusId.Value > 0)
+        {
+            return requestedCampusId.Value;
+        }
+
+        if (request != null && request.Headers.TryGetValue("X-Campus-Id", out var hVal) &&
+            int.TryParse(hVal.FirstOrDefault(), out int hId) && hId > 0)
+        {
+            return hId;
+        }
+
+        if (user != null)
+        {
+            var claim = user.Claims.FirstOrDefault(c =>
+                c.Type == "CampusId" ||
+                c.Type == "campus_id" ||
+                c.Type == "campusId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0)
+            {
+                return cid;
+            }
+        }
+
+        return null;
+    }
+
     public static int ResolveAndValidateCampusId(ClaimsPrincipal user, int? requestedCampusId)
     {
         var isPrivilegedAdmin = user.IsInRole("Super Admin") ||

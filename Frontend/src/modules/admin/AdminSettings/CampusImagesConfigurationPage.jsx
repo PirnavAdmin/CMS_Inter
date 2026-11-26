@@ -450,7 +450,7 @@ export default function CampusImagesConfigurationPage({ page = "landing" }) {
       breadcrumb={["Home", "Settings", title]}
     >
       <main className="campus-images-page">
-        <Link className="cms-back-link" to="/dashboard/settings">
+        <Link className="cms-back-link" to="/admin-dashboard/settings">
           <ArrowLeft size={15} /> Back to Settings
         </Link>
         <section className="campus-images-scope">

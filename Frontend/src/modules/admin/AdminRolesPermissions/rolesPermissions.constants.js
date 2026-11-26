@@ -334,7 +334,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "profile",
     name: "My Profile",
-    route: "/dashboard/profile",
+    route: "/admin-dashboard/profile",
     section: "Overview",
     icon: User,
     availableActions: [ACTIONS.VIEW, ACTIONS.EDIT],
@@ -357,7 +357,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "board-academic-year",
     name: "Board & Academic Year",
-    route: "/dashboard/board-academic-year",
+    route: "/admin-dashboard/board-academic-year",
     section: "Academic",
     icon: Landmark,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -369,7 +369,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "group-management",
     name: "Group Management",
-    route: "/dashboard/courses",
+    route: "/admin-dashboard/courses",
     section: "Academic",
     icon: Users,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -381,7 +381,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "subject-management",
     name: "Subject Management",
-    route: "/dashboard/subjects",
+    route: "/admin-dashboard/subjects",
     section: "Academic",
     icon: BookOpen,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -393,7 +393,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "section-room",
     name: "Section & Room",
-    route: "/dashboard/sections",
+    route: "/admin-dashboard/sections",
     section: "Academic",
     icon: Building2,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -405,7 +405,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "timetable",
     name: "Timetable",
-    route: "/dashboard/timetable",
+    route: "/admin-dashboard/timetable",
     section: "Academic",
     icon: CalendarDays,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -420,7 +420,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "holiday-management",
     name: "Holiday Management",
-    route: "/dashboard/holidays",
+    route: "/admin-dashboard/holidays",
     section: "Academic",
     icon: CalendarDays,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -431,7 +431,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "inventory-management",
     name: "Inventory Management",
-    route: "/dashboard/inventory-management",
+    route: "/admin-dashboard/inventory-management",
     section: "Academic",
     icon: Building2,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -444,7 +444,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "student-admission",
     name: "Student Admission",
-    route: "/dashboard/admission",
+    route: "/admin-dashboard/admission",
     section: "Student",
     icon: ClipboardList,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -456,7 +456,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "student-management",
     name: "Student Management",
-    route: "/dashboard/students",
+    route: "/admin-dashboard/students",
     section: "Student",
     icon: Users,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -469,7 +469,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "section-allocation",
     name: "Section Allocation",
-    route: "/dashboard/section-allocation",
+    route: "/admin-dashboard/section-allocation",
     section: "Student",
     icon: Building2,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -482,7 +482,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "attendance",
     name: "Attendance",
-    route: "/dashboard/attendance/student",
+    route: "/admin-dashboard/attendance/student",
     section: "Student",
     icon: CalendarCheck,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -495,7 +495,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "promotion",
     name: "Promotion",
-    route: "/dashboard/promotion",
+    route: "/admin-dashboard/promotion",
     section: "Student",
     icon: Medal,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -510,7 +510,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "transport",
     name: "Transport",
-    route: "/dashboard/transport",
+    route: "/admin-dashboard/transport",
     section: "Operations",
     icon: Bus,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -527,7 +527,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "staff-management",
     name: "Staff Management",
-    route: "/dashboard/staff",
+    route: "/admin-dashboard/staff",
     section: "Staff",
     icon: Users,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -541,7 +541,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "department-designation",
     name: "Department & Designation",
-    route: "/dashboard/departments",
+    route: "/admin-dashboard/departments",
     section: "Staff",
     icon: Building2,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -553,7 +553,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "staff-attendance",
     name: "Staff Attendance",
-    route: "/dashboard/attendance/staff",
+    route: "/admin-dashboard/attendance/staff",
     section: "Staff",
     icon: CalendarCheck,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -567,7 +567,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "staff-leave-management",
     name: "Staff Leave Management",
-    route: "/dashboard/leave-management?tab=staff",
+    route: "/admin-dashboard/leave-management?tab=staff",
     section: "Staff",
     icon: CalendarDays,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -581,7 +581,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "reimbursement",
     name: "Reimbursement",
-    route: "/dashboard/reimbursement",
+    route: "/admin-dashboard/reimbursement",
     section: "Finance",
     icon: ReceiptIndianRupee,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -594,7 +594,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "examination",
     name: "Examination",
-    route: "/dashboard/examinations",
+    route: "/admin-dashboard/examinations",
     section: "Examinations",
     icon: ClipboardCheck,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -608,7 +608,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "marks-evaluation",
     name: "Marks Evaluation",
-    route: "/dashboard/marks-entry",
+    route: "/admin-dashboard/marks-entry",
     section: "Examinations",
     icon: FileSpreadsheet,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -620,7 +620,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "results",
     name: "Results",
-    route: "/dashboard/results",
+    route: "/admin-dashboard/results",
     section: "Examinations",
     icon: FileSpreadsheet,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -632,7 +632,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "fee-management",
     name: "Fee Management",
-    route: "/dashboard/fee-structure",
+    route: "/admin-dashboard/fee-structure",
     section: "Finance",
     icon: ReceiptIndianRupee,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -652,7 +652,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "payroll",
     name: "Payroll",
-    route: "/dashboard/payroll",
+    route: "/admin-dashboard/payroll",
     section: "Finance",
     icon: ReceiptIndianRupee,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -668,7 +668,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "certificates",
     name: "Certificates",
-    route: "/dashboard/certificates",
+    route: "/admin-dashboard/certificates",
     section: "Documents & Reports",
     icon: FileBadge,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT, ACTIONS.DOWNLOAD],
@@ -680,7 +680,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "reports-analytics",
     name: "Reports & Analytics",
-    route: "/dashboard/reports",
+    route: "/admin-dashboard/reports",
     section: "Documents & Reports",
     icon: FileSpreadsheet,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT, ACTIONS.DOWNLOAD],
@@ -693,7 +693,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "hostel-management",
     name: "Hostel Management",
-    route: "/dashboard/hostel",
+    route: "/admin-dashboard/hostel",
     section: "Hostel Management",
     icon: Home,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -708,7 +708,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "enquiry-management",
     name: "Enquiry Management",
-    route: "/dashboard/enquiry-management",
+    route: "/admin-dashboard/enquiry-management",
     section: "Enquiry Management",
     icon: ClipboardList,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE, ACTIONS.EXPORT],
@@ -720,7 +720,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "settings",
     name: "Settings",
-    route: "/dashboard/settings",
+    route: "/admin-dashboard/settings",
     section: "Administration",
     icon: Settings,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE],
@@ -743,7 +743,7 @@ export const MODULE_PERMISSION_CONFIG = Object.freeze([
   {
     id: "roles-permissions",
     name: "Roles & Permissions",
-    route: "/dashboard/settings/roles-permissions",
+    route: "/admin-dashboard/settings/roles-permissions",
     section: "Administration",
     icon: ShieldCheck,
     availableActions: [ACTIONS.VIEW, ACTIONS.CREATE, ACTIONS.EDIT, ACTIONS.DELETE],

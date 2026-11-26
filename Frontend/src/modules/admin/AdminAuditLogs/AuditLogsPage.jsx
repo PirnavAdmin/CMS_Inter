@@ -407,7 +407,7 @@ export default function AuditLogsPage() {
     <DashboardLayout title="Audit Logs" subtitle="Review system activity, security events, network provenance, and administrative changes." breadcrumb={["Home", "Settings", "Audit Logs"]}>
       <main className="audit-logs-page">
         <div className="audit-page-actions">
-          <button type="button" className="cms-back-link audit-back" onClick={() => navigate("/dashboard/settings")}>
+          <button type="button" className="cms-back-link audit-back" onClick={() => navigate("/admin-dashboard/settings")}>
             <ArrowLeft size={14} /> Back to Settings
           </button>
           <div style={{ display: "flex", gap: "8px" }}>

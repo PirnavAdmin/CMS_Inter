@@ -197,11 +197,15 @@ DROP PROCEDURE IF EXISTS `sp_GetRoomTypeConfigs`//
 CREATE PROCEDURE `sp_GetRoomTypeConfigs`
 (
     IN p_Search VARCHAR(150),
-    IN p_Status VARCHAR(50)
+    IN p_Status VARCHAR(50),
+    IN p_CampusId INT,
+    IN p_CollegeId INT
 )
 BEGIN
     SELECT
         rtc.`RoomTypeId`,
+        rtc.`CollegeId`,
+        rtc.`CampusId`,
         rtc.`RoomTypeSpecification`,
         rtc.`BedCapacity`,
         rtc.`AcType`,
@@ -209,7 +213,9 @@ BEGIN
         rtc.`Description`,
         rtc.`CreatedAt`
     FROM `room_type_configs` rtc
-    WHERE (p_Search IS NULL OR p_Search = '' OR
+    WHERE (p_CollegeId IS NULL OR p_CollegeId <= 0 OR rtc.`CollegeId` = p_CollegeId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` = p_CampusId)
+      AND (p_Search IS NULL OR p_Search = '' OR
            rtc.`RoomTypeSpecification` LIKE CONCAT('%', TRIM(p_Search), '%') OR
            rtc.`AcType` LIKE CONCAT('%', TRIM(p_Search), '%'))
       AND (p_Status IS NULL OR p_Status = '' OR rtc.`Status` = TRIM(p_Status))
@@ -224,6 +230,8 @@ CREATE PROCEDURE `sp_GetRoomTypeConfigById`
 BEGIN
     SELECT
         rtc.`RoomTypeId`,
+        rtc.`CollegeId`,
+        rtc.`CampusId`,
         rtc.`RoomTypeSpecification`,
         rtc.`BedCapacity`,
         rtc.`AcType`,
@@ -238,11 +246,15 @@ END //
 DROP PROCEDURE IF EXISTS `sp_GetRoomTypeConfigBySpecification`//
 CREATE PROCEDURE `sp_GetRoomTypeConfigBySpecification`
 (
-    IN p_RoomTypeSpecification VARCHAR(150)
+    IN p_RoomTypeSpecification VARCHAR(150),
+    IN p_CampusId INT,
+    IN p_CollegeId INT
 )
 BEGIN
     SELECT
         rtc.`RoomTypeId`,
+        rtc.`CollegeId`,
+        rtc.`CampusId`,
         rtc.`RoomTypeSpecification`,
         rtc.`BedCapacity`,
         rtc.`AcType`,
@@ -251,6 +263,8 @@ BEGIN
         rtc.`CreatedAt`
     FROM `room_type_configs` rtc
     WHERE LOWER(rtc.`RoomTypeSpecification`) = LOWER(TRIM(p_RoomTypeSpecification))
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR rtc.`CollegeId` = p_CollegeId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR rtc.`CampusId` = p_CampusId)
     LIMIT 1;
 END //
 
@@ -261,11 +275,18 @@ CREATE PROCEDURE `sp_CreateRoomTypeConfig`
     IN p_BedCapacity INT,
     IN p_AcType VARCHAR(50),
     IN p_Status VARCHAR(50),
-    IN p_Description VARCHAR(255)
+    IN p_Description VARCHAR(255),
+    IN p_CampusId INT,
+    IN p_CollegeId INT
 )
 BEGIN
+    DECLARE v_CollegeId INT;
+    SET v_CollegeId = COALESCE(NULLIF(p_CollegeId, 0), 1);
+
     INSERT INTO `room_type_configs`
     (
+        `CollegeId`,
+        `CampusId`,
         `RoomTypeSpecification`,
         `BedCapacity`,
         `AcType`,
@@ -275,6 +296,8 @@ BEGIN
     )
     VALUES
     (
+        v_CollegeId,
+        NULLIF(p_CampusId, 0),
         p_RoomTypeSpecification,
         p_BedCapacity,
         p_AcType,
@@ -294,17 +317,21 @@ CREATE PROCEDURE `sp_UpdateRoomTypeConfig`
     IN p_BedCapacity INT,
     IN p_AcType VARCHAR(50),
     IN p_Status VARCHAR(50),
-    IN p_Description VARCHAR(255)
+    IN p_Description VARCHAR(255),
+    IN p_CampusId INT,
+    IN p_CollegeId INT
 )
 BEGIN
     UPDATE `room_type_configs`
     SET
+        `CampusId` = COALESCE(NULLIF(p_CampusId, 0), `CampusId`),
         `RoomTypeSpecification` = p_RoomTypeSpecification,
         `BedCapacity` = p_BedCapacity,
         `AcType` = p_AcType,
         `Status` = p_Status,
         `Description` = p_Description
-    WHERE `RoomTypeId` = p_RoomTypeId;
+    WHERE `RoomTypeId` = p_RoomTypeId
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR `CollegeId` = p_CollegeId);
 
     SELECT ROW_COUNT() AS AffectedRows;
 END //

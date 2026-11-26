@@ -32,7 +32,7 @@ import {
 import { useDialogFocus } from "./components/InventoryUi.jsx";
 import "./InventoryManagement.css";
 
-const BASE = "/dashboard/inventory-management";
+const BASE = "/admin-dashboard/inventory-management";
 const TABS = [
   ["", "Dashboard", LayoutDashboard, "Manage college inventory, stock, supplies and assets."],
   ["items", "Items", List, "View and manage all college inventory items."],

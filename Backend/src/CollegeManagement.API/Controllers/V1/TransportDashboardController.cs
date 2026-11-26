@@ -22,12 +22,18 @@ namespace CollegeManagement.API.Controllers.V1
 
         [HttpGet]
         [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
-        public async Task<IActionResult> GetDashboard([FromQuery] int? campusId = null)
+        public async Task<IActionResult> GetDashboard([FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
         {
             try
             {
-                var collegeClaim = User.FindFirst("CollegeId")?.Value ?? User.FindFirst("collegeId")?.Value;
-                int? collegeId = int.TryParse(collegeClaim, out int cid) ? cid : null;
+                if (!campusId.HasValue || campusId.Value <= 0)
+                {
+                    campusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, campusId);
+                }
+                if (!collegeId.HasValue || collegeId.Value <= 0)
+                {
+                    collegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+                }
 
                 var result = await _service.GetDashboardAsync(collegeId, campusId);
 

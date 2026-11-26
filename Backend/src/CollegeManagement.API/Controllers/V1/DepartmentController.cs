@@ -134,7 +134,9 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { message = "Department name is required." });
             }
 
-            var isNameValid = await _departmentService.ValidateNameAsync(dto.DepartmentName, null, campusId);
+            var effectiveCampusId = campusId ?? dto.CampusId;
+            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
+            var isNameValid = await _departmentService.ValidateNameAsync(dto.DepartmentName, null, effectiveCampusId, effectiveCollegeId);
             if (!isNameValid)
             {
                 return Conflict(new { message = $"Department with name '{dto.DepartmentName}' already exists." });
@@ -142,15 +144,14 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (!string.IsNullOrWhiteSpace(dto.DepartmentCode))
             {
-                var isCodeValid = await _departmentService.ValidateCodeAsync(dto.DepartmentCode, null, campusId);
+                var isCodeValid = await _departmentService.ValidateCodeAsync(dto.DepartmentCode, null, effectiveCampusId, effectiveCollegeId);
                 if (!isCodeValid)
                 {
                     return Conflict(new { message = $"Department with code '{dto.DepartmentCode}' already exists." });
                 }
             }
 
-            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
-            var created = await _departmentService.CreateDepartmentAsync(dto, campusId, effectiveCollegeId);
+            var created = await _departmentService.CreateDepartmentAsync(dto, effectiveCampusId, effectiveCollegeId);
             if (_realtimeEventService != null)
             {
                 await _realtimeEventService.PublishDomainChangeAsync("Departments", "Created", campusId, created.DepartmentId.ToString());
@@ -174,7 +175,9 @@ namespace CollegeManagement.API.Controllers.V1
                 return BadRequest(new { message = "Department name is required." });
             }
 
-            var isNameValid = await _departmentService.ValidateNameAsync(dto.DepartmentName, excludeId: id, campusId: campusId);
+            var effectiveCampusId = campusId ?? dto.CampusId;
+            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
+            var isNameValid = await _departmentService.ValidateNameAsync(dto.DepartmentName, excludeId: id, campusId: effectiveCampusId, collegeId: effectiveCollegeId);
             if (!isNameValid)
             {
                 return Conflict(new { message = $"Department with name '{dto.DepartmentName}' already exists." });
@@ -182,15 +185,14 @@ namespace CollegeManagement.API.Controllers.V1
 
             if (!string.IsNullOrWhiteSpace(dto.DepartmentCode))
             {
-                var isCodeValid = await _departmentService.ValidateCodeAsync(dto.DepartmentCode, excludeId: id, campusId: campusId);
+                var isCodeValid = await _departmentService.ValidateCodeAsync(dto.DepartmentCode, excludeId: id, campusId: effectiveCampusId, collegeId: effectiveCollegeId);
                 if (!isCodeValid)
                 {
                     return Conflict(new { message = $"Department with code '{dto.DepartmentCode}' already exists." });
                 }
             }
 
-            var effectiveCollegeId = ResolveCollegeId(collegeId ?? dto.CollegeId);
-            var updated = await _departmentService.UpdateDepartmentAsync(id, dto, campusId, effectiveCollegeId);
+            var updated = await _departmentService.UpdateDepartmentAsync(id, dto, effectiveCampusId, effectiveCollegeId);
             if (updated == null)
             {
                 return NotFound(new { message = $"Department with ID {id} not found." });
@@ -234,9 +236,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("validate-code")]
         [BypassPermission]
-        public async Task<IActionResult> ValidateCode([FromQuery] string code, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null)
-        {
-            var isValid = await _departmentService.ValidateCodeAsync(code, excludeId, campusId);
+        public async Task<IActionResult> ValidateCode([FromQuery] string code, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
+{
+    var isValid = await _departmentService.ValidateCodeAsync(code, excludeId, campusId, ResolveCollegeId(collegeId));
             return Ok(new { isValid, message = isValid ? "Code is available." : "Code is already in use." });
         }
 
@@ -246,9 +248,9 @@ namespace CollegeManagement.API.Controllers.V1
         /// </summary>
         [HttpGet("validate-name")]
         [BypassPermission]
-        public async Task<IActionResult> ValidateName([FromQuery] string name, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null)
-        {
-            var isValid = await _departmentService.ValidateNameAsync(name, excludeId, campusId);
+        public async Task<IActionResult> ValidateName([FromQuery] string name, [FromQuery] int? excludeId = null, [FromQuery] int? campusId = null, [FromQuery] int? collegeId = null)
+{
+    var isValid = await _departmentService.ValidateNameAsync(name, excludeId, campusId, ResolveCollegeId(collegeId));
             return Ok(new { isValid, message = isValid ? "Name is available." : "Name is already in use." });
         }
 

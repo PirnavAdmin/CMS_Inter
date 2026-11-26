@@ -3221,7 +3221,7 @@ function Field({
   );
 }
 
-function Back({ to = "/dashboard/staff", label = "Back" }) {
+function Back({ to = "/admin-dashboard/staff", label = "Back" }) {
   const n = useNavigate();
   return (
     <button className="staff-mock-back" onClick={() => n(to)}>
@@ -3410,7 +3410,7 @@ function StaffCredentialsGeneratorModal({ isOpen, onClose, onSave }) {
             className="cms-btn cms-btn-ghost"
             onClick={() => {
               onClose();
-              n("/dashboard/settings/credentials");
+              n("/admin-dashboard/settings/credentials");
             }}
             title="Open comprehensive credentials generation & batch dispatch manager"
           >
@@ -3608,7 +3608,7 @@ function Dashboard({ records = [], loadingRecords = false }) {
         isDataLoading ? (
           <SkeletonButton width={105} />
         ) : (
-          <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add")}>
+          <button className="cms-btn cms-btn-primary" onClick={() => n("/admin-dashboard/staff/add")}>
             <Plus /> Add Staff
           </button>
         )
@@ -3620,11 +3620,11 @@ function Dashboard({ records = [], loadingRecords = false }) {
         <main className="staff-mock-page">
           <section className="staff-kpis">
             {[
-              ["Total Staff", totalCount, totalStaffIcon, "/dashboard/staff/list"],
-              ["Teaching Staff", teachingCount, teachingStaffIcon, "/dashboard/staff/teaching"],
-              ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/dashboard/staff/non-teaching"],
-              ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/dashboard/staff/pending?tab=Link%20Sent"],
-              ["Completed Profiles", completedCount, completedProfilesIcon, "/dashboard/staff/completed"],
+              ["Total Staff", totalCount, totalStaffIcon, "/admin-dashboard/staff/list"],
+              ["Teaching Staff", teachingCount, teachingStaffIcon, "/admin-dashboard/staff/teaching"],
+              ["Non-Teaching Staff", nonTeachingCount, nonTeachingStaffIcon, "/admin-dashboard/staff/non-teaching"],
+              ["Pending Profile Completion", pendingCount, pendingProfilesIcon, "/admin-dashboard/staff/pending?tab=Link%20Sent"],
+              ["Completed Profiles", completedCount, completedProfilesIcon, "/admin-dashboard/staff/completed"],
             ].map(([l, v, icon, to]) => (
               <article
                 key={l}
@@ -3679,11 +3679,11 @@ function Dashboard({ records = [], loadingRecords = false }) {
                 </div>
               </header>
               {[
-                ["Add Teaching Staff", "/dashboard/staff/add-teaching"],
-                ["Add Non-Teaching Staff", "/dashboard/staff/add-non-teaching"],
-                ["Send Profile Link", "/dashboard/staff/pending?tab=Link%20Sent"],
-                ["View Pending Submissions", "/dashboard/staff/pending"],
-                ["View All Staff", "/dashboard/staff/list"],
+                ["Add Teaching Staff", "/admin-dashboard/staff/add-teaching"],
+                ["Add Non-Teaching Staff", "/admin-dashboard/staff/add-non-teaching"],
+                ["Send Profile Link", "/admin-dashboard/staff/pending?tab=Link%20Sent"],
+                ["View Pending Submissions", "/admin-dashboard/staff/pending"],
+                ["View All Staff", "/admin-dashboard/staff/list"],
               ].map(([l, to]) => (
                 <button
                   key={l}
@@ -5102,7 +5102,7 @@ function StaffList({ records = [], setRecords, forced }) {
       actions={null}
     >
       <main className="staff-mock-page">
-        <Back to="/dashboard/staff" label="Back to Staff Management" />
+        <Back to="/admin-dashboard/staff" label="Back to Staff Management" />
         <section className="staff-panel">
           <input
             type="file"
@@ -5196,10 +5196,10 @@ function StaffList({ records = [], setRecords, forced }) {
                 onClick={() =>
                   n(
                     forced === "Teaching" || tab === "Teaching"
-                      ? "/dashboard/staff/add-teaching"
+                      ? "/admin-dashboard/staff/add-teaching"
                       : forced === "Non-Teaching" || tab === "Non-Teaching"
-                        ? "/dashboard/staff/add-non-teaching"
-                        : "/dashboard/staff/add",
+                        ? "/admin-dashboard/staff/add-non-teaching"
+                        : "/admin-dashboard/staff/add",
                   )
                 }
               >
@@ -5290,7 +5290,7 @@ function StaffList({ records = [], setRecords, forced }) {
                           const isTransferredOut = r.status === "Transferred" || (activeCampusId && String(r.transferredFromCampusId) === String(activeCampusId));
                           return (
                             <div className="row-actions">
-                              <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/dashboard/staff/${r.id}`)}>
+                              <button title="View Details (GET /api/v1/staff/{id})" onClick={() => n(`/admin-dashboard/staff/${r.id}`)}>
                                 <Eye />
                               </button>
                               <button 
@@ -5307,7 +5307,7 @@ function StaffList({ records = [], setRecords, forced }) {
                                   const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
                                   window.open(url, "_blank");
                                 } catch {
-                                  n(`/dashboard/staff/${r.id}`);
+                                  n(`/admin-dashboard/staff/${r.id}`);
                                   setTimeout(() => window.print(), 300);
                                 }
                               }}>
@@ -5451,7 +5451,7 @@ function TypeSelect() {
             <GraduationCap />
             <h2>Teaching Staff</h2>
             <p>Admin adds basic details. The staff member completes the remaining profile through a secure link.</p>
-            <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add-teaching")}>
+            <button className="cms-btn cms-btn-primary" onClick={() => n("/admin-dashboard/staff/add-teaching")}>
               Add Teaching Staff
             </button>
           </article>
@@ -5459,7 +5459,7 @@ function TypeSelect() {
             <Building2 />
             <h2>Non-Teaching Staff</h2>
             <p>Admin manages and completes all details for non-teaching staff.</p>
-            <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/add-non-teaching")}>
+            <button className="cms-btn cms-btn-primary" onClick={() => n("/admin-dashboard/staff/add-non-teaching")}>
               Add Non-Teaching Staff
             </button>
           </article>
@@ -5706,9 +5706,9 @@ function TeachingForm({ records, setRecords, existing }) {
       } catch { }
       setToast(successMsg);
       if (existing) {
-        n(`/dashboard/staff/teaching`, { state: { toast: successMsg } });
+        n(`/admin-dashboard/staff/teaching`, { state: { toast: successMsg } });
       } else {
-        n(`/dashboard/staff/teaching`, { state: { toast: successMsg } });
+        n(`/admin-dashboard/staff/teaching`, { state: { toast: successMsg } });
       }
     } catch (err) {
       const status = err?.response?.status;
@@ -5880,7 +5880,7 @@ function TeachingForm({ records, setRecords, existing }) {
             })}
           </div>
           <footer>
-            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff")}>
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => n("/admin-dashboard/staff")}>
               Cancel
             </button>
             <button className="cms-btn cms-btn-primary" disabled={submitting}>
@@ -6183,9 +6183,9 @@ function NonTeachingForm({ records, setRecords, existing }) {
       setToast(successMsg);
 
       if (existing) {
-        n(`/dashboard/staff/non-teaching`, { state: { toast: successMsg } });
+        n(`/admin-dashboard/staff/non-teaching`, { state: { toast: successMsg } });
       } else {
-        n(`/dashboard/staff/${record.id}`, { state: { toast: successMsg } });
+        n(`/admin-dashboard/staff/${record.id}`, { state: { toast: successMsg } });
       }
     } catch (err) {
       const status = err?.response?.status;
@@ -6428,7 +6428,7 @@ function SendLink({ record, update, activity }) {
       breadcrumb={["People", "Staff Management"]}
     >
       <main className="staff-mock-page">
-        <Back to="/dashboard/staff/list" />
+        <Back to="/admin-dashboard/staff/list" />
         <Steps labels={["Basic Details", "Send Link"]} step={1} />
         <section className="send-grid">
           <article className="staff-form-panel">
@@ -6501,7 +6501,7 @@ function SendLink({ record, update, activity }) {
               </aside>
             ) : null}
             <footer>
-              <button className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff/list")}>
+              <button className="cms-btn cms-btn-ghost" onClick={() => n("/admin-dashboard/staff/list")}>
                 Back
               </button>
               <button className="cms-btn cms-btn-primary" onClick={send} disabled={sending}>
@@ -6804,7 +6804,7 @@ function Pending({ records = [], setRecords, activity }) {
       breadcrumb={["People", "Staff Management"]}
     >
       <main className="staff-mock-page">
-        <Back to="/dashboard/staff" label="Back to Staff Management" />
+        <Back to="/admin-dashboard/staff" label="Back to Staff Management" />
         <section className="staff-panel">
           <div className="staff-tabs">
             <div style={{ display: "flex", gap: "2px" }}>
@@ -6933,7 +6933,7 @@ function Pending({ records = [], setRecords, activity }) {
                             <button
                               className="cms-btn cms-btn-primary"
                               style={{ padding: "5px 12px", fontSize: "12px", display: "inline-flex", alignItems: "center", gap: "5px" }}
-                              onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}/review`)}
+                              onClick={() => n(`/admin-dashboard/staff/${r.id || r.employeeId}/review`)}
                             >
                               <UserCheck size={13} /> Review Submission
                             </button>
@@ -6953,7 +6953,7 @@ function Pending({ records = [], setRecords, activity }) {
                             className="cms-btn cms-btn-ghost"
                             style={{ padding: "5px 8px" }}
                             title="View Details"
-                            onClick={() => n(`/dashboard/staff/${r.id || r.employeeId}`)}
+                            onClick={() => n(`/admin-dashboard/staff/${r.id || r.employeeId}`)}
                           >
                             <Eye size={14} />
                           </button>
@@ -8606,7 +8606,7 @@ function Details({ record, records, setRecords, id }) {
       <DashboardLayout title="Staff Record Not Found" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
           <p style={{ margin: "20px 0" }}>The requested staff record could not be found.</p>
-          <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/list")}>Back to Staff List</button>
+          <button className="cms-btn cms-btn-primary" onClick={() => n("/admin-dashboard/staff/list")}>Back to Staff List</button>
         </main>
       </DashboardLayout>
     );
@@ -8767,7 +8767,7 @@ function Details({ record, records, setRecords, id }) {
           {activeRecord.staffType === "Teaching" && activeRecord.profileStatus === "Submitted" ? (
             <button
               className="cms-btn cms-btn-secondary"
-              onClick={() => n(`/dashboard/staff/${activeRecord.id}/review`)}
+              onClick={() => n(`/admin-dashboard/staff/${activeRecord.id}/review`)}
             >
               Review Submission
             </button>
@@ -8776,7 +8776,7 @@ function Details({ record, records, setRecords, id }) {
       }
     >
       <main className="staff-mock-page">
-        <Back to="/dashboard/staff/list" />
+        <Back to="/admin-dashboard/staff/list" />
         <section className="staff-detail-head">
           {(() => {
             const rawPhoto = activeRecord.profilePhoto || activeRecord.photo || activeRecord.photoPath || activeRecord.photoUrl || activeRecord.avatar || activeRecord.profileImage;
@@ -8898,7 +8898,7 @@ function Review({ record, update, activity }) {
       });
       if (activity) activity(`${record.fullName} profile approved by administration`);
       alert(`Faculty profile approved successfully! Official QuestPDF Offer Letter generated and emailed to ${record.email || "faculty email"}.`);
-      n(`/dashboard/staff/${record.id}`);
+      n(`/admin-dashboard/staff/${record.id}`);
     } catch (err) {
       console.error("POST /api/v1/staff/{id}/admin-review failed", err);
       alert(getApiErrorMessage(err, "Failed to approve staff profile. Please try again."));
@@ -8926,7 +8926,7 @@ function Review({ record, update, activity }) {
         correctionNote: note.trim(),
       });
       if (activity) activity(`${record.fullName} requested profile corrections: ${note.trim()}`);
-      n(`/dashboard/staff/${record.id}`);
+      n(`/admin-dashboard/staff/${record.id}`);
     } catch (err) {
       console.error("POST /api/v1/staff/{id}/admin-review failed", err);
       alert(getApiErrorMessage(err, "Failed to request correction. Please try again."));
@@ -8942,7 +8942,7 @@ function Review({ record, update, activity }) {
       breadcrumb={["People", "Staff Management"]}
     >
       <main className="staff-mock-page">
-        <Back to="/dashboard/staff/pending" />
+        <Back to="/admin-dashboard/staff/pending" />
         <section className="staff-form-panel">
           <header>
             <UserCheck />
@@ -8965,7 +8965,7 @@ function Review({ record, update, activity }) {
             </label>
           ) : null}
           <footer>
-            <button className="cms-btn cms-btn-ghost" onClick={() => n("/dashboard/staff/pending")}>
+            <button className="cms-btn cms-btn-ghost" onClick={() => n("/admin-dashboard/staff/pending")}>
               Back
             </button>
             <button
@@ -11518,22 +11518,22 @@ export default function StaffManagementPage() {
   const p = loc.pathname.replace(/\/$/, "");
 
   let page;
-  if (p === "/dashboard/staff" || p === "/dashboard/faculty")
+  if (p === "/admin-dashboard/staff" || p === "/admin-dashboard/faculty")
     page = <Dashboard records={safeRecords} loadingRecords={loadingRecords} />;
-  else if (p === "/dashboard/staff/add") page = <TypeSelect />;
-  else if (p === "/dashboard/staff/add-teaching")
+  else if (p === "/admin-dashboard/staff/add") page = <TypeSelect />;
+  else if (p === "/admin-dashboard/staff/add-teaching")
     page = <TeachingForm records={safeRecords} setRecords={setRecords} />;
-  else if (p === "/dashboard/staff/add-non-teaching")
+  else if (p === "/admin-dashboard/staff/add-non-teaching")
     page = <NonTeachingForm records={safeRecords} setRecords={setRecords} />;
-  else if (p === "/dashboard/staff/list")
+  else if (p === "/admin-dashboard/staff/list")
     page = <StaffList records={safeRecords} setRecords={setRecords} forced="All" />;
-  else if (p === "/dashboard/staff/teaching")
+  else if (p === "/admin-dashboard/staff/teaching")
     page = <StaffList records={safeRecords} setRecords={setRecords} forced="Teaching" />;
-  else if (p === "/dashboard/staff/non-teaching")
+  else if (p === "/admin-dashboard/staff/non-teaching")
     page = <StaffList records={safeRecords} setRecords={setRecords} forced="Non-Teaching" />;
-  else if (p === "/dashboard/staff/completed")
+  else if (p === "/admin-dashboard/staff/completed")
     page = <StaffList records={safeRecords} setRecords={setRecords} forced="Completed" />;
-  else if (p === "/dashboard/staff/pending" || p.startsWith("/dashboard/staff/pending"))
+  else if (p === "/admin-dashboard/staff/pending" || p.startsWith("/admin-dashboard/staff/pending"))
     page = <Pending records={safeRecords} setRecords={setRecords} activity={activity} />;
   else if (loadingStaff && !record)
     page = (
@@ -11546,7 +11546,7 @@ export default function StaffManagementPage() {
   else if ((p.includes("/mock-staff-portal") || p.includes("/staff-portal") || p.includes("/staff/onboarding")) && record)
     page = <Navigate to="/faculty-dashboard" replace />;
   else if (p.endsWith("/send-link") && record)
-    page = <Navigate to="/dashboard/staff/pending" replace />;
+    page = <Navigate to="/admin-dashboard/staff/pending" replace />;
   else if (p.endsWith("/review") && record)
     page = <Review record={record} update={update} activity={activity} />;
   else if (p.endsWith("/edit")) {
@@ -11570,7 +11570,7 @@ export default function StaffManagementPage() {
         <DashboardLayout title="Staff Record Not Found" breadcrumb={["People", "Staff Management"]}>
           <main className="staff-mock-page">
             <p style={{ margin: "20px 0" }}>The requested staff record could not be found for editing.</p>
-            <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/list")}>Back to Staff List</button>
+            <button className="cms-btn cms-btn-primary" onClick={() => n("/admin-dashboard/staff/list")}>Back to Staff List</button>
           </main>
         </DashboardLayout>
       );
@@ -11582,7 +11582,7 @@ export default function StaffManagementPage() {
       <DashboardLayout title="Staff Record Not Found" breadcrumb={["People", "Staff Management"]}>
         <main className="staff-mock-page">
           <p style={{ margin: "20px 0" }}>The requested staff record could not be found.</p>
-          <button className="cms-btn cms-btn-primary" onClick={() => n("/dashboard/staff/list")}>Back to Staff List</button>
+          <button className="cms-btn cms-btn-primary" onClick={() => n("/admin-dashboard/staff/list")}>Back to Staff List</button>
         </main>
       </DashboardLayout>
     );

@@ -164,7 +164,8 @@ public class TransportRepository : ITransportRepository
                 p_Search = "",
                 p_Status = (byte?)null,
                 p_BusType = (string?)null,
-                p_CampusId = (int?)null
+                p_CampusId = (int?)null,
+                p_CollegeId = (int?)null
             },
             commandType: CommandType.StoredProcedure)).ToList();
 

@@ -23,7 +23,7 @@ const mockStudents = [];
 
 export const pageConfig = {
   title: "Certificates",
-  route: "/dashboard/certificates",
+  route: "/admin-dashboard/certificates",
 };
 
 // Default PAGE_SIZE parameterized

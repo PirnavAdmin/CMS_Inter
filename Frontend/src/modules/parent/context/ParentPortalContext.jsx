@@ -481,15 +481,15 @@ export const transformStudentData = (raw, feeData, attendanceData, currentAcadem
 
 export const transformFeeData = (feeData, childRecord) => {
   if (!feeData) {
-    const total = childRecord?.feeAmount || 0;
-    const paid = childRecord?.feePaid || 0;
+    const paid = Number(childRecord?.feePaid ?? childRecord?.fees?.paid ?? 0);
+    const total = Math.max(Number(childRecord?.feeAmount ?? childRecord?.fees?.total ?? 0), paid);
     const pending = Math.max(0, total - paid);
     return {
       total,
       paid,
       pending,
       status: total > 0 ? (pending === 0 ? "Paid" : paid > 0 ? "Partial" : "Pending") : "—",
-      dueDate: "—",
+      dueDate: pending === 0 && total > 0 ? "All Dues Cleared" : (childRecord?.fees?.dueDate || "—"),
       breakdown: [],
       schedules: [],
       receipts: [],
@@ -1014,14 +1014,20 @@ export function ParentPortalProvider({ children }) {
         if (cached) fallbackList = JSON.parse(cached);
       } catch {}
       fallbackList = (fallbackList || []).filter((c) => c && String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
-      if (!fallbackList || fallbackList.length === 0) {
-        fallbackList = Array.isArray(initialChildren) && initialChildren.length > 0 ? initialChildren : [];
+      if (fallbackList.length === 0) {
+        setError(err?.response?.data?.message || err?.message || "Unable to load student records.");
       }
       setChildrenList(fallbackList);
       fallbackList.forEach((c) => {
         if (c?.id) fetchActiveChildData(c.id);
       });
       setActiveChildIdState((prev) => {
+        if (fallbackList.length === 0) {
+          try {
+            window.sessionStorage.removeItem("cms-parent-active-child");
+          } catch {}
+          return "";
+        }
         let candidate = prev;
         if (!candidate && typeof window !== "undefined") {
           try {
@@ -1328,19 +1334,7 @@ export function ParentPortalProvider({ children }) {
     }
     const rawFee = feeMap[activeBaseChild.id];
     const rawDetailed = detailedStudentMap[activeBaseChild.id];
-    if (rawFee) {
-      return transformFeeData(rawFee, rawDetailed);
-    }
-    return {
-      total: activeBaseChild.fees?.total || 0,
-      paid: activeBaseChild.fees?.paid || 0,
-      pending: activeBaseChild.fees?.pending || 0,
-      status: activeBaseChild.fees?.status || "—",
-      dueDate: activeBaseChild.fees?.dueDate || "—",
-      breakdown: [],
-      schedules: [],
-      receipts: [],
-    };
+    return transformFeeData(rawFee, rawDetailed || activeBaseChild);
   }, [activeBaseChild, feeMap, detailedStudentMap]);
 
   // Active child exam results

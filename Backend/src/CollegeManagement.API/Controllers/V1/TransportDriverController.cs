@@ -42,6 +42,11 @@ namespace CollegeManagement.API.Controllers
                 }
             }
 
+            if (!filter.CollegeId.HasValue || filter.CollegeId.Value <= 0)
+            {
+                filter.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+            }
+
             try
             {
                 var result = await _service.GetAllAsync(filter);

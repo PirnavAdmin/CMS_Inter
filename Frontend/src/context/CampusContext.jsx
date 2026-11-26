@@ -24,7 +24,9 @@ export function CampusProvider({ children }) {
 
   // Load campuses from tenant-scoped localStorage (never leak another college's campuses)
   const [campuses, setCampuses] = useState(() => {
+    const token = getAuthToken();
     const u = getAuthUser();
+    if (!token || !u) return [];
     const suffix = getTenantKeySuffix();
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY_CAMPUSES}${suffix}`);
@@ -43,7 +45,9 @@ export function CampusProvider({ children }) {
 
   // Selected campus state (tenant-scoped)
   const [selectedCampusId, setSelectedCampusId] = useState(() => {
+    const token = getAuthToken();
     const u = getAuthUser();
+    if (!token || !u) return "";
     const suffix = getTenantKeySuffix();
     if (u?.collegeId && Number(u.collegeId) > 1 && campuses.length === 0) {
       return "";
@@ -156,9 +160,57 @@ export function CampusProvider({ children }) {
     }
   }, []);
 
-  // Initial load
+  // Initial load & react to auth login/logout events across SPA transitions
   useEffect(() => {
     fetchCampuses();
+  }, [fetchCampuses]);
+
+  useEffect(() => {
+    const handleAuthLogin = () => {
+      const u = getAuthUser();
+      const suffix = getTenantKeySuffix();
+      if (Array.isArray(u?.assignedCampusIds) && u.assignedCampusIds.length > 0) {
+        setPrincipalAssignedCampusIds(u.assignedCampusIds.map(Number));
+      } else if (u?.campusId) {
+        setPrincipalAssignedCampusIds([Number(u.campusId)]);
+      } else {
+        setPrincipalAssignedCampusIds(null);
+      }
+
+      try {
+        const savedId = suffix ? localStorage.getItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`) : "";
+        setSelectedCampusId(savedId || "");
+        const savedCampuses = suffix ? localStorage.getItem(`${STORAGE_KEY_CAMPUSES}${suffix}`) : null;
+        if (savedCampuses) {
+          const parsed = JSON.parse(savedCampuses);
+          if (Array.isArray(parsed)) {
+            setCampuses(parsed.map(campusApi.normalizeCampus));
+          } else {
+            setCampuses([]);
+          }
+        } else {
+          setCampuses([]);
+        }
+      } catch {
+        setCampuses([]);
+        setSelectedCampusId("");
+      }
+
+      fetchCampuses();
+    };
+
+    const handleAuthLogout = () => {
+      setCampuses([]);
+      setSelectedCampusId("");
+      setPrincipalAssignedCampusIds(null);
+    };
+
+    window.addEventListener("cms-auth-login", handleAuthLogin);
+    window.addEventListener("cms-auth-logout", handleAuthLogout);
+    return () => {
+      window.removeEventListener("cms-auth-login", handleAuthLogin);
+      window.removeEventListener("cms-auth-logout", handleAuthLogout);
+    };
   }, [fetchCampuses]);
 
   // Save campuses to tenant-scoped localStorage on update

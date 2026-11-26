@@ -33,6 +33,15 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
+                if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+                {
+                    filter.CampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, filter.CampusId);
+                }
+                if (!filter.CollegeId.HasValue || filter.CollegeId.Value <= 0)
+                {
+                    filter.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+                }
+
                 var result = await _service.GetAllAsync(filter);
                 return Ok(result);
             }
@@ -129,6 +138,11 @@ namespace CollegeManagement.API.Controllers
         {
             try
             {
+                if (!dto.CampusId.HasValue || dto.CampusId.Value <= 0)
+                {
+                    dto.CampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, dto.CampusId);
+                }
+
                 long routeId = await _service.CreateAsync(dto, userId: null);
                 _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "create", dto.CampusId, routeId.ToString());
                 TransportRouteDto? result = await _service.GetByIdAsync(routeId);

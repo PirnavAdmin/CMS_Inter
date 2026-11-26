@@ -70,6 +70,8 @@ namespace CollegeManagement.API.Services.Implementations
                 StaffType = created.StaffType,
                 Description = created.Description,
                 IsActive = created.IsActive,
+                CampusId = created.CampusId,
+                CollegeId = created.CollegeId,
                 DesignationCount = 0,
                 StaffCount = 0,
                 CreatedAt = created.CreatedAt,
@@ -114,6 +116,8 @@ namespace CollegeManagement.API.Services.Implementations
                 StaffType = updated.StaffType,
                 Description = updated.Description,
                 IsActive = updated.IsActive,
+                CampusId = updated.CampusId,
+                CollegeId = updated.CollegeId,
                 DesignationCount = deps.DesignationCount,
                 StaffCount = deps.StaffCount,
                 CreatedAt = updated.CreatedAt,
@@ -151,14 +155,14 @@ namespace CollegeManagement.API.Services.Implementations
             return await _departmentRepository.GetSummaryAsync(campusId, collegeId);
         }
 
-        public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null)
+        public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null, int? collegeId = null)
         {
-            return await _departmentRepository.ValidateCodeAsync(code, excludeId, campusId);
+            return await _departmentRepository.ValidateCodeAsync(code, excludeId, campusId, collegeId);
         }
 
-        public async Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null)
+        public async Task<bool> ValidateNameAsync(string name, int? excludeId = null, int? campusId = null, int? collegeId = null)
         {
-            return await _departmentRepository.ValidateNameAsync(name, excludeId, campusId);
+            return await _departmentRepository.ValidateNameAsync(name, excludeId, campusId, collegeId);
         }
 
         public async Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null, int? collegeId = null)

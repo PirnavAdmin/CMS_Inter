@@ -53,6 +53,12 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleAssignment
             set { if (long.TryParse(value, out var id)) AttendantId = id; }
         }
 
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("collegeId")]
+        public int? CollegeId { get; set; }
+
         [JsonPropertyName("branchName")]
         public string? BranchName { get; set; }
 

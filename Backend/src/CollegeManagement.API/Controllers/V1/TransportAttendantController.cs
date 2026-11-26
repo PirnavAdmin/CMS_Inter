@@ -33,6 +33,11 @@ namespace CollegeManagement.API.Controllers
                     filter.CampusId = resolvedCampusId;
                 }
 
+                if (!filter.CollegeId.HasValue || filter.CollegeId.Value <= 0)
+                {
+                    filter.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+                }
+
                 var result = await _service.GetAllAsync(filter);
                 return Ok(result);
             }

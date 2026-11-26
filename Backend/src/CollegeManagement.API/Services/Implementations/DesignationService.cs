@@ -48,7 +48,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             string trimmedName = dto.Name.Trim();
 
-            if (!await _designationRepository.IsNameUniqueAsync(trimmedName, null, campusId))
+            if (!await _designationRepository.IsNameUniqueAsync(trimmedName, null, campusId ?? dto.CampusId, collegeId ?? dto.CollegeId))
                 throw new ConflictException($"Designation with name '{trimmedName}' already exists.");
 
             string deptName = string.Empty;
@@ -100,6 +100,8 @@ namespace CollegeManagement.API.Services.Implementations
                 ReportsToDesignationId = created.ReportsToDesignationId,
                 ReportsToDesignationName = reportsToName,
                 IsActive = created.IsActive,
+                CampusId = created.CampusId,
+                CollegeId = created.CollegeId,
                 AssignedStaffCount = 0,
                 CreatedAt = created.CreatedAt,
                 UpdatedAt = created.UpdatedAt
@@ -116,7 +118,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             string trimmedName = dto.Name.Trim();
 
-            if (!await _designationRepository.IsNameUniqueAsync(trimmedName, id, campusId))
+            if (!await _designationRepository.IsNameUniqueAsync(trimmedName, id, campusId ?? dto.CampusId, collegeId ?? dto.CollegeId))
                 throw new ConflictException($"Designation with name '{trimmedName}' already exists.");
 
             string deptName = string.Empty;
@@ -166,6 +168,8 @@ namespace CollegeManagement.API.Services.Implementations
                 ReportsToDesignationId = existing.ReportsToDesignationId,
                 ReportsToDesignationName = reportsToName,
                 IsActive = existing.IsActive,
+                CampusId = existing.CampusId,
+                CollegeId = existing.CollegeId,
                 AssignedStaffCount = staffCount,
                 CreatedAt = existing.CreatedAt,
                 UpdatedAt = existing.UpdatedAt
