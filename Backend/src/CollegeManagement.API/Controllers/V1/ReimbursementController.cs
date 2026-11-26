@@ -64,6 +64,7 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User) ?? 0;
             var staffId = ResolveStaffId();
             bool isPrivileged = User.IsInRole("Admin") ||
+                               User.IsInRole("College Admin") ||
                                User.IsInRole("Super Admin") ||
                                User.IsInRole("Accountant") ||
                                User.IsInRole("Principal") ||
@@ -252,6 +253,16 @@ namespace CollegeManagement.API.Controllers.V1
             var staffId = await ResolveStaffIdAsync();
             if (!staffId.HasValue || staffId.Value <= 0)
             {
+                if (IsAdminOrFinance())
+                {
+                    return Ok(new
+                    {
+                        Status = true,
+                        Message = "No personal reimbursement claims found for this account.",
+                        Data = Array.Empty<ReimbursementClaimDto>()
+                    });
+                }
+
                 return BadRequest(new { Status = false, Message = "Unable to determine staff identity." });
             }
 
@@ -515,6 +526,6 @@ namespace CollegeManagement.API.Controllers.V1
             return Ok(new { Status = true, Message = "Proof document uploaded successfully.", Data = filePath });
         }
 
-        private bool IsAdminOrFinance() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Transport Manager");
+        private bool IsAdminOrFinance() => User.IsInRole("Admin") || User.IsInRole("College Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Transport Manager");
     }
 }

@@ -166,7 +166,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                             p_StartDate = h.StartDate,
                             p_EndDate = h.EndDate,
                             p_Status = h.Status ?? "Active",
-                            p_Description = h.Description
+                            p_Description = h.Description,
+                            p_CollegeId = ResolveCollegeId()
                         },
                         transaction: tran,
                         commandType: CommandType.StoredProcedure);
@@ -201,7 +202,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StartDate = holiday.StartDate,
                     p_EndDate = holiday.EndDate,
                     p_Status = holiday.Status,
-                    p_Description = holiday.Description
+                    p_Description = holiday.Description,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 

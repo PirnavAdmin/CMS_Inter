@@ -6,7 +6,8 @@ namespace CollegeManagement.API.Services.Interfaces.Hostel
     {
         Task<IEnumerable<RoomTypeConfigResponseDto>> GetAllAsync(
             string? search = null,
-            string? status = null);
+            string? status = null,
+            int? campusId = null);
 
         Task<RoomTypeConfigResponseDto?> GetByIdAsync(int roomTypeId);
 

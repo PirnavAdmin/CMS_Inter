@@ -30,17 +30,19 @@ DELIMITER //
 CREATE PROCEDURE `sp_GetHolidaySummary`(
     IN p_CampusId INT,
     IN p_AcademicYearId INT,
-    IN p_BoardId INT
+    IN p_BoardId INT,
+    IN p_CollegeId INT
 )
 BEGIN
     SELECT 
         COUNT(*) AS Total,
-        COALESCE(SUM(CASE WHEN HolidayType = 'National Holiday' THEN 1 ELSE 0 END), 0) AS National,
+        COALESCE(SUM(CASE WHEN HolidayType = 'National Holiday' THEN 1 ELSE 0 END), 0) AS `National`,
         COALESCE(SUM(CASE WHEN HolidayType LIKE '%Festival%' THEN 1 ELSE 0 END), 0) AS Festival,
         COALESCE(SUM(CASE WHEN EndDate >= CURRENT_DATE() AND Status = 'Active' THEN 1 ELSE 0 END), 0) AS Upcoming,
         COALESCE(SUM(CASE WHEN EndDate < CURRENT_DATE() AND Status = 'Active' THEN 1 ELSE 0 END), 0) AS Completed
     FROM `Holidays`
     WHERE (IsDeleted = 0 OR IsDeleted IS NULL)
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR CollegeId = p_CollegeId OR CollegeId IS NULL OR CollegeId = 0)
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId IS NULL OR CampusId = p_CampusId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId <= 0 OR AcademicYearId IS NULL OR AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR BoardId IS NULL OR BoardId = p_BoardId);
@@ -61,7 +63,8 @@ CREATE PROCEDURE `sp_GetHolidays`(
     IN p_FromDate DATE,
     IN p_ToDate DATE,
     IN p_Limit INT,
-    IN p_Offset INT
+    IN p_Offset INT,
+    IN p_CollegeId INT
 )
 BEGIN
     DECLARE v_Limit INT DEFAULT 10;
@@ -79,6 +82,7 @@ BEGIN
     SELECT COUNT(*) AS TotalCount
     FROM `Holidays`
     WHERE (IsDeleted = 0 OR IsDeleted IS NULL)
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR CollegeId = p_CollegeId OR CollegeId IS NULL OR CollegeId = 0)
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId IS NULL OR CampusId = p_CampusId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId <= 0 OR AcademicYearId IS NULL OR AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR BoardId IS NULL OR BoardId = p_BoardId)
@@ -110,6 +114,7 @@ BEGIN
     -- Query 2: Paged Items
     SELECT 
         Id,
+        CollegeId,
         HolidayCode,
         CampusId,
         AcademicYearId,
@@ -127,6 +132,7 @@ BEGIN
         UpdatedAt
     FROM `Holidays`
     WHERE (IsDeleted = 0 OR IsDeleted IS NULL)
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR CollegeId = p_CollegeId OR CollegeId IS NULL OR CollegeId = 0)
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId IS NULL OR CampusId = p_CampusId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId <= 0 OR AcademicYearId IS NULL OR AcademicYearId = p_AcademicYearId)
       AND (p_BoardId IS NULL OR p_BoardId <= 0 OR BoardId IS NULL OR BoardId = p_BoardId)
@@ -367,11 +373,13 @@ CREATE PROCEDURE `sp_GetHolidaysBetweenDates`(
     IN p_CampusId INT,
     IN p_BoardId INT,
     IN p_AcademicYearId INT,
-    IN p_AppliesTo VARCHAR(50)
+    IN p_AppliesTo VARCHAR(50),
+    IN p_CollegeId INT
 )
 BEGIN
     SELECT 
         Id,
+        CollegeId,
         HolidayCode,
         CampusId,
         AcademicYearId,
@@ -390,6 +398,7 @@ BEGIN
     FROM `Holidays`
     WHERE (IsDeleted = 0 OR IsDeleted IS NULL)
       AND Status = 'Active'
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR CollegeId = p_CollegeId OR CollegeId IS NULL OR CollegeId = 0)
       AND DATE(StartDate) <= DATE(p_EndDate)
       AND DATE(EndDate) >= DATE(p_StartDate)
       AND (p_CampusId IS NULL OR p_CampusId <= 0 OR CampusId IS NULL OR CampusId = p_CampusId)

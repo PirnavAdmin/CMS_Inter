@@ -996,37 +996,24 @@ export default function LeaveManagementPage() {
   const [leaveSubmitting, setLeaveSubmitting] = useState(false);
   const [holidays, setHolidays] = useState([]);
 
-  // Derive Admin identification strictly
+  // Derive Admin staff identification strictly (do not fall back to UserId/hardcoded IDs)
   const effectiveAdminId = useMemo(() => {
     const a = getAuthUser() || {};
     const token = getAuthToken();
-    let jwtAdminId = null;
     let jwtStaffId = null;
-    let jwtUserId = null;
     if (token) {
       try {
         const parts = token.split(".");
         if (parts.length >= 2) {
           const decoded = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
-          jwtAdminId = decoded?.AdminId || decoded?.adminId || decoded?.admin_id;
           jwtStaffId = decoded?.StaffId || decoded?.staffId || decoded?.staff_id;
-          jwtUserId = decoded?.UserId || decoded?.userId || decoded?.id || decoded?.sub;
         }
       } catch {
         /* ignore parse error */
       }
     }
-    const id = Number(
-      a?.staffId ||
-      a?.StaffId ||
-      jwtStaffId ||
-      (a?.role !== "Admin" && a?.role !== "Super Admin" ? (a?.adminId || a?.AdminId || jwtAdminId) : null) ||
-      a?.id ||
-      a?.userId ||
-      jwtUserId ||
-      1116
-    );
-    return id > 0 ? id : 1116;
+    const id = Number(a?.staffId || a?.StaffId || jwtStaffId || 0);
+    return id > 0 ? id : null;
   }, []);
 
   const effectiveDepartmentId = useMemo(() => {
@@ -1086,13 +1073,17 @@ export default function LeaveManagementPage() {
       let balanceObj = null;
 
       try {
-        let histRes;
+        let histRes = null;
         try {
           histRes = await apiClient.get("/api/v1/staff-attendance/leave/my-history");
-        } catch {
-          histRes = await apiClient.get(
-            `/api/v1/staff-attendance/leave/history/staff/${effectiveAdminId}`
-          );
+        } catch (myHistErr) {
+          if (effectiveAdminId) {
+            histRes = await apiClient.get(
+              `/api/v1/staff-attendance/leave/history/staff/${effectiveAdminId}`
+            );
+          } else {
+            throw myHistErr;
+          }
         }
         const rawHist = histRes?.data;
         const histData = (rawHist && typeof rawHist === "object" && ("data" in rawHist || "Data" in rawHist))
@@ -1113,8 +1104,8 @@ export default function LeaveManagementPage() {
         console.warn("Could not fetch admin leave history:", histErr);
       }
 
-      // Fallback if history endpoint returned empty
-      if (leaves.length === 0) {
+      // Fallback if history endpoint returned empty and a linked staffId exists
+      if (leaves.length === 0 && effectiveAdminId) {
         try {
           const leaveRes = await apiClient.get("/api/v1/staff-attendance/leave", {
             params: { staffId: effectiveAdminId, campusId: effectiveCampusId },
@@ -1387,7 +1378,7 @@ export default function LeaveManagementPage() {
       }
 
       const payload = {
-        staffId: effectiveAdminId,
+        staffId: effectiveAdminId || 0,
         leaveType: targetLeaveType,
         leaveCategoryId: Number(targetCategoryId || 1),
         startDate: new Date(leaveForm.fromDate).toISOString(),

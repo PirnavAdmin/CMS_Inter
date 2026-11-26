@@ -18,10 +18,11 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
         public async Task<IEnumerable<RoomTypeConfigResponseDto>>
             GetAllAsync(
                 string? search = null,
-                string? status = null)
+                string? status = null,
+                int? campusId = null)
         {
             var roomTypes =
-                await _repository.GetAllAsync(search, status);
+                await _repository.GetAllAsync(search, status, campusId);
 
             return roomTypes.Select(MapToResponse);
         }
@@ -48,7 +49,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
         {
             var existing =
                 await _repository.GetBySpecificationAsync(
-                    dto.RoomTypeSpecification.Trim());
+                    dto.RoomTypeSpecification.Trim(),
+                    dto.CampusId);
 
             if (existing != null)
             {
@@ -61,6 +63,9 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
             var roomType = new RoomTypeConfig
             {
+                CampusId =
+                    dto.CampusId,
+
                 RoomTypeSpecification =
                     dto.RoomTypeSpecification.Trim(),
 
@@ -118,7 +123,8 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
 
             var existing =
                 await _repository.GetBySpecificationAsync(
-                    dto.RoomTypeSpecification.Trim());
+                    dto.RoomTypeSpecification.Trim(),
+                    dto.CampusId ?? roomType.CampusId);
 
             if (existing != null &&
                 existing.RoomTypeId != roomTypeId)
@@ -128,6 +134,11 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                     "Room type specification already exists.",
                     null
                 );
+            }
+
+            if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
+            {
+                roomType.CampusId = dto.CampusId;
             }
 
             roomType.RoomTypeSpecification =
@@ -174,10 +185,10 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
         public async Task<(bool Success, string Message)>
             DeleteAsync(int roomTypeId)
         {
-            var exists =
-                await _repository.ExistsAsync(roomTypeId);
+            var existing =
+                await _repository.GetByIdAsync(roomTypeId);
 
-            if (!exists)
+            if (existing == null)
             {
                 return (
                     false,
@@ -220,6 +231,9 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
             {
                 RoomTypeId =
                     roomType.RoomTypeId,
+
+                CampusId =
+                    roomType.CampusId,
 
                 RoomTypeSpecification =
                     roomType.RoomTypeSpecification,

@@ -203,7 +203,8 @@ namespace CollegeManagement.API.Controllers.V1
             var result =
                 await _roomTypeConfigService.GetAllAsync(
                     search,
-                    status);
+                    status,
+                    campusId);
 
             return Ok(new
             {
