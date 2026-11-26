@@ -29,6 +29,8 @@ namespace CollegeManagement.API.Services.Interfaces
         /// </summary>
         /// <param name="request">Creation details.</param>
         /// <param name="userName">The authenticated admin user initiating the action.</param>
+        /// <param name="collegeId">Optional college identifier.</param>
+        /// <param name="campusId">Optional campus identifier.</param>
         /// <returns>The created board details.</returns>
         Task<BoardResponse> CreateBoardAsync(CreateBoardRequest request, string userName, int? collegeId = null, int? campusId = null);
 
@@ -62,6 +64,7 @@ namespace CollegeManagement.API.Services.Interfaces
         /// Validates board code availability.
         /// </summary>
         /// <param name="request">The validation parameter details.</param>
+        /// <param name="collegeId">Optional college identifier.</param>
         /// <returns>The validation response status.</returns>
         Task<ValidateBoardCodeResponse> ValidateBoardCodeAsync(ValidateBoardCodeRequest request, int? collegeId = null);
 

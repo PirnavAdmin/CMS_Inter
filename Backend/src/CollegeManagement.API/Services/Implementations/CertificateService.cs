@@ -376,7 +376,7 @@ public class CertificateService : ICertificateService
                 }
                 else if (!isPermitted && cert.FeeDueAmount.GetValueOrDefault() > 0)
                 {
-                    throw new InvalidOperationException($"Cannot issue certificate {cert.CertificateNumber}. Student {cert.StudentName} (Admission No: {cert.AdmissionNo}) has pending fee dues of ₹{cert.FeeDueAmount.Value:N2}. Fee clearance or Principal Permission is required.");
+                    throw new InvalidOperationException($"Cannot issue certificate {cert.CertificateNumber}. Student {cert.StudentName} (Admission No: {cert.AdmissionNo}) has pending fee dues of ₹{cert.FeeDueAmount.GetValueOrDefault():N2}. Fee clearance or Principal Permission is required.");
                 }
             }
         }

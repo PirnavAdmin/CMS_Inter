@@ -226,8 +226,20 @@ export function AcademicProvider({ children }) {
   }, [academicYears]);
 
   useEffect(() => {
+    const handleLogout = () => {
+      setAllBoards([]);
+      setAcademicYears([]);
+      setSelectedBoardState(null);
+      setSelectedAcademicYearState(null);
+    };
     window.addEventListener("cms_academic_masters_updated", refreshAcademicContext);
-    return () => window.removeEventListener("cms_academic_masters_updated", refreshAcademicContext);
+    window.addEventListener("cms-auth-login", refreshAcademicContext);
+    window.addEventListener("cms-auth-logout", handleLogout);
+    return () => {
+      window.removeEventListener("cms_academic_masters_updated", refreshAcademicContext);
+      window.removeEventListener("cms-auth-login", refreshAcademicContext);
+      window.removeEventListener("cms-auth-logout", handleLogout);
+    };
   }, [refreshAcademicContext]);
 
   // Fetch Master Boards

@@ -972,48 +972,45 @@ try
             await dbContext.Database.ExecuteSqlRawAsync("UPDATE `NumberSeriesConfigurations` SET `CollegeId` = 1 WHERE `CollegeId` IS NULL OR `CollegeId` = 0;");
         }
 
-        // Drop legacy single-column or non-college unique index if exists
-        try
+        // Drop legacy single-column or non-college unique index only if present
+        var existingIndexes = await dbContext.Database.SqlQueryRaw<string>(@"
+            SELECT DISTINCT INDEX_NAME AS `Value`
+            FROM information_schema.statistics
+            WHERE table_schema = DATABASE() AND table_name = 'NumberSeriesConfigurations'").ToListAsync();
+
+        if (existingIndexes.Any(i => string.Equals(i, "IX_NumberSeriesConfigurations_SeriesCode", StringComparison.OrdinalIgnoreCase)))
         {
             await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` DROP INDEX `IX_NumberSeriesConfigurations_SeriesCode`;");
         }
-        catch { }
-        try
+        if (existingIndexes.Any(i => string.Equals(i, "IX_NumberSeriesConfigurations_SeriesCode_CampusId", StringComparison.OrdinalIgnoreCase)))
         {
             await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` DROP INDEX `IX_NumberSeriesConfigurations_SeriesCode_CampusId`;");
         }
-        catch { }
-        try
+        if (!existingIndexes.Any(i => string.Equals(i, "IX_NumberSeries_College_Series_Campus", StringComparison.OrdinalIgnoreCase)))
         {
             await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` ADD KEY `IX_NumberSeries_College_Series_Campus` (`CollegeId`, `SeriesCode`, `CampusId`);");
         }
-        catch { }
 
-        // Upgrade legacy hardcoded format patterns to use {PREFIX} placeholder
-        await dbContext.Database.ExecuteSqlRawAsync(@"
-            UPDATE `NumberSeriesConfigurations` 
-            SET `FormatPattern` = '{CAMPUS}-{PREFIX}-{YY}-{SEQ}' 
-            WHERE `SeriesCode` = 'ADMISSION_NO' AND `FormatPattern` LIKE '%-ADM-%';");
+        // Upgrade legacy hardcoded format patterns to use {PREFIX} placeholder via parameterized ExecuteSqlRawAsync
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE `NumberSeriesConfigurations` SET `FormatPattern` = {0} WHERE `SeriesCode` = 'ADMISSION_NO' AND `FormatPattern` LIKE '%-ADM-%';",
+            "{CAMPUS}-{PREFIX}-{YY}-{SEQ}");
 
-        await dbContext.Database.ExecuteSqlRawAsync(@"
-            UPDATE `NumberSeriesConfigurations` 
-            SET `FormatPattern` = '{CAMPUS}-{PREFIX}-{YYYYMMDD}-{SEQ}' 
-            WHERE `SeriesCode` = 'RECEIPT_NO' AND `FormatPattern` LIKE '%-FEE-%';");
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE `NumberSeriesConfigurations` SET `FormatPattern` = {0} WHERE `SeriesCode` = 'RECEIPT_NO' AND `FormatPattern` LIKE '%-FEE-%';",
+            "{CAMPUS}-{PREFIX}-{YYYYMMDD}-{SEQ}");
 
-        await dbContext.Database.ExecuteSqlRawAsync(@"
-            UPDATE `NumberSeriesConfigurations` 
-            SET `FormatPattern` = '{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}' 
-            WHERE `SeriesCode` = 'OFFER_LETTER_NO' AND `FormatPattern` LIKE '%-OL/%';");
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE `NumberSeriesConfigurations` SET `FormatPattern` = {0} WHERE `SeriesCode` = 'OFFER_LETTER_NO' AND `FormatPattern` LIKE '%-OL/%';",
+            "{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}");
 
-        await dbContext.Database.ExecuteSqlRawAsync(@"
-            UPDATE `NumberSeriesConfigurations` 
-            SET `FormatPattern` = '{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}' 
-            WHERE `SeriesCode` = 'TRANSFER_ORDER_NO' AND `FormatPattern` LIKE '%-TRF/%';");
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE `NumberSeriesConfigurations` SET `FormatPattern` = {0} WHERE `SeriesCode` = 'TRANSFER_ORDER_NO' AND `FormatPattern` LIKE '%-TRF/%';",
+            "{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}");
 
-        await dbContext.Database.ExecuteSqlRawAsync(@"
-            UPDATE `NumberSeriesConfigurations` 
-            SET `FormatPattern` = '{PREFIX}{SEQ}' 
-            WHERE `SeriesCode` IN ('TEACHING_STAFF_ID', 'NON_TEACHING_STAFF_ID') AND `FormatPattern` NOT LIKE '%{PREFIX}%';");
+        await dbContext.Database.ExecuteSqlRawAsync(
+            "UPDATE `NumberSeriesConfigurations` SET `FormatPattern` = {0} WHERE `SeriesCode` IN ('TEACHING_STAFF_ID', 'NON_TEACHING_STAFF_ID') AND `FormatPattern` NOT LIKE {1};",
+            "{PREFIX}{SEQ}", "%{PREFIX}%");
     }
     catch (Exception ex)
     {
