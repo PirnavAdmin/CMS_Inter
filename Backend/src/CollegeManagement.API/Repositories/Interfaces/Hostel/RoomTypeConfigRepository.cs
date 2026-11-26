@@ -6,12 +6,14 @@ namespace CollegeManagement.API.Repositories.Interfaces.Hostel
     {
         Task<IEnumerable<RoomTypeConfig>> GetAllAsync(
             string? search = null,
-            string? status = null);
+            string? status = null,
+            int? campusId = null);
 
         Task<RoomTypeConfig?> GetByIdAsync(int roomTypeId);
 
         Task<RoomTypeConfig?> GetBySpecificationAsync(
-            string roomTypeSpecification);
+            string roomTypeSpecification,
+            int? campusId = null);
 
         Task<int> CreateAsync(RoomTypeConfig roomTypeConfig);
 

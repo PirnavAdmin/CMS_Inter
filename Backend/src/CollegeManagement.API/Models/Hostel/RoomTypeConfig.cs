@@ -6,6 +6,10 @@ namespace CollegeManagement.API.Models.Hostel
     {
         public int RoomTypeId { get; set; }
 
+        public int CollegeId { get; set; } = 1;
+
+        public int? CampusId { get; set; }
+
         public string RoomTypeSpecification { get; set; } = string.Empty;
 
         public int BedCapacity { get; set; }

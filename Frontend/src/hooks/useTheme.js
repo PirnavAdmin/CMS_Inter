@@ -68,7 +68,7 @@ export function isUserAdmin() {
     const pathname = window.location?.pathname || "";
     if (
       pathname.startsWith("/super-admin") || pathname.startsWith("/dashboard/settings") ||
-      pathname === "/dashboard" ||
+      pathname === "/admin-dashboard" || pathname === "/dashboard" ||
       (pathname.startsWith("/dashboard/") && !pathname.startsWith("/dashboard/student"))
     ) {
       return true;

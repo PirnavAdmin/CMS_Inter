@@ -692,7 +692,7 @@ const StaffList = () => {
 
       {/* Breadcrumb */}
       <div className="staff-breadcrumb">
-        <Link to="/dashboard">Home</Link>
+        <Link to="/admin-dashboard">Home</Link>
         <span className="sep">&gt;</span>
         <span>People</span>
         <span className="sep">&gt;</span>

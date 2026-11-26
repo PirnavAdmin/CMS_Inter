@@ -419,7 +419,7 @@ export default function CampusConfigurationPage() {
       subtitle="Manage multi-campus branches, branch codes, address, affiliated boards and active header branch selector."
       breadcrumb={["Home", "Settings", "Campus Configuration"]}
       backLink={
-        <Link to="/dashboard/settings" className="campus-back-btn">
+        <Link to="/admin-dashboard/settings" className="campus-back-btn">
           <ArrowLeft size={16} /> Back to Settings
         </Link>
       }

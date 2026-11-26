@@ -36,7 +36,7 @@ export const SCREEN_PREVIEWS = {
   // 1. Dashboard
   "dashboard:overview": {
     title: "Overview & Metrics",
-    route: "/dashboard",
+    route: "/admin-dashboard",
     section: "Overview",
     description: "Executive summary with live enrollment, fee collection, and attendance metrics.",
     layoutType: "analytics",
@@ -46,7 +46,7 @@ export const SCREEN_PREVIEWS = {
   },
   "dashboard:analytics": {
     title: "Analytics & BI",
-    route: "/dashboard/analytics",
+    route: "/admin-dashboard/analytics",
     section: "Overview",
     description: "Statistical analytics, grade distributions, and department comparisons.",
     layoutType: "analytics",
@@ -58,7 +58,7 @@ export const SCREEN_PREVIEWS = {
   // 2. Board & Academic Year
   "board-academic-year:boards-master": {
     title: "Boards & Universities",
-    route: "/dashboard/board-academic-year",
+    route: "/admin-dashboard/board-academic-year",
     section: "Academic",
     description: "Education boards, affiliation codes, and recognized authority credentials.",
     layoutType: "table",
@@ -68,7 +68,7 @@ export const SCREEN_PREVIEWS = {
   },
   "board-academic-year:academic-years": {
     title: "Academic Years & Sessions",
-    route: "/dashboard/board-academic-year?tab=years",
+    route: "/admin-dashboard/board-academic-year?tab=years",
     section: "Academic",
     description: "Define annual academic calendars, semesters, terms, and set the active session.",
     layoutType: "table",
@@ -80,7 +80,7 @@ export const SCREEN_PREVIEWS = {
   // 3. Group Management
   "group-management:courses": {
     title: "Courses & Groups",
-    route: "/dashboard/courses",
+    route: "/admin-dashboard/courses",
     section: "Academic",
     description: "Manage degree courses, diploma programs, academic branches, and group intake.",
     layoutType: "cards",
@@ -90,7 +90,7 @@ export const SCREEN_PREVIEWS = {
   },
   "group-management:batches": {
     title: "Batches & Streams",
-    route: "/dashboard/courses?tab=batches",
+    route: "/admin-dashboard/courses?tab=batches",
     section: "Academic",
     description: "Manage year batches, specialized streams, and assign curriculum paths.",
     layoutType: "table",
@@ -102,7 +102,7 @@ export const SCREEN_PREVIEWS = {
   // 4. Subject Management
   "subject-management:subjects": {
     title: "Subjects Directory",
-    route: "/dashboard/subjects",
+    route: "/admin-dashboard/subjects",
     section: "Academic",
     description: "Course subjects, unique course codes, theory/lab credits, and syllabus links.",
     layoutType: "table",
@@ -112,7 +112,7 @@ export const SCREEN_PREVIEWS = {
   },
   "subject-management:subject-assignment": {
     title: "Faculty Subject Allocation",
-    route: "/dashboard/subjects?tab=assignment",
+    route: "/admin-dashboard/subjects?tab=assignment",
     section: "Academic",
     description: "Allocate subject workloads, lecture hours, and lab in-charges to teaching faculty.",
     layoutType: "split-pane",
@@ -124,7 +124,7 @@ export const SCREEN_PREVIEWS = {
   // 5. Section & Room
   "section-room:sections": {
     title: "Sections Directory",
-    route: "/dashboard/sections",
+    route: "/admin-dashboard/sections",
     section: "Academic",
     description: "Class sections, divisions, room assignments, and student capacity limits.",
     layoutType: "cards",
@@ -134,7 +134,7 @@ export const SCREEN_PREVIEWS = {
   },
   "section-room:rooms": {
     title: "Classrooms & Labs",
-    route: "/dashboard/sections?tab=rooms",
+    route: "/admin-dashboard/sections?tab=rooms",
     section: "Academic",
     description: "Campus buildings, classrooms, science/computer labs, and seating capacities.",
     layoutType: "table",
@@ -146,7 +146,7 @@ export const SCREEN_PREVIEWS = {
   // 6. Timetable
   "timetable:view-timetable": {
     title: "Weekly Timetable View",
-    route: "/dashboard/timetable",
+    route: "/admin-dashboard/timetable",
     section: "Academic",
     description: "Interactive master weekly timetable view by section, classroom, or faculty.",
     layoutType: "calendar",
@@ -156,7 +156,7 @@ export const SCREEN_PREVIEWS = {
   },
   "timetable:setup-timetable": {
     title: "Period Slots & Timetable Setup",
-    route: "/dashboard/timetable/setup",
+    route: "/admin-dashboard/timetable/setup",
     section: "Academic",
     description: "Configure daily bell schedule, period durations, lunch breaks, and shift slots.",
     layoutType: "form",
@@ -166,7 +166,7 @@ export const SCREEN_PREVIEWS = {
   },
   "timetable:draft-timetable": {
     title: "Draft Schedules & Revisions",
-    route: "/dashboard/timetable/drafts",
+    route: "/admin-dashboard/timetable/drafts",
     section: "Academic",
     description: "Review, compare, and modify pending timetable schedules prior to publishing.",
     layoutType: "split-pane",
@@ -176,7 +176,7 @@ export const SCREEN_PREVIEWS = {
   },
   "timetable:generate-timetable": {
     title: "Auto Schedule Generator",
-    route: "/dashboard/timetable/generator",
+    route: "/admin-dashboard/timetable/generator",
     section: "Academic",
     description: "AI-assisted automated timetable generator with room and faculty conflict solver.",
     layoutType: "analytics",
@@ -186,7 +186,7 @@ export const SCREEN_PREVIEWS = {
   },
   "timetable:faculty-timetable": {
     title: "Faculty Timetable & Substitutions",
-    route: "/dashboard/timetable/faculty",
+    route: "/admin-dashboard/timetable/faculty",
     section: "Academic",
     description: "Personalized faculty schedules and substitute teacher allocation for absent staff.",
     layoutType: "calendar",
@@ -198,7 +198,7 @@ export const SCREEN_PREVIEWS = {
   // 7. Holiday Management
   "holiday-management:academic-holidays": {
     title: "Holidays Calendar",
-    route: "/dashboard/holidays",
+    route: "/admin-dashboard/holidays",
     section: "Academic",
     description: "Official institutional holidays, festival vacations, and declared semester breaks.",
     layoutType: "calendar",
@@ -210,7 +210,7 @@ export const SCREEN_PREVIEWS = {
   // 8. Inventory Management
   "inventory-management:inventory-items": {
     title: "Items Catalog & Stocks",
-    route: "/dashboard/inventory-management",
+    route: "/admin-dashboard/inventory-management",
     section: "Academic",
     description: "Campus lab consumables, sports items, stationery stocks, and asset depreciation.",
     layoutType: "table",
@@ -220,7 +220,7 @@ export const SCREEN_PREVIEWS = {
   },
   "inventory-management:stock-movements": {
     title: "Stock Movements & Issues",
-    route: "/dashboard/inventory-management?tab=movements",
+    route: "/admin-dashboard/inventory-management?tab=movements",
     section: "Academic",
     description: "Department stock requests, item issues, return inspections, and write-offs.",
     layoutType: "table",
@@ -230,7 +230,7 @@ export const SCREEN_PREVIEWS = {
   },
   "inventory-management:purchase-orders": {
     title: "Vendors & Purchase Orders",
-    route: "/dashboard/inventory-management?tab=po",
+    route: "/admin-dashboard/inventory-management?tab=po",
     section: "Academic",
     description: "Vendor quotations, purchase approvals, invoice attachments, and deliveries.",
     layoutType: "form",
@@ -242,7 +242,7 @@ export const SCREEN_PREVIEWS = {
   // 9. Student Admission
   "student-admission:admission-pipeline": {
     title: "Admission Inquiries & Forms",
-    route: "/dashboard/admission",
+    route: "/admin-dashboard/admission",
     section: "Student",
     description: "Online and counter admission inquiries, lead statuses, and application form tracker.",
     layoutType: "cards",
@@ -252,7 +252,7 @@ export const SCREEN_PREVIEWS = {
   },
   "student-admission:admission-approval": {
     title: "Verification & Approval",
-    route: "/dashboard/admission?tab=approval",
+    route: "/admin-dashboard/admission?tab=approval",
     section: "Student",
     description: "Principal / Admissions desk verification of certificates and final enrollment sign-off.",
     layoutType: "split-pane",
@@ -264,7 +264,7 @@ export const SCREEN_PREVIEWS = {
   // 10. Student Management
   "student-management:student-directory": {
     title: "Student Directory",
-    route: "/dashboard/students",
+    route: "/admin-dashboard/students",
     section: "Student",
     description: "Complete searchable roster of all enrolled students with campus and course filters.",
     layoutType: "table",
@@ -274,7 +274,7 @@ export const SCREEN_PREVIEWS = {
   },
   "student-management:student-profile": {
     title: "Student Profile & Bio",
-    route: "/dashboard/students/profile",
+    route: "/admin-dashboard/students/profile",
     section: "Student",
     description: "Comprehensive 360-degree student record: academic history, guardian details, and fees.",
     layoutType: "split-pane",
@@ -284,7 +284,7 @@ export const SCREEN_PREVIEWS = {
   },
   "student-management:student-enrollment": {
     title: "Enrollment & Documents",
-    route: "/dashboard/students/enrollment",
+    route: "/admin-dashboard/students/enrollment",
     section: "Student",
     description: "Manage original certificates, transfer certificates, caste papers, and photo uploads.",
     layoutType: "form",
@@ -296,7 +296,7 @@ export const SCREEN_PREVIEWS = {
   // 11. Section Allocation
   "section-allocation:student-allocation": {
     title: "Allocate Sections",
-    route: "/dashboard/section-allocation",
+    route: "/admin-dashboard/section-allocation",
     section: "Student",
     description: "Batch allocate newly admitted or unassigned students into designated sections.",
     layoutType: "split-pane",
@@ -306,7 +306,7 @@ export const SCREEN_PREVIEWS = {
   },
   "section-allocation:allocated-list": {
     title: "Allocated Students Register",
-    route: "/dashboard/section-allocation?tab=allocated",
+    route: "/admin-dashboard/section-allocation?tab=allocated",
     section: "Student",
     description: "Section-wise student roll rosters, group distributions, and transfer requests.",
     layoutType: "table",
@@ -316,7 +316,7 @@ export const SCREEN_PREVIEWS = {
   },
   "section-allocation:roll-numbers": {
     title: "Roll Numbers",
-    route: "/dashboard/section-allocation?tab=roll-numbers",
+    route: "/admin-dashboard/section-allocation?tab=roll-numbers",
     section: "Student",
     description: "Automated sequential roll number generator sorted alphabetically or by merit.",
     layoutType: "table",
@@ -328,7 +328,7 @@ export const SCREEN_PREVIEWS = {
   // 12. Attendance
   "attendance:student-attendance": {
     title: "Daily Attendance Entry",
-    route: "/dashboard/attendance/student",
+    route: "/admin-dashboard/attendance/student",
     section: "Student",
     description: "Period-wise and day-wise attendance recording with quick mark-all shortcuts.",
     layoutType: "table",
@@ -338,7 +338,7 @@ export const SCREEN_PREVIEWS = {
   },
   "attendance:attendance-overview": {
     title: "Student Attendance Overview",
-    route: "/dashboard/attendance/student?tab=overview",
+    route: "/admin-dashboard/attendance/student?tab=overview",
     section: "Student",
     description: "Student-wise percentage statistics, monthly heatmaps, and medical leave allowances.",
     layoutType: "analytics",
@@ -348,7 +348,7 @@ export const SCREEN_PREVIEWS = {
   },
   "attendance:attendance-reports": {
     title: "Attendance Reports & Defaulters",
-    route: "/dashboard/attendance/student?tab=reports",
+    route: "/admin-dashboard/attendance/student?tab=reports",
     section: "Student",
     description: "Identify students below mandatory attendance threshold (<75%) and export notices.",
     layoutType: "table",
@@ -360,7 +360,7 @@ export const SCREEN_PREVIEWS = {
   // 13. Promotion
   "promotion:eligible": {
     title: "Promotion Eligibility",
-    route: "/dashboard/promotion",
+    route: "/admin-dashboard/promotion",
     section: "Student",
     description: "Evaluate students eligible for next year promotion based on GPA and attendance.",
     layoutType: "table",
@@ -370,7 +370,7 @@ export const SCREEN_PREVIEWS = {
   },
   "promotion:single": {
     title: "Single Student Promotion",
-    route: "/dashboard/promotion?tab=single",
+    route: "/admin-dashboard/promotion?tab=single",
     section: "Student",
     description: "Individual student promotion override with special academic committee approval.",
     layoutType: "form",
@@ -380,7 +380,7 @@ export const SCREEN_PREVIEWS = {
   },
   "promotion:allocation": {
     title: "Section Allocation on Promotion",
-    route: "/dashboard/promotion?tab=allocation",
+    route: "/admin-dashboard/promotion?tab=allocation",
     section: "Student",
     description: "Directly assign promoted students into their new higher-year class sections.",
     layoutType: "split-pane",
@@ -390,7 +390,7 @@ export const SCREEN_PREVIEWS = {
   },
   "promotion:history": {
     title: "Promotion History & Audits",
-    route: "/dashboard/promotion?tab=history",
+    route: "/admin-dashboard/promotion?tab=history",
     section: "Student",
     description: "Archival record of promotions, detentions, and academic year rollover audits.",
     layoutType: "table",
@@ -400,7 +400,7 @@ export const SCREEN_PREVIEWS = {
   },
   "promotion:report": {
     title: "Promotion Analytics Report",
-    route: "/dashboard/promotion?tab=report",
+    route: "/admin-dashboard/promotion?tab=report",
     section: "Student",
     description: "Macro-level statistical reports on promotion ratios, dropouts, and stream shifts.",
     layoutType: "analytics",
@@ -412,7 +412,7 @@ export const SCREEN_PREVIEWS = {
   // 14. Transport
   "transport:routes": {
     title: "Bus Routes & Stops",
-    route: "/dashboard/transport",
+    route: "/admin-dashboard/transport",
     section: "Operations",
     description: "Manage transit routes, designated stops, pickup times, and distance fares.",
     layoutType: "table",
@@ -422,7 +422,7 @@ export const SCREEN_PREVIEWS = {
   },
   "transport:pickup-points": {
     title: "Pickup Points Master",
-    route: "/dashboard/transport?tab=pickupPoints",
+    route: "/admin-dashboard/transport?tab=pickupPoints",
     section: "Operations",
     description: "Manage bus stop landmarks, GPS coordinates, morning pickup and evening drop timings.",
     layoutType: "table",
@@ -432,7 +432,7 @@ export const SCREEN_PREVIEWS = {
   },
   "transport:vehicles": {
     title: "Fleet & Vehicles",
-    route: "/dashboard/transport?tab=vehicles",
+    route: "/admin-dashboard/transport?tab=vehicles",
     section: "Operations",
     description: "College bus fleet inventory, RC documents, fitness certificates, and insurance.",
     layoutType: "cards",
@@ -442,7 +442,7 @@ export const SCREEN_PREVIEWS = {
   },
   "transport:driver-assignment": {
     title: "Driver & Bus Allocations",
-    route: "/dashboard/transport?tab=drivers",
+    route: "/admin-dashboard/transport?tab=drivers",
     section: "Operations",
     description: "Assign licensed drivers and conductors to specific buses and morning/evening routes.",
     layoutType: "split-pane",
@@ -452,7 +452,7 @@ export const SCREEN_PREVIEWS = {
   },
   "transport:student-transport": {
     title: "Student Transport Passes",
-    route: "/dashboard/transport?tab=passes",
+    route: "/admin-dashboard/transport?tab=passes",
     section: "Operations",
     description: "Issue bus passes, allocate student pickup stops, and calculate annual transport fees.",
     layoutType: "table",
@@ -462,7 +462,7 @@ export const SCREEN_PREVIEWS = {
   },
   "transport:live-tracking": {
     title: "Live GPS Tracking",
-    route: "/dashboard/transport/tracking",
+    route: "/admin-dashboard/transport/tracking",
     section: "Operations",
     description: "Real-time telemetry map showing bus speeds, active route checkpoints, and delays.",
     layoutType: "analytics",
@@ -472,7 +472,7 @@ export const SCREEN_PREVIEWS = {
   },
   "transport:maintenance": {
     title: "Fleet Maintenance & Service",
-    route: "/dashboard/transport?tab=maintenance",
+    route: "/admin-dashboard/transport?tab=maintenance",
     section: "Operations",
     description: "Log vehicle servicing, spare parts replacement, fuel tracking, and fitness certificates.",
     layoutType: "table",
@@ -484,7 +484,7 @@ export const SCREEN_PREVIEWS = {
   // 15. Staff Management
   "staff-management:teaching-staff": {
     title: "Teaching Faculty Directory",
-    route: "/dashboard/staff",
+    route: "/admin-dashboard/staff",
     section: "Staff",
     description: "Faculty directory with departments, designations, qualifications, and contacts.",
     layoutType: "table",
@@ -494,7 +494,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-management:non-teaching-staff": {
     title: "Non-Teaching Staff Directory",
-    route: "/dashboard/staff?tab=non-teaching",
+    route: "/admin-dashboard/staff?tab=non-teaching",
     section: "Staff",
     description: "Roster of administrative, finance, library, transport, and maintenance personnel.",
     layoutType: "table",
@@ -504,7 +504,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-management:staff-onboarding": {
     title: "Staff Onboarding & Review",
-    route: "/dashboard/staff/onboarding",
+    route: "/admin-dashboard/staff/onboarding",
     section: "Staff",
     description: "Onboarding form processing, identity verification, resume checks, and contract sign.",
     layoutType: "split-pane",
@@ -514,7 +514,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-management:staff-profile": {
     title: "Staff Profile & KYC Details",
-    route: "/dashboard/staff/profile",
+    route: "/admin-dashboard/staff/profile",
     section: "Staff",
     description: "Full employee personnel dossier: bank info, PF number, experience, and certificates.",
     layoutType: "form",
@@ -526,7 +526,7 @@ export const SCREEN_PREVIEWS = {
   // 16. Department & Designation
   "department-designation:departments": {
     title: "Departments Directory",
-    route: "/dashboard/departments",
+    route: "/admin-dashboard/departments",
     section: "Staff",
     description: "Manage academic departments (Science, Arts, Commerce) and administrative divisions.",
     layoutType: "cards",
@@ -536,7 +536,7 @@ export const SCREEN_PREVIEWS = {
   },
   "department-designation:designations": {
     title: "Designations Directory",
-    route: "/dashboard/departments?tab=designations",
+    route: "/admin-dashboard/departments?tab=designations",
     section: "Staff",
     description: "Organizational hierarchy, pay-bands, and job titles (Professor, Assistant Prof, Clerk).",
     layoutType: "table",
@@ -548,7 +548,7 @@ export const SCREEN_PREVIEWS = {
   // 17. Staff Attendance
   "staff-attendance:mark-staff-attendance": {
     title: "Mark Staff Attendance",
-    route: "/dashboard/attendance/staff",
+    route: "/admin-dashboard/attendance/staff",
     section: "Staff",
     description: "Daily staff attendance register with biometric device sync and manual corrections.",
     layoutType: "table",
@@ -558,7 +558,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-attendance:staff-attendance-overview": {
     title: "Staff Attendance Overview",
-    route: "/dashboard/attendance/staff?tab=overview",
+    route: "/admin-dashboard/attendance/staff?tab=overview",
     section: "Staff",
     description: "Monthly staff muster roll showing present, absent, on-duty, and leave totals.",
     layoutType: "analytics",
@@ -568,7 +568,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-attendance:staff-attendance-logs": {
     title: "Biometric Logs & Reports",
-    route: "/dashboard/attendance/staff?tab=logs",
+    route: "/admin-dashboard/attendance/staff?tab=logs",
     section: "Staff",
     description: "Raw punch machine logs with device IP, reader timestamp, and failed sync alerts.",
     layoutType: "table",
@@ -580,7 +580,7 @@ export const SCREEN_PREVIEWS = {
   // 18. Staff Leave Management
   "staff-leave-management:leave-applications": {
     title: "Leave Applications",
-    route: "/dashboard/leave-management?tab=staff",
+    route: "/admin-dashboard/leave-management?tab=staff",
     section: "Staff",
     description: "Personal staff portal to apply for casual, sick, or maternity leave with attachments.",
     layoutType: "form",
@@ -590,7 +590,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-leave-management:leave-approvals": {
     title: "Leave Approvals",
-    route: "/dashboard/leave-management?tab=approvals",
+    route: "/admin-dashboard/leave-management?tab=approvals",
     section: "Staff",
     description: "HOD and Principal desk to review pending leave requests, balances, and substitute plans.",
     layoutType: "split-pane",
@@ -600,7 +600,7 @@ export const SCREEN_PREVIEWS = {
   },
   "staff-leave-management:leave-balances": {
     title: "Leave Balance & History",
-    route: "/dashboard/leave-management?tab=balances",
+    route: "/admin-dashboard/leave-management?tab=balances",
     section: "Staff",
     description: "Staff annual leave ledger showing opening balance, used leaves, and remaining quota.",
     layoutType: "table",
@@ -612,7 +612,7 @@ export const SCREEN_PREVIEWS = {
   // 19. Staff Reimbursements
   "reimbursement:submit-claim": {
     title: "Submit Reimbursement Claim",
-    route: "/dashboard/reimbursements",
+    route: "/admin-dashboard/reimbursements",
     section: "Staff",
     description: "Staff expense claims for travel, academic paper publications, stationery, and seminars.",
     layoutType: "form",
@@ -622,7 +622,7 @@ export const SCREEN_PREVIEWS = {
   },
   "reimbursement:claim-approvals": {
     title: "Claim Approvals Desk",
-    route: "/dashboard/reimbursements?tab=approvals",
+    route: "/admin-dashboard/reimbursements?tab=approvals",
     section: "Staff",
     description: "Accounts manager review of expense receipts, budget verification, and sanction.",
     layoutType: "split-pane",
@@ -632,7 +632,7 @@ export const SCREEN_PREVIEWS = {
   },
   "reimbursement:disbursement-history": {
     title: "Disbursement History",
-    route: "/dashboard/reimbursements?tab=history",
+    route: "/admin-dashboard/reimbursements?tab=history",
     section: "Staff",
     description: "Paid claims audit ledger with bank transaction reference numbers and payment vouchers.",
     layoutType: "table",
@@ -644,7 +644,7 @@ export const SCREEN_PREVIEWS = {
   // 20. Examination
   "examination:exam-schedules": {
     title: "Exam Schedules & Datesheets",
-    route: "/dashboard/examinations",
+    route: "/admin-dashboard/examinations",
     section: "Examinations",
     description: "Configure mid-term, quarterly, and annual exam datesheets, slots, and paper timings.",
     layoutType: "table",
@@ -654,7 +654,7 @@ export const SCREEN_PREVIEWS = {
   },
   "examination:hall-allocation": {
     title: "Exam Hall Allocation",
-    route: "/dashboard/examinations?tab=hall-allocation",
+    route: "/admin-dashboard/examinations?tab=hall-allocation",
     section: "Examinations",
     description: "Auto-assign exam halls, classrooms, invigilators, and sequential desk seating.",
     layoutType: "split-pane",
@@ -664,7 +664,7 @@ export const SCREEN_PREVIEWS = {
   },
   "examination:hall-tickets": {
     title: "Hall Tickets",
-    route: "/dashboard/examinations?tab=hall-tickets",
+    route: "/admin-dashboard/examinations?tab=hall-tickets",
     section: "Examinations",
     description: "Generate and download student examination admit cards with barcodes and fee checks.",
     layoutType: "cards",
@@ -674,7 +674,7 @@ export const SCREEN_PREVIEWS = {
   },
   "examination:exam-reports": {
     title: "Exam Cell Reports",
-    route: "/dashboard/examinations?tab=reports",
+    route: "/admin-dashboard/examinations?tab=reports",
     section: "Examinations",
     description: "Exam room attendance slips, malpractice incident reports, and invigilator sheets.",
     layoutType: "table",
@@ -686,7 +686,7 @@ export const SCREEN_PREVIEWS = {
   // 21. Marks Evaluation
   "marks-evaluation:marks-entry": {
     title: "Enter Subject Marks",
-    route: "/dashboard/marks-entry",
+    route: "/admin-dashboard/marks-entry",
     section: "Examinations",
     description: "Teacher portal to enter theory, practical, internal assessment, and viva marks.",
     layoutType: "table",
@@ -696,7 +696,7 @@ export const SCREEN_PREVIEWS = {
   },
   "marks-evaluation:marks-verification": {
     title: "Marks Verification & Lock",
-    route: "/dashboard/marks-entry?tab=verify",
+    route: "/admin-dashboard/marks-entry?tab=verify",
     section: "Examinations",
     description: "HOD and Exam Controller moderation, score normalization, and final ledger freeze.",
     layoutType: "split-pane",
@@ -708,7 +708,7 @@ export const SCREEN_PREVIEWS = {
   // 22. Results
   "results:process-results": {
     title: "Process & Calculate GPA",
-    route: "/dashboard/results",
+    route: "/admin-dashboard/results",
     section: "Examinations",
     description: "Automated GPA/CGPA calculation engine with grade boundary configurations and ranking.",
     layoutType: "analytics",
@@ -718,7 +718,7 @@ export const SCREEN_PREVIEWS = {
   },
   "results:publish-results": {
     title: "Publish Results & Memos",
-    route: "/dashboard/results?tab=publish",
+    route: "/admin-dashboard/results?tab=publish",
     section: "Examinations",
     description: "Publish semester result cards, send parent SMS blasts, and generate marks memos.",
     layoutType: "cards",
@@ -730,7 +730,7 @@ export const SCREEN_PREVIEWS = {
   // 23. Fee Management
   "fee-management:fee-structure": {
     title: "Fee Structure",
-    route: "/dashboard/fee-structure",
+    route: "/admin-dashboard/fee-structure",
     section: "Finance",
     description: "Tuition, lab, library, hostel, and examination fee templates by batch and course.",
     layoutType: "table",
@@ -740,7 +740,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:student-fees": {
     title: "Student Fee Ledger",
-    route: "/dashboard/fee-structure?tab=ledger",
+    route: "/admin-dashboard/fee-structure?tab=ledger",
     section: "Finance",
     description: "Individual student ledger showing paid installments, pending balance, and concessions.",
     layoutType: "split-pane",
@@ -750,7 +750,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:hostel-fees": {
     title: "Hostel Fees",
-    route: "/dashboard/fee-structure?tab=hostel",
+    route: "/admin-dashboard/fee-structure?tab=hostel",
     section: "Finance",
     description: "Hostel room rent, mess charges, caution deposits, and resident payment ledgers.",
     layoutType: "table",
@@ -760,7 +760,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:transport-fees": {
     title: "Transport Fees",
-    route: "/dashboard/fee-structure?tab=transport",
+    route: "/admin-dashboard/fee-structure?tab=transport",
     section: "Finance",
     description: "Route and pickup-point based transport fare configuration with monthly and annual slabs.",
     layoutType: "table",
@@ -770,7 +770,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:fee-types": {
     title: "Fee Types & Categories",
-    route: "/dashboard/fee-structure?tab=types",
+    route: "/admin-dashboard/fee-structure?tab=types",
     section: "Finance",
     description: "Master fee categories for Admission, Tuition, Examination, Transport, and Activities.",
     layoutType: "table",
@@ -780,7 +780,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:scholarships": {
     title: "Scholarships & Concessions",
-    route: "/dashboard/fee-structure?tab=scholarships",
+    route: "/admin-dashboard/fee-structure?tab=scholarships",
     section: "Finance",
     description: "Merit scholarships, sports quota, staff concessions, and government welfare schemes.",
     layoutType: "split-pane",
@@ -790,7 +790,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:fine-rules": {
     title: "Fine & Late Fee Rules",
-    route: "/dashboard/fee-structure?tab=fines",
+    route: "/admin-dashboard/fee-structure?tab=fines",
     section: "Finance",
     description: "Automated penalty rules, grace period configurations, and overdue defaulter surcharges.",
     layoutType: "form",
@@ -800,7 +800,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:payment-history": {
     title: "Payment History & Receipts",
-    route: "/dashboard/fee-structure?tab=history",
+    route: "/admin-dashboard/fee-structure?tab=history",
     section: "Finance",
     description: "Historical transaction audit logs, payment mode reconciliation, and instant reprint desk.",
     layoutType: "table",
@@ -810,7 +810,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:fee-collection": {
     title: "Fee Collection & Receipts",
-    route: "/dashboard/fee-structure?tab=collection",
+    route: "/admin-dashboard/fee-structure?tab=collection",
     section: "Finance",
     description: "Cash/Card counter collection desk with thermal receipt print and online gateway sync.",
     layoutType: "form",
@@ -820,7 +820,7 @@ export const SCREEN_PREVIEWS = {
   },
   "fee-management:fee-reports": {
     title: "Fee Defaulters & Reports",
-    route: "/dashboard/fee-structure?tab=reports",
+    route: "/admin-dashboard/fee-structure?tab=reports",
     section: "Finance",
     description: "Daily cashier collection reports, aging defaulter lists, and fee head summaries.",
     layoutType: "analytics",
@@ -832,7 +832,7 @@ export const SCREEN_PREVIEWS = {
   // 24. Payroll
   "payroll:salary-structures": {
     title: "Salary Structures",
-    route: "/dashboard/payroll",
+    route: "/admin-dashboard/payroll",
     section: "Finance",
     description: "Define base pay, HRA, DA, travel allowance, EPF, and tax deduction formulas.",
     layoutType: "table",
@@ -842,7 +842,7 @@ export const SCREEN_PREVIEWS = {
   },
   "payroll:payroll-assignments": {
     title: "Staff Salary Mapping",
-    route: "/dashboard/payroll?tab=assignments",
+    route: "/admin-dashboard/payroll?tab=assignments",
     section: "Finance",
     description: "Map designated salary structures and bank account details to teaching and non-teaching staff.",
     layoutType: "split-pane",
@@ -852,7 +852,7 @@ export const SCREEN_PREVIEWS = {
   },
   "payroll:payroll-generation": {
     title: "Monthly Payroll Processing",
-    route: "/dashboard/payroll?tab=processing",
+    route: "/admin-dashboard/payroll?tab=processing",
     section: "Finance",
     description: "Monthly salary calculator incorporating staff attendance, unpaid leaves, and loans.",
     layoutType: "analytics",
@@ -862,7 +862,7 @@ export const SCREEN_PREVIEWS = {
   },
   "payroll:payslips": {
     title: "Staff Payslips",
-    route: "/dashboard/payroll?tab=payslips",
+    route: "/admin-dashboard/payroll?tab=payslips",
     section: "Finance",
     description: "Generate, review, and email digital monthly salary slips with college seal and signature.",
     layoutType: "cards",
@@ -872,7 +872,7 @@ export const SCREEN_PREVIEWS = {
   },
   "payroll:salary-revisions": {
     title: "Revisions, Bonuses & Overtime",
-    route: "/dashboard/payroll?tab=revisions",
+    route: "/admin-dashboard/payroll?tab=revisions",
     section: "Finance",
     description: "Annual increments, festival bonuses, incentive approvals, and salary advances.",
     layoutType: "table",
@@ -882,7 +882,7 @@ export const SCREEN_PREVIEWS = {
   },
   "payroll:payroll-approvals": {
     title: "Payroll Approvals & Bank Files",
-    route: "/dashboard/payroll?tab=approvals",
+    route: "/admin-dashboard/payroll?tab=approvals",
     section: "Finance",
     description: "Management sign-off and generate standard NEFT/RTGS bank disbursement text files.",
     layoutType: "split-pane",
@@ -894,7 +894,7 @@ export const SCREEN_PREVIEWS = {
   // 25. Certificates
   "certificates:issue-certificates": {
     title: "Generate & Issue Certificates",
-    route: "/dashboard/certificates",
+    route: "/admin-dashboard/certificates",
     section: "Documents & Reports",
     description: "Issue Bonafide, Study, Conduct, Fee Paid, and Transfer Certificates with QR stamps.",
     layoutType: "form",
@@ -904,7 +904,7 @@ export const SCREEN_PREVIEWS = {
   },
   "certificates:certificate-history": {
     title: "Issued Certificates Register",
-    route: "/dashboard/certificates?tab=history",
+    route: "/admin-dashboard/certificates?tab=history",
     section: "Documents & Reports",
     description: "Audit register of every certificate generated, issuance dates, and verify authenticity.",
     layoutType: "table",
@@ -916,7 +916,7 @@ export const SCREEN_PREVIEWS = {
   // 26. Reports & Analytics
   "reports-analytics:academic-reports": {
     title: "Academic & Performance Reports",
-    route: "/dashboard/reports",
+    route: "/admin-dashboard/reports",
     section: "Documents & Reports",
     description: "Department pass statistics, top rankers, subject failure audits, and NAAC summaries.",
     layoutType: "analytics",
@@ -926,7 +926,7 @@ export const SCREEN_PREVIEWS = {
   },
   "reports-analytics:administrative-reports": {
     title: "Enrollment & Administrative",
-    route: "/dashboard/reports?tab=admin",
+    route: "/admin-dashboard/reports?tab=admin",
     section: "Documents & Reports",
     description: "Admissions census, student caste/category ratios, gender diversity, and dropout logs.",
     layoutType: "analytics",
@@ -936,7 +936,7 @@ export const SCREEN_PREVIEWS = {
   },
   "reports-analytics:custom-reports": {
     title: "Custom Exports & Data Dumps",
-    route: "/dashboard/reports?tab=custom",
+    route: "/admin-dashboard/reports?tab=custom",
     section: "Documents & Reports",
     description: "Configurable dynamic query builder to extract custom spreadsheets with selective columns.",
     layoutType: "table",
@@ -948,7 +948,7 @@ export const SCREEN_PREVIEWS = {
   // 27. Hostel Management
   "hostel-management:hostel-rooms": {
     title: "Hostel Blocks, Rooms & Beds",
-    route: "/dashboard/hostel",
+    route: "/admin-dashboard/hostel",
     section: "Hostel Management",
     description: "Manage hostel buildings, floor rooms, AC/Non-AC types, and individual bed numbers.",
     layoutType: "cards",
@@ -958,7 +958,7 @@ export const SCREEN_PREVIEWS = {
   },
   "hostel-management:bed-allocation": {
     title: "Resident Student Allocation",
-    route: "/dashboard/hostel?tab=allocation",
+    route: "/admin-dashboard/hostel?tab=allocation",
     section: "Hostel Management",
     description: "Allocate vacant beds to admitted students, manage room transfers, and checkouts.",
     layoutType: "split-pane",
@@ -968,7 +968,7 @@ export const SCREEN_PREVIEWS = {
   },
   "hostel-management:hostel-attendance": {
     title: "Hostel Night Attendance",
-    route: "/dashboard/hostel?tab=attendance",
+    route: "/admin-dashboard/hostel?tab=attendance",
     section: "Hostel Management",
     description: "Nightly roll-call check, biometric gate logs, and absent boarder notifications.",
     layoutType: "table",
@@ -978,7 +978,7 @@ export const SCREEN_PREVIEWS = {
   },
   "hostel-management:hostel-complaints": {
     title: "Outpass, Leaves & Complaints",
-    route: "/dashboard/hostel?tab=complaints",
+    route: "/admin-dashboard/hostel?tab=complaints",
     section: "Hostel Management",
     description: "Digital gate outpasses, weekend leave approvals, and student maintenance tickets.",
     layoutType: "table",
@@ -988,7 +988,7 @@ export const SCREEN_PREVIEWS = {
   },
   "hostel-management:hostel-reports": {
     title: "Hostel Occupancy & Mess Dues",
-    route: "/dashboard/hostel?tab=reports",
+    route: "/admin-dashboard/hostel?tab=reports",
     section: "Hostel Management",
     description: "Hostel room occupancy charts, mess bill balances, and resident register exports.",
     layoutType: "analytics",
@@ -1000,7 +1000,7 @@ export const SCREEN_PREVIEWS = {
   // 28. Settings
   "settings:landing-configuration": {
     title: "Landing Page Configuration",
-    route: "/dashboard/settings/landing",
+    route: "/admin-dashboard/settings/landing",
     section: "Administration",
     description: "Customize public website banner, hero headline, campus photos, and announcements.",
     layoutType: "form",
@@ -1010,7 +1010,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:login-configuration": {
     title: "Login Page Configuration",
-    route: "/dashboard/settings/login",
+    route: "/admin-dashboard/settings/login",
     section: "Administration",
     description: "Configure portal login screen branding, background imagery, and security advisories.",
     layoutType: "form",
@@ -1020,7 +1020,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:campus-configuration": {
     title: "Campus Configuration & Branches",
-    route: "/dashboard/settings/campus",
+    route: "/admin-dashboard/settings/campus",
     section: "Administration",
     description: "Manage multiple college campus branches, addresses, board affiliations, and contact info.",
     layoutType: "cards",
@@ -1030,7 +1030,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:number-series": {
     title: "Auto Number Series",
-    route: "/dashboard/settings/number-series",
+    route: "/admin-dashboard/settings/number-series",
     section: "Administration",
     description: "Sequential numbering prefix and sequence counters for admissions, invoices, and slips.",
     layoutType: "table",
@@ -1040,7 +1040,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:templates": {
     title: "Templates & Bulk Uploaders",
-    route: "/dashboard/settings/templates",
+    route: "/admin-dashboard/settings/templates",
     section: "Administration",
     description: "Official college letterhead templates, certificate designs, and Excel upload templates.",
     layoutType: "cards",
@@ -1050,7 +1050,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:leave-types": {
     title: "Leave Types & Quotas",
-    route: "/dashboard/settings/leave-types",
+    route: "/admin-dashboard/settings/leave-types",
     section: "Administration",
     description: "Configure annual leave categories, quotas, carryover rules, and encashment terms.",
     layoutType: "table",
@@ -1060,7 +1060,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:attendance-timing": {
     title: "Attendance Timings & Shifts",
-    route: "/dashboard/settings/attendance-timing",
+    route: "/admin-dashboard/settings/attendance-timing",
     section: "Administration",
     description: "Set campus shift hours, grace period minutes, half-day cutoffs, and biometric sync rules.",
     layoutType: "form",
@@ -1070,7 +1070,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:credentials": {
     title: "Credentials Generator",
-    route: "/dashboard/settings/credentials",
+    route: "/admin-dashboard/settings/credentials",
     section: "Administration",
     description: "Bulk generate student and faculty portal login usernames and temporary passwords.",
     layoutType: "form",
@@ -1080,7 +1080,7 @@ export const SCREEN_PREVIEWS = {
   },
   "settings:audit-logs": {
     title: "Audit & Security Logs",
-    route: "/dashboard/settings/audit-logs",
+    route: "/admin-dashboard/settings/audit-logs",
     section: "Administration",
     description: "Detailed system audit trail: user logins, role modifications, and critical updates.",
     layoutType: "table",
@@ -1092,7 +1092,7 @@ export const SCREEN_PREVIEWS = {
   // 29. Roles & Permissions
   "roles-permissions:role-management": {
     title: "Role & Permission Matrix",
-    route: "/dashboard/settings/roles-permissions",
+    route: "/admin-dashboard/settings/roles-permissions",
     section: "Administration",
     description: "Enterprise RBAC matrix: configure module and screen permissions across all roles.",
     layoutType: "table",
@@ -1102,7 +1102,7 @@ export const SCREEN_PREVIEWS = {
   },
   "roles-permissions:user-role-assignment": {
     title: "User Role Assignment",
-    route: "/dashboard/settings/roles-permissions?tab=assignments",
+    route: "/admin-dashboard/settings/roles-permissions?tab=assignments",
     section: "Administration",
     description: "Assign roles to faculty and staff with granular user-specific member overrides.",
     layoutType: "split-pane",
@@ -1114,7 +1114,7 @@ export const SCREEN_PREVIEWS = {
   // 30. Library
   "library:book-catalog": {
     title: "Book Catalog & Search",
-    route: "/dashboard/library",
+    route: "/admin-dashboard/library",
     section: "Operations",
     description: "Search books by title, author, ISBN, category, shelf rack, and check available copies.",
     layoutType: "cards",
@@ -1124,7 +1124,7 @@ export const SCREEN_PREVIEWS = {
   },
   "library:circulation": {
     title: "Issue & Return Desk",
-    route: "/dashboard/library?tab=circulation",
+    route: "/admin-dashboard/library?tab=circulation",
     section: "Operations",
     description: "Issue books, process returns, calculate late fines, and scan student library cards.",
     layoutType: "table",
@@ -1134,7 +1134,7 @@ export const SCREEN_PREVIEWS = {
   },
   "library:library-members": {
     title: "Student & Staff Cards",
-    route: "/dashboard/library?tab=members",
+    route: "/admin-dashboard/library?tab=members",
     section: "Operations",
     description: "Manage library membership cards, active book borrow quotas, and clearance certificates.",
     layoutType: "table",
@@ -1146,7 +1146,7 @@ export const SCREEN_PREVIEWS = {
   // 31. Placement
   "placement:placement-drives": {
     title: "Recruitment Drives",
-    route: "/dashboard/placement",
+    route: "/admin-dashboard/placement",
     section: "Operations",
     description: "Manage visiting companies, CTC job offers, recruitment drive dates, and eligibility criteria.",
     layoutType: "cards",
@@ -1156,7 +1156,7 @@ export const SCREEN_PREVIEWS = {
   },
   "placement:student-applications": {
     title: "Applications & Offers",
-    route: "/dashboard/placement?tab=applications",
+    route: "/admin-dashboard/placement?tab=applications",
     section: "Operations",
     description: "Shortlisted candidates, written test scores, interview rounds, and offer letter tracker.",
     layoutType: "table",
@@ -1176,7 +1176,7 @@ export function getScreenPreview(moduleId, screenId) {
       .split("-")
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(" "),
-    route: `/dashboard/${moduleId}`,
+    route: `/admin-dashboard/${moduleId}`,
     section: "System Module",
     description: `Administrative management interface for ${screenId || moduleId}.`,
     layoutType: "table",

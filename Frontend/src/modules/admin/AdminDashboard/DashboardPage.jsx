@@ -81,13 +81,13 @@ const DASHBOARD_API = {
 };
 
 const QUICK_SETUP = [
-  { label: "+ Add Campus", to: "/dashboard/settings/campus-configuration", isPlus: true, tone: "setup-green" },
-  { label: "+ Add Board", to: "/dashboard/board-academic-year?tab=boards", isPlus: true, tone: "setup-green" },
-  { label: "+ Create Academic Year", to: "/dashboard/board-academic-year?tab=academic-years", isPlus: true, tone: "setup-green" },
-  { label: "Add Student", to: "/dashboard/admission?view=new", icon: addStudentIcon, tone: "green" },
-  { label: "Add Staff", to: "/dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
-  { label: "Create Group", to: "/dashboard/courses/add", icon: createGroupIcon, tone: "violet" },
-  { label: "Create Section", to: "/dashboard/sections?tab=sections&view=add", icon: createSectionIcon, tone: "cyan" },
+  { label: "+ Add Campus", to: "/admin-dashboard/settings/campus-configuration", isPlus: true, tone: "setup-green" },
+  { label: "+ Add Board", to: "/admin-dashboard/board-academic-year?tab=boards", isPlus: true, tone: "setup-green" },
+  { label: "+ Create Academic Year", to: "/admin-dashboard/board-academic-year?tab=academic-years", isPlus: true, tone: "setup-green" },
+  { label: "Add Student", to: "/admin-dashboard/admission?view=new", icon: addStudentIcon, tone: "green" },
+  { label: "Add Staff", to: "/admin-dashboard/staff/add", icon: addStaffIcon, tone: "blue" },
+  { label: "Create Group", to: "/admin-dashboard/courses/add", icon: createGroupIcon, tone: "violet" },
+  { label: "Create Section", to: "/admin-dashboard/sections?tab=sections&view=add", icon: createSectionIcon, tone: "cyan" },
 ];
 
 function unwrap(payload) {
@@ -1406,7 +1406,7 @@ export default function DashboardPage() {
       tone: "green",
       changeLabel: studentsKpi.label,
       changePct: studentsKpi.badge,
-      to: "/dashboard/students",
+      to: "/admin-dashboard/students",
     },
     {
       label: "Teaching Staff",
@@ -1416,7 +1416,7 @@ export default function DashboardPage() {
       tone: "blue",
       changeLabel: teachingKpi.label,
       changePct: teachingKpi.badge,
-      to: "/dashboard/staff/teaching",
+      to: "/admin-dashboard/staff/teaching",
     },
     {
       label: "Non-Teaching Staff",
@@ -1426,7 +1426,7 @@ export default function DashboardPage() {
       tone: "orange",
       changeLabel: nonTeachingKpi.label,
       changePct: nonTeachingKpi.badge,
-      to: "/dashboard/staff/non-teaching",
+      to: "/admin-dashboard/staff/non-teaching",
     },
     {
       label: "Total Groups",
@@ -1436,7 +1436,7 @@ export default function DashboardPage() {
       tone: "violet",
       changeLabel: groupsKpi.label,
       changePct: groupsKpi.badge,
-      to: "/dashboard/courses",
+      to: "/admin-dashboard/courses",
     },
     {
       label: "Total Sections",
@@ -1446,15 +1446,41 @@ export default function DashboardPage() {
       tone: "cyan",
       changeLabel: sectionsKpi.label,
       changePct: sectionsKpi.badge,
-      to: "/dashboard/sections",
+      to: "/admin-dashboard/sections",
     },
   ];
 
-  // Students Overview chart scroll ref and drag handlers
-  const chartScrollRef = useRef(null);
-  const isDraggingChartRef = useRef(false);
-  const chartStartXRef = useRef(0);
-  const chartScrollStartRef = useRef(0);
+  // Admission Overview container ref and responsive width tracking
+  const overviewContainerRef = useRef(null);
+  const [overviewWidth, setOverviewWidth] = useState(0);
+
+  useEffect(() => {
+    const el = overviewContainerRef.current;
+    if (!el) return;
+
+    const updateWidth = () => {
+      if (el) {
+        setOverviewWidth(el.clientWidth || el.getBoundingClientRect().width || 0);
+      }
+    };
+
+    updateWidth();
+
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver((entries) => {
+        if (entries && entries[0] && entries[0].contentRect) {
+          setOverviewWidth(entries[0].contentRect.width);
+        } else {
+          updateWidth();
+        }
+      });
+      ro.observe(el);
+      return () => ro.disconnect();
+    } else {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
+  }, []);
 
   // Students Overview Normalized Trend Data (Consecutive months from Academic Year start up to present month)
   const overviewChartData = useMemo(() => {
@@ -1618,61 +1644,23 @@ export default function DashboardPage() {
     return { yMax: ceilMax, yTicks: ticks };
   }, [overviewChartData]);
 
-  // Auto-scroll Students Overview chart to the far right (present month & latest 4 months in view) on data load
-  useEffect(() => {
-    if (overviewChartData.length > 5) {
-      const scrollToEnd = () => {
-        if (chartScrollRef.current) {
-          const maxScroll = chartScrollRef.current.scrollWidth - chartScrollRef.current.clientWidth;
-          if (maxScroll > 0) {
-            chartScrollRef.current.scrollLeft = maxScroll + 1000; // force it all the way
-          }
-        }
-      };
+  // Dynamically calculate visible ticks and interval for Admission Overview X-Axis based on available container width
+  const overviewXAxisInterval = useMemo(() => {
+    const dataLen = overviewChartData?.length || 0;
+    if (dataLen <= 2) return 0;
 
-      // Execute immediately and also re-try a few times to allow Recharts to finish rendering
-      scrollToEnd();
-      
-      let attempts = 0;
-      const interval = setInterval(() => {
-        scrollToEnd();
-        attempts++;
-        if (attempts > 30) clearInterval(interval); // 30 * 100ms = 3.0s
-      }, 100);
+    // Available width for X-axis after accounting for Y-axis (~30px) and margins (~15px)
+    const availableWidth = overviewWidth > 0 ? overviewWidth - 45 : 400;
+    // Each month label (e.g. "Jan 2026") needs ~65px width including comfortable gap to avoid any collision
+    const maxTicks = Math.max(2, Math.floor(availableWidth / 65));
 
-      return () => clearInterval(interval);
+    if (dataLen <= maxTicks) {
+      return 0; // All labels fit comfortably without overlap
     }
-  }, [overviewChartData]);
 
-  const handleChartMouseDown = (e) => {
-    if (!chartScrollRef.current) return;
-    isDraggingChartRef.current = true;
-    chartStartXRef.current = e.pageX - chartScrollRef.current.offsetLeft;
-    chartScrollStartRef.current = chartScrollRef.current.scrollLeft;
-  };
-
-  const handleChartMouseMove = (e) => {
-    if (!isDraggingChartRef.current || !chartScrollRef.current) return;
-    e.preventDefault();
-    const x = e.pageX - chartScrollRef.current.offsetLeft;
-    const walk = (x - chartStartXRef.current) * 1.2;
-    chartScrollRef.current.scrollLeft = chartScrollStartRef.current - walk;
-  };
-
-  const handleChartMouseUp = () => {
-    isDraggingChartRef.current = false;
-  };
-
-  const handleChartMouseLeave = () => {
-    isDraggingChartRef.current = false;
-  };
-
-  const handleChartWheel = (e) => {
-    if (!chartScrollRef.current) return;
-    if (e.deltaY !== 0) {
-      chartScrollRef.current.scrollLeft += e.deltaY;
-    }
-  };
+    // Automatically preserve start and end labels while skipping intermediate overlapping ticks
+    return "preserveStartEnd";
+  }, [overviewChartData?.length, overviewWidth]);
 
   // Explicit custom tick renderer for Area Chart X-Axis so labels are never omitted by Recharts heuristics
   const renderAreaXAxisTick = useCallback(({ x, y, payload }) => {
@@ -1761,19 +1749,12 @@ export default function DashboardPage() {
   // Student Attendance Normalized Values
   const studentAttData = useMemo(() => {
     const data = studentAttState.data || {};
-    let total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
+    const total = Number(metric(data, ["total", "totalStudents", "totalCount"]) ?? 0);
     const marked = Number(metric(data, ["marked", "markedStudents", "markedCount"]) ?? 0);
     const present = Number(metric(data, ["present", "presentCount"]) ?? 0);
     const absent = Number(metric(data, ["absent", "absentCount"]) ?? 0);
     const halfDay = Number(metric(data, ["halfDay", "halfDayCount", "halfDays", "late", "lateCount"]) ?? 0);
     let percentage = metric(data, ["percentage", "attendancePercentage"]);
-
-    // Dynamically calculate and reconcile Total Students with studentManagementCount (Groups / Student Management)
-    if (studentManagementCount > 0) {
-      total = studentManagementCount;
-    } else if (total === 0) {
-      total = Number(summaryState.data?.totalStudents ?? overviewState.data?.totalStudents ?? 0);
-    }
 
     const hasMarkedRecords = Boolean(data.hasMarked) || marked > 0 || (present + absent + halfDay > 0);
 
@@ -1796,7 +1777,7 @@ export default function DashboardPage() {
     const breakdownList = data.breakdownList || data.items || data.list || data.breakdown || (Array.isArray(data) ? data : []);
 
     return { total, marked, present, absent, halfDay, late: halfDay, percentage, hasMarkedRecords, chartData, breakdownList };
-  }, [studentAttState.data, studentManagementCount, summaryState.data?.totalStudents, overviewState.data?.totalStudents]);
+  }, [studentAttState.data]);
 
   // Staff Attendance Normalized Values
   const staffAttData = useMemo(() => {
@@ -2050,80 +2031,57 @@ export default function DashboardPage() {
                 title="No data available"
                 subtitle="Add a campus and academic year to start admissions."
                 actionLabel="+ Add Campus"
-                actionTo="/dashboard/settings/campus-configuration"
+                actionTo="/admin-dashboard/settings/campus-configuration"
               />
             ) : overviewState.error ? (
               <ErrorState message={overviewState.error} onRetry={fetchStudentsOverview} />
             ) : (
               <div className="dashboard-card-body">
-                <div className="dashboard-area-chart-container">
-                  {/* Fixed Y-Axis column (pinned on the left) */}
-                  <div className="dashboard-area-chart-yaxis" style={{ width: yMax >= 1000 ? 40 : yMax >= 100 ? 34 : 28, flexShrink: 0, height: "100%" }}>
+                <div
+                  ref={overviewContainerRef}
+                  className="dashboard-chart dashboard-area-chart-wrap"
+                >
+                  <div style={{ width: "100%", height: "100%", minWidth: 0, position: "relative" }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={overviewChartData} margin={{ top: 6, right: 4, left: 0, bottom: 2 }}>
+                      <AreaChart data={overviewChartData} margin={{ top: 10, right: 10, left: -6, bottom: 2 }}>
+                        <defs>
+                          <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--cms-primary, #22a447)" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="var(--cms-primary, #22a447)" stopOpacity={0.02} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border, #e2e8f0)" />
+                        <XAxis
+                          dataKey="period"
+                          tickLine={false}
+                          axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
+                          height={20}
+                          tick={{ fontSize: 10, fontWeight: 700, fill: "var(--cms-text, #334155)", dy: 2 }}
+                          interval={overviewXAxisInterval}
+                          minTickGap={10}
+                          padding={{ left: 16, right: 16 }}
+                        />
                         <YAxis
-                          width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 24}
                           domain={[0, yMax]}
                           ticks={yTicks}
+                          interval={0}
                           allowDecimals={false}
+                          width={yMax >= 1000 ? 36 : yMax >= 100 ? 30 : 26}
                           tickLine={false}
                           axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
                           tick={{ fontSize: 9.5, fill: "var(--cms-muted, #64748b)" }}
                         />
-                        <XAxis height={20} tick={false} axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }} tickLine={false} />
+                        <Tooltip formatter={(val) => [formatNumber(val), "Students Admitted"]} />
+                        <Area
+                          type="monotone"
+                          dataKey="studentsJoined"
+                          stroke="var(--cms-primary, #22a447)"
+                          strokeWidth={2.5}
+                          fill="url(#admissionGradient)"
+                          dot={{ r: 3, fill: "var(--cms-primary, #22a447)" }}
+                        />
                       </AreaChart>
                     </ResponsiveContainer>
-                  </div>
-
-                  {/* Scrollable Area Chart */}
-                  <div
-                    ref={chartScrollRef}
-                    className="dashboard-chart dashboard-area-chart-wrap"
-                    onMouseDown={handleChartMouseDown}
-                    onMouseMove={handleChartMouseMove}
-                    onMouseUp={handleChartMouseUp}
-                    onMouseLeave={handleChartMouseLeave}
-                    onWheel={handleChartWheel}
-                  >
-                    <div
-                      style={{
-                        width: overviewChartData.length > 5 ? `${Math.round((overviewChartData.length / 5) * 100)}%` : "100%",
-                        minWidth: "100%",
-                        height: 118,
-                        position: "relative"
-                      }}
-                    >
-                      <ResponsiveContainer width="100%" height={118}>
-                        <AreaChart data={overviewChartData} margin={{ top: 6, right: 10, left: 15, bottom: 2 }}>
-                          <defs>
-                            <linearGradient id="admissionGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="var(--cms-primary, #22a447)" stopOpacity={0.35} />
-                              <stop offset="100%" stopColor="var(--cms-primary, #22a447)" stopOpacity={0.02} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--cms-border)" />
-                          <XAxis
-                            dataKey="period"
-                            tickLine={false}
-                            axisLine={{ stroke: "var(--cms-border, #cbd5e1)", strokeWidth: 1 }}
-                            height={20}
-                            tick={renderAreaXAxisTick}
-                            interval={0}
-                            padding={{ left: 16, right: 16 }}
-                          />
-                          <YAxis hide domain={[0, yMax]} ticks={yTicks} />
-                          <Tooltip formatter={(val) => [formatNumber(val), "Students Admitted"]} />
-                          <Area
-                            type="monotone"
-                            dataKey="studentsJoined"
-                            stroke="var(--cms-primary, #22a447)"
-                            strokeWidth={2.5}
-                            fill="url(#admissionGradient)"
-                            dot={{ r: 3, fill: "var(--cms-primary, #22a447)" }}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
                   </div>
                 </div>
                 <div className="dashboard-students-chips">
@@ -2150,7 +2108,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="dashboard-card-footer">
-                  <Link to="/dashboard/admission" className="dashboard-footer-btn">
+                  <Link to="/admin-dashboard/admission" className="dashboard-footer-btn">
                     View Student Admissions <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -2169,7 +2127,7 @@ export default function DashboardPage() {
                 title="No data available"
                 subtitle="Create a group to view student distribution."
                 actionLabel="+ Create Group"
-                actionTo="/dashboard/courses/add"
+                actionTo="/admin-dashboard/courses/add"
               />
             ) : groupState.error ? (
               <ErrorState message={groupState.error} onRetry={fetchGroupDistribution} />
@@ -2239,7 +2197,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="dashboard-card-footer">
-                  <Link to="/dashboard/courses" className="dashboard-footer-btn">
+                  <Link to="/admin-dashboard/courses" className="dashboard-footer-btn">
                     View All Groups <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -2259,7 +2217,7 @@ export default function DashboardPage() {
                 title="No data available"
                 subtitle="Add students and mark attendance to see today's overview."
                 actionLabel="+ Add Student"
-                actionTo="/dashboard/admission?view=new"
+                actionTo="/admin-dashboard/admission?view=new"
               />
             ) : studentAttState.error ? (
               <ErrorState message={studentAttState.error} onRetry={fetchStudentAttendance} />
@@ -2331,23 +2289,23 @@ export default function DashboardPage() {
 
                       {/* 5 Summary KPI Chips */}
                       <div className="dashboard-attendance-kpi-row">
-                        <Link to="/dashboard/attendance/student" className="att-kpi-chip">
+                        <Link to="/admin-dashboard/attendance/student" className="att-kpi-chip">
                           <small>Total Students</small>
                           <strong>{formatNumber(studentAttData.total)}</strong>
                         </Link>
-                        <Link to="/dashboard/attendance/student" className="att-kpi-chip text-present">
+                        <Link to="/admin-dashboard/attendance/student" className="att-kpi-chip text-present">
                           <small>Present</small>
                           <strong>{formatNumber(studentAttData.present)}</strong>
                         </Link>
-                        <Link to="/dashboard/attendance/student" className="att-kpi-chip text-absent">
+                        <Link to="/admin-dashboard/attendance/student" className="att-kpi-chip text-absent">
                           <small>Absent</small>
                           <strong>{formatNumber(studentAttData.absent)}</strong>
                         </Link>
-                        <Link to="/dashboard/attendance/student" className="att-kpi-chip text-halfday text-late">
+                        <Link to="/admin-dashboard/attendance/student" className="att-kpi-chip text-halfday text-late">
                           <small>Half-day</small>
                           <strong>{formatNumber(studentAttData.halfDay)}</strong>
                         </Link>
-                        <Link to="/dashboard/attendance/student" className="att-kpi-chip">
+                        <Link to="/admin-dashboard/attendance/student" className="att-kpi-chip">
                           <small>Attendance</small>
                           <strong>{formatNumber(studentAttData.percentage)}%</strong>
                         </Link>
@@ -2357,7 +2315,7 @@ export default function DashboardPage() {
 
                 {/* Footer */}
                 <div className="dashboard-card-footer">
-                  <Link to="/dashboard/attendance/student" className="dashboard-footer-btn">
+                  <Link to="/admin-dashboard/attendance/student" className="dashboard-footer-btn">
                     View Attendance Details <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -2377,7 +2335,7 @@ export default function DashboardPage() {
                 title="No data available"
                 subtitle="Add staff and mark attendance to see today's overview."
                 actionLabel="+ Add Staff"
-                actionTo="/dashboard/staff/add"
+                actionTo="/admin-dashboard/staff/add"
               />
             ) : staffAttState.error ? (
               <ErrorState message={staffAttState.error} onRetry={fetchStaffAttendance} />
@@ -2450,23 +2408,23 @@ export default function DashboardPage() {
 
                 {/* Staff Summary Metrics */}
                 <div className="dashboard-attendance-kpi-row dashboard-staff-kpis">
-                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip">
+                  <Link to="/admin-dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip">
                     <small>Total Staff</small>
                     <strong>{formatNumber(staffAttData.total)}</strong>
                   </Link>
-                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-present">
+                  <Link to="/admin-dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-present">
                     <small>Present</small>
                     <strong>{formatNumber(staffAttData.present)}</strong>
                   </Link>
-                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-absent">
+                  <Link to="/admin-dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-absent">
                     <small>Absent</small>
                     <strong>{formatNumber(staffAttData.absent)}</strong>
                   </Link>
-                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-late">
+                  <Link to="/admin-dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-late">
                     <small>Late</small>
                     <strong>{formatNumber(staffAttData.late)}</strong>
                   </Link>
-                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-leave">
+                  <Link to="/admin-dashboard/attendance/staff?tab=staff-attendance" className="att-kpi-chip staff-chip text-leave">
                     <small>On Leave</small>
                     <strong>{formatNumber(staffAttData.onLeave)}</strong>
                   </Link>
@@ -2479,7 +2437,7 @@ export default function DashboardPage() {
                       Teaching: <strong>{formatNumber(staffAttData.teachingCount)}</strong> &bull; Non-Teaching: <strong>{formatNumber(staffAttData.nonTeachingCount)}</strong>
                     </span>
                   ) : null}
-                  <Link to="/dashboard/attendance/staff?tab=staff-attendance" className="dashboard-footer-btn">
+                  <Link to="/admin-dashboard/attendance/staff?tab=staff-attendance" className="dashboard-footer-btn">
                     View Staff Attendance <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -2500,7 +2458,7 @@ export default function DashboardPage() {
                 title="No holidays added"
                 subtitle="Add holidays to manage academic breaks."
                 actionLabel="+ Add Holiday"
-                actionTo="/dashboard/holidays"
+                actionTo="/admin-dashboard/holidays"
               />
             ) : holidayState.error ? (
               <ErrorState message={holidayState.error} onRetry={fetchUpcomingHolidays} />
@@ -2528,7 +2486,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
                 <div className="dashboard-card-footer">
-                  <Link to="/dashboard/holidays" className="dashboard-footer-btn">
+                  <Link to="/admin-dashboard/holidays" className="dashboard-footer-btn">
                     View Holiday Calendar <ChevronRight size={14} />
                   </Link>
                 </div>
@@ -2549,7 +2507,7 @@ export default function DashboardPage() {
                 title="No examinations scheduled"
                 subtitle="Create an examination to see the upcoming list."
                 actionLabel="+ Create Exam"
-                actionTo="/dashboard/examinations/add"
+                actionTo="/admin-dashboard/examinations/add"
               />
             ) : examState.error ? (
               <ErrorState message={examState.error} onRetry={fetchUpcomingExaminations} />
@@ -2575,7 +2533,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
                 <div className="dashboard-card-footer">
-                  <Link to="/dashboard/examinations" className="dashboard-footer-btn">
+                  <Link to="/admin-dashboard/examinations" className="dashboard-footer-btn">
                     View Exam Schedule <ChevronRight size={14} />
                   </Link>
                 </div>

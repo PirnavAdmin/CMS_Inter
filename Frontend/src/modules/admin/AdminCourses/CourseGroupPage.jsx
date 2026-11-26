@@ -373,7 +373,7 @@ function CourseGroupFormPage() {
     status: "Active",
   });
   const mode = id ? "Edit" : "Add";
-  const listPath = "/dashboard/courses";
+  const listPath = "/admin-dashboard/courses";
   const showProgramError = useCallback((message) => {
     setToastType("error");
     setToast(message);
@@ -703,7 +703,7 @@ function CourseGroupListPage() {
   };
 
   const addGroup = () => {
-    navigate("/dashboard/courses/add");
+    navigate("/admin-dashboard/courses/add");
   };
 
   const columns = useMemo(
@@ -752,7 +752,7 @@ function CourseGroupListPage() {
           onSearchChange={handleSearch}
           onAdd={addGroup}
           enableExport={false}
-          onEdit={(row) => navigate(`/dashboard/courses/${row.id}/edit`)}
+          onEdit={(row) => navigate(`/admin-dashboard/courses/${row.id}/edit`)}
           onDelete={requestDeleteGroup}
         />
       </div>

@@ -41,7 +41,7 @@ import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.js
 import Search3DIcon from "@/shared/components/Search3DIcon.jsx";
 import { ConfirmDialog, Modal, SkeletonRow, StatusBadge, Toast } from "@/shared/components/Ui.jsx";
 import "@/modules/admin/AdminExaminations/ExaminationPage.css";
-import { enrichExaminations } from "../services/examCellMasterData.js";
+import { enrichExaminations, CANONICAL_GROUPS, CANONICAL_SUBJECTS } from "../services/examCellMasterData.js";
 
 const PAGE_SIZE = 5;
 
@@ -4199,6 +4199,11 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
           }
         }
 
+        if (!rows.length) {
+          const matched = CANONICAL_GROUPS.filter((g) => !selectedBoardId || !g.boardId || String(g.boardId) === String(selectedBoardId));
+          rows = matched.length > 0 ? matched : CANONICAL_GROUPS;
+        }
+
         if (!active) return;
 
         const loadedGroups = rows.map((group) => {
@@ -4447,21 +4452,20 @@ export default function ExaminationPage({ initialTab = "exams", initialExamId = 
             }
           } catch (error) { if (isMounted) showToast(getApiErrorMessage(error) || "Failed to load programs.", "error"); }
 
-        if (subjectsRes?.status === "fulfilled" && subjectsRes.value) {
-          const rawSubjects = unwrap(subjectsRes.value);
-          setEligibleSubjects(
-            ensureArray(rawSubjects).map((s) => ({
-              id: normalizeId(s.subjectId ?? s.id),
-              name: s.subjectName ?? s.name,
-              code: s.subjectCode ?? s.code ?? "",
-              academicLevelIds: ensureArray(s.academicLevelIds || (s.academicLevelId ? [s.academicLevelId] : [])).map(normalizeId),
-              groupIds: ensureArray(s.groupIds || (s.groupId ? [s.groupId] : [])).map(normalizeId),
-              programIds: ensureArray(s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId),
-              facultyIds: ensureArray(s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId),
-              isActive: s.isActive !== false,
-            })),
-          );
-        }
+        const rawSubjectsData = (subjectsRes?.status === "fulfilled" && subjectsRes.value) ? unwrap(subjectsRes.value) : [];
+        const rawSubjects = Array.isArray(rawSubjectsData) && rawSubjectsData.length > 0 ? rawSubjectsData : CANONICAL_SUBJECTS;
+        setEligibleSubjects(
+          ensureArray(rawSubjects).map((s) => ({
+            id: normalizeId(s.subjectId ?? s.id),
+            name: s.subjectName ?? s.name,
+            code: s.subjectCode ?? s.code ?? "",
+            academicLevelIds: ensureArray(s.academicLevelIds || (s.academicLevelId ? [s.academicLevelId] : [])).map(normalizeId),
+            groupIds: ensureArray(s.groupIds || (s.groupId ? [s.groupId] : [])).map(normalizeId),
+            programIds: ensureArray(s.programIds || (s.programId ? [s.programId] : [])).map(normalizeId),
+            facultyIds: ensureArray(s.facultyIds || (s.facultyId ? [s.facultyId] : [])).map(normalizeId),
+            isActive: s.isActive !== false,
+          })),
+        );
       } catch (err) {
         if (isMounted) showToast("Failed to load initial master data.", "error");
       }
@@ -7645,6 +7649,10 @@ function ExamForm({
         // 3. Fallback to groups prop passed from parent
         if (!rows.length && Array.isArray(groups) && groups.length > 0) {
           rows = groups;
+        }
+
+        if (!rows.length) {
+          rows = CANONICAL_GROUPS.filter((g) => !form.boardId || !g.boardId || String(g.boardId) === String(form.boardId));
         }
 
         if (!active) return;

@@ -1116,7 +1116,7 @@ export default function TemplatesPage() {
       <AddTemplateWizardScreen
         onAdd={async (newTemp) => {
           await handleSaveTemplate(newTemp);
-          navigate("/dashboard/settings/templates");
+          navigate("/admin-dashboard/settings/templates");
         }}
       />
     );
@@ -1132,7 +1132,7 @@ export default function TemplatesPage() {
         {/* Back Navigation */}
         <div className="cms-back-nav-bar" style={{ marginBottom: "14px" }}>
           <Link
-            to="/dashboard/settings"
+            to="/admin-dashboard/settings"
             className="cms-back-link"
             style={{
               display: "inline-flex",
@@ -1254,8 +1254,8 @@ export default function TemplatesPage() {
             {activeTab === "reports" ? (
               <ReportsTableView
                 templates={filteredTemplates}
-                onEdit={(item) => navigate(`/dashboard/settings/templates/reports/${item.id}/edit`)}
-                onPreview={(item) => navigate(`/dashboard/settings/templates/${item.id}/preview`)}
+                onEdit={(item) => navigate(`/admin-dashboard/settings/templates/reports/${item.id}/edit`)}
+                onPreview={(item) => navigate(`/admin-dashboard/settings/templates/${item.id}/preview`)}
                 onDownload={handleDownloadTemplate}
                 onDuplicate={handleDuplicateTemplate}
                 onDelete={(item) => setDeleteConfirmId(item.id)}
@@ -1266,7 +1266,7 @@ export default function TemplatesPage() {
                 {/* Always include "+ Add New Template" dashed card */}
                 <article
                   className="templates-card add-new-dashed-card"
-                  onClick={() => navigate("/dashboard/settings/templates/add")}
+                  onClick={() => navigate("/admin-dashboard/settings/templates/add")}
                 >
                   <div className="add-dashed-content">
                     <span className="add-dashed-icon"><Plus size={24} /></span>
@@ -1287,11 +1287,11 @@ export default function TemplatesPage() {
                       key={item.id}
                       template={item}
                       onEdit={() => {
-                        if (item.type === "Certificate") navigate(`/dashboard/settings/templates/certificates/${item.id}/edit`);
-                        else if (item.type === "Report") navigate(`/dashboard/settings/templates/reports/${item.id}/edit`);
-                        else navigate(`/dashboard/settings/templates/letters/${item.id}/edit`);
+                        if (item.type === "Certificate") navigate(`/admin-dashboard/settings/templates/certificates/${item.id}/edit`);
+                        else if (item.type === "Report") navigate(`/admin-dashboard/settings/templates/reports/${item.id}/edit`);
+                        else navigate(`/admin-dashboard/settings/templates/letters/${item.id}/edit`);
                       }}
-                      onPreview={() => navigate(`/dashboard/settings/templates/${item.id}/preview`)}
+                      onPreview={() => navigate(`/admin-dashboard/settings/templates/${item.id}/preview`)}
                       onDownload={() => handleDownloadTemplate(item)}
                       onDuplicate={() => handleDuplicateTemplate(item)}
                       onResetDefault={() => handleResetToDefault(item.id)}
@@ -1695,7 +1695,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
       <div className="cert-editor-page">
         {/* Top Action Header */}
         <header className="cert-editor-topbar">
-          <button type="button" className="cms-btn cms-btn-ghost back-btn" onClick={() => navigate("/dashboard/settings/templates")}>
+          <button type="button" className="cms-btn cms-btn-ghost back-btn" onClick={() => navigate("/admin-dashboard/settings/templates")}>
             <ChevronLeft size={16} /> Back to Templates
           </button>
           <div className="topbar-title-wrap">
@@ -1704,7 +1704,7 @@ function CertificateEditorScreen({ template, onSave, onResetDefault, onDownload,
             <span className={`templates-status-badge status-${status.toLowerCase()}`}>{status} (v{version})</span>
           </div>
           <div className="topbar-actions">
-            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate(`/dashboard/settings/templates/${template.id}/preview`)}>
+            <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate(`/admin-dashboard/settings/templates/${template.id}/preview`)}>
               <Eye size={14} /> Full Preview
             </button>
             {template.builtIn && (
@@ -2232,11 +2232,11 @@ function ReportEditorScreen({ template, onSave, notify }) {
     <DashboardLayout title="Edit Report Template" subtitle="Configure report columns, format export settings and header parameters." breadcrumb={["Home", "Settings", "Templates", "Report Edit"]}>
       <div className="report-editor-page">
         <div className="report-editor-header">
-          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/settings/templates")}>
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/admin-dashboard/settings/templates")}>
             <ChevronLeft size={16} /> Back to Templates
           </button>
           <h2>Edit Report Template: {name}</h2>
-          <button type="button" className="cms-btn cms-btn-primary" onClick={() => { onSave({ ...template, name, format, columns }); navigate("/dashboard/settings/templates"); }}>
+          <button type="button" className="cms-btn cms-btn-primary" onClick={() => { onSave({ ...template, name, format, columns }); navigate("/admin-dashboard/settings/templates"); }}>
             Save Changes
           </button>
         </div>
@@ -2315,11 +2315,11 @@ function LetterEditorScreen({ template, onSave, notify }) {
     <DashboardLayout title="Edit Letter Template" subtitle="Customize formal letter layouts, dynamic tokens and closing signatures." breadcrumb={["Home", "Settings", "Templates", "Letter Edit"]}>
       <div className="letter-editor-page">
         <div className="letter-editor-header">
-          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/settings/templates")}>
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/admin-dashboard/settings/templates")}>
             <ChevronLeft size={16} /> Back to Templates
           </button>
           <h2>Edit Letter: {name}</h2>
-          <button type="button" className="cms-btn cms-btn-primary" onClick={() => { onSave({ ...template, name, subject, greeting, body }); navigate("/dashboard/settings/templates"); }}>
+          <button type="button" className="cms-btn cms-btn-primary" onClick={() => { onSave({ ...template, name, subject, greeting, body }); navigate("/admin-dashboard/settings/templates"); }}>
             Save Letter Template
           </button>
         </div>
@@ -2608,7 +2608,7 @@ function AddTemplateWizardScreen({ onAdd }) {
                 ))}
               </div>
               <div className="wizard-foot">
-                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/settings/templates")}>Cancel</button>
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/admin-dashboard/settings/templates")}>Cancel</button>
                 <button type="button" className="cms-btn cms-btn-primary" onClick={() => setStep(2)}>Next Step <ChevronRight size={14} /></button>
               </div>
             </div>
@@ -2685,7 +2685,7 @@ function TemplatePreviewScreen({ template, onDownload, notify }) {
     >
       <div className="preview-screen-container">
         <header className="preview-topbar">
-          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/settings/templates")}>
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/admin-dashboard/settings/templates")}>
             <ChevronLeft size={16} /> Back to Templates
           </button>
           <div className="topbar-title-wrap">

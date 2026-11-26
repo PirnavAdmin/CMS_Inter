@@ -3726,7 +3726,7 @@ export default function RolesPermissionsPage() {
       backLink={
         <div className="cms-back-nav-bar">
           <Link
-            to="/dashboard/settings"
+            to="/admin-dashboard/settings"
             className="cms-back-link"
             onClick={(event) => { if (!guardDirty()) event.preventDefault(); }}
             style={{

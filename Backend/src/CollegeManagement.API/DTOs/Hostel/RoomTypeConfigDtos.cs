@@ -21,6 +21,8 @@ namespace CollegeManagement.API.DTOs.Hostel
 
         [StringLength(500)]
         public string? Description { get; set; }
+
+        public int? CampusId { get; set; }
     }
 
     public class UpdateRoomTypeConfigDto
@@ -41,11 +43,15 @@ namespace CollegeManagement.API.DTOs.Hostel
 
         [StringLength(500)]
         public string? Description { get; set; }
+
+        public int? CampusId { get; set; }
     }
 
     public class RoomTypeConfigResponseDto
     {
         public int RoomTypeId { get; set; }
+
+        public int? CampusId { get; set; }
 
         public string RoomTypeSpecification { get; set; } = string.Empty;
 

@@ -320,7 +320,7 @@ await describe("Admin payment gateway", async () => {
   globalThis.window = {
     localStorage: storage,
     sessionStorage: storage,
-    location: { pathname: "/dashboard/fee-structure" },
+    location: { pathname: "/admin-dashboard/fee-structure" },
     setTimeout,
   };
   const adapter = (work) => {
@@ -554,7 +554,7 @@ await describe("Admin payment gateway", async () => {
       getAuthUser: () => ({ role: "Admin" }),
       getAuthItem: () => "Admin",
       ACTIONS: { APPROVE_REJECT: "approve-reject" },
-      useLocation: () => ({ pathname: "/dashboard/fee-structure", search: "?tab=student-ledger&subtab=fee-collection&account=41&source=collection" }),
+      useLocation: () => ({ pathname: "/admin-dashboard/fee-structure", search: "?tab=student-ledger&subtab=fee-collection&account=41&source=collection" }),
       Link: "Link",
       isReversedPayment,
       mobilePaymentLinkFor,
@@ -1797,10 +1797,10 @@ await describe("Admin payment gateway", async () => {
     const admin = await mount(configSource, "PaymentGatewayConfigPage", { ...base, Link: "Link" }, {});
     const layout = admin.render().find((node) => node.type === "DashboardLayout");
     assert.equal(layout.props.actions.type, "Link");
-    assert.equal(layout.props.actions.props.to, "/dashboard/settings");
+    assert.equal(layout.props.actions.props.to, "/admin-dashboard/settings");
     assert.ok(layout.props.actions.props.children.join("").includes("Back to Settings"));
     const routes = await readFile(new URL("../../../../routes/AppRoutes.jsx", import.meta.url), "utf8");
-    assert.ok(routes.includes('path="/dashboard/settings"'));
+    assert.ok(routes.includes('path="/admin-dashboard/settings"'));
     admin.unmount();
   });
   test("only admin editors can author templates; page exit warnings protect all retained campus drafts", async () => {

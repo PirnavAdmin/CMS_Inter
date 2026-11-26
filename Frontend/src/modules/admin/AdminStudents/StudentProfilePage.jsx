@@ -224,7 +224,7 @@ export default function StudentProfilePage({ id }) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [remotePhotoUrl]);
-  const profileBackLink = <Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>;
+  const profileBackLink = <Link className="cms-back-link" to="/admin-dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>;
   const loadingTitle = editMode ? "EDIT STUDENT PROFILE" : "Student Profile";
   if (loading || loadedStudentId !== String(id)) return <DashboardLayout title={loadingTitle} breadcrumb={["People", "Students"]} backLink={profileBackLink}><div className="student-management-profile-page" data-active-section={activeTab}><SkeletonPage /></div></DashboardLayout>;
   if (!student) return <DashboardLayout title={loadingTitle} breadcrumb={["People", "Students"]} backLink={profileBackLink}><div className="cms-card"><div className="cms-empty">{error || "Student record was not found."}</div></div></DashboardLayout>;
@@ -235,7 +235,7 @@ export default function StudentProfilePage({ id }) {
     title={<span className="student-profile-title">{student.name}<StatusBadge value={student.status} /></span>}
     subtitle={<><span className="student-profile-header-admission">Admission No: {student.admissionNo} • Roll No: {student.roll || "Not assigned"}</span><span className="student-profile-header-academic">{[student.academicYear, student.group, student.programme, student.section].filter(Boolean).join(" • ")}</span></>}
     breadcrumb={["People", "Students"]}
-    backLink={<Link className="cms-back-link" to="/dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>}
+    backLink={<Link className="cms-back-link" to="/admin-dashboard/students" state={returnState ? { studentManagement: returnState } : undefined}><ArrowLeft size={14} /> Back to Students</Link>}
     actions={<div className="cms-admission-main-tabs" role="group" aria-label="Student profile mode">
       <button type="button" className={`cms-admission-main-tab ${!editMode ? "is-active" : ""}`} aria-pressed={!editMode} disabled={editorBusy} onClick={() => setEditMode(false)}><Eye size={15} />View</button>
       <button type="button" className={`cms-admission-main-tab ${editMode ? "is-active" : ""}`} aria-pressed={editMode} disabled={editorBusy} onClick={() => setEditMode(true)}><Pencil size={15} />Edit</button>

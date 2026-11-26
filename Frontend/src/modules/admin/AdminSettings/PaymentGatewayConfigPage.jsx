@@ -55,7 +55,7 @@ export function usePaymentSettingsAccess() {
 export function PaymentSettingsLink({ accountant = false, children = "Payment Settings", className = "cms-btn cms-btn-ghost" }) {
   const allowed = usePaymentSettingsAccess();
   if (!allowed) return null;
-  return <Link className={className} to={accountant ? "/accountant-dashboard/settings/payment-gateway" : "/dashboard/settings/payment-gateway"}><CreditCard size={15} /> {children}</Link>;
+  return <Link className={className} to={accountant ? "/accountant-dashboard/settings/payment-gateway" : "/admin-dashboard/settings/payment-gateway"}><CreditCard size={15} /> {children}</Link>;
 }
 
 function configFailure(error) {
@@ -750,5 +750,5 @@ export default function PaymentGatewayConfigPage({ embedded = false }) {
       : !inScope ? <p role="alert">Select a permitted campus in the header. No default receiving account will be loaded. Assigned campus access must be present in your account.</p>
         : <CampusPaymentConfig key={`${campusId}:${canEdit}:${templatesEditable}`} campusId={campusId} campusName={selectedCampus.name || selectedCampus.campusName || `Campus ${campusId}`} editable={canEdit} drafts={drafts.current} templateDrafts={templateDrafts.current} templatesEditable={templatesEditable} />;
   return embedded ? <><h1>Payment Gateway & Bank Accounts</h1>{content}</>
-    : <DashboardLayout actions={<Link className="cms-btn cms-btn-ghost" to="/dashboard/settings">&larr; Back to Settings</Link>} title="Payment Gateway & Bank Accounts" subtitle="Configure campus receiving bank accounts and payment processing." breadcrumb={["Settings", "Payment Gateway"]}>{content}</DashboardLayout>;
+    : <DashboardLayout actions={<Link className="cms-btn cms-btn-ghost" to="/admin-dashboard/settings">&larr; Back to Settings</Link>} title="Payment Gateway & Bank Accounts" subtitle="Configure campus receiving bank accounts and payment processing." breadcrumb={["Settings", "Payment Gateway"]}>{content}</DashboardLayout>;
 }

@@ -7,11 +7,11 @@ const ROLE_ATTENDANCE_PATHS = [
   { match: (r) => r.includes("driver") || r.includes("attendant"), path: "/driver/attendance" },
   { match: (r) => r.includes("non-teaching") || r.includes("nonteaching"), path: "/non-teaching-dashboard/attendance" },
   { match: (r) => r.includes("warden"), path: "/warden-dashboard" },
-  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/dashboard/attendance/staff?tab=my-attendance" },
+  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/admin-dashboard/attendance/staff?tab=my-attendance" },
 ];
 
 const ROLE_LEAVE_PATHS = [
-  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/dashboard/leave-management?tab=all" },
+  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/admin-dashboard/leave-management?tab=all" },
   { match: (r) => r.includes("accountant") || r.includes("finance") || r.includes("cashier"), path: "/accountant-dashboard/leave" },
   { match: (r) => r.includes("non-teaching") || r.includes("nonteaching"), path: "/non-teaching-dashboard/staff-leave" },
   { match: (r) => r.includes("inventory"), path: "/inventory-dashboard/leave" },
@@ -20,7 +20,7 @@ const ROLE_LEAVE_PATHS = [
 ];
 
 const ROLE_PAYSLIP_PATHS = [
-  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/dashboard/payroll/payslips" },
+  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/admin-dashboard/payroll/payslips" },
   { match: (r) => r.includes("non-teaching") || r.includes("nonteaching"), path: "/non-teaching-dashboard/payslips" },
   { match: (r) => r.includes("inventory"), path: "/inventory-dashboard/payslips" },
   { match: (r) => r.includes("driver") || r.includes("attendant"), path: "/driver/payslips" },
@@ -28,7 +28,7 @@ const ROLE_PAYSLIP_PATHS = [
 ];
 
 const ROLE_REIMBURSEMENT_PATHS = [
-  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/dashboard/reimbursement" },
+  { match: (r) => r.includes("admin") || r.includes("principal"), path: "/admin-dashboard/reimbursement" },
   { match: (r) => r.includes("accountant") || r.includes("finance") || r.includes("cashier"), path: "/accountant-dashboard/reimbursements" },
 ];
 
@@ -110,7 +110,7 @@ export function resolveNotificationTarget(notif, authUser = null) {
       });
     }
     // Default for Admin, SuperAdmin, CollegeAdmin, Staff
-    return appendQueryParams("/dashboard/enquiry-management", {
+    return appendQueryParams("/admin-dashboard/enquiry-management", {
       ...existingQueryObj,
       ...(refId ? { enquiryId: refId } : {}),
     });
@@ -129,7 +129,7 @@ export function resolveNotificationTarget(notif, authUser = null) {
       isAdminRole(roleLower) &&
       (rawUrl.includes("view=regularize") || titleLower.includes("regularization request"))
     ) {
-      return appendQueryParams("/dashboard/attendance/staff", {
+      return appendQueryParams("/admin-dashboard/attendance/staff", {
         ...existingQueryObj,
         tab: "staff-attendance",
         view: "regularize",
@@ -147,19 +147,19 @@ export function resolveNotificationTarget(notif, authUser = null) {
   }
 
   // 2. Student Admissions
-  if (rawPath === "/dashboard/admissions" || rawPath === "/dashboard/admission" || typeLower === "admission") {
+  if (rawPath === "/admin-dashboard/admissions" || rawPath === "/admin-dashboard/admission" || typeLower === "admission") {
     if (refId) {
-      return appendQueryParams("/dashboard/admission", {
+      return appendQueryParams("/admin-dashboard/admission", {
         ...existingQueryObj,
         view: existingQueryObj.view || "preview",
         admissionId: existingQueryObj.admissionId || refId,
       });
     }
-    return appendQueryParams("/dashboard/admission", { ...existingQueryObj, view: existingQueryObj.view || "requests" });
+    return appendQueryParams("/admin-dashboard/admission", { ...existingQueryObj, view: existingQueryObj.view || "requests" });
   }
 
   // 3. Leave Management
-  if (rawPath === "/dashboard/leave" || rawPath === "/dashboard/leave-management" || rawPath.includes("/leave") || typeLower === "leave") {
+  if (rawPath === "/admin-dashboard/leave" || rawPath === "/admin-dashboard/leave-management" || rawPath.includes("/leave") || typeLower === "leave") {
     const leaveBase = resolveFromList(ROLE_LEAVE_PATHS, roleLower, "/faculty-dashboard/leave");
     return appendQueryParams(leaveBase, {
       ...existingQueryObj,
@@ -168,7 +168,7 @@ export function resolveNotificationTarget(notif, authUser = null) {
   }
 
   // 4. Marks & Results
-  if (rawPath === "/dashboard/faculty/marks" || rawPath.includes("/marks") || typeLower === "marks") {
+  if (rawPath === "/admin-dashboard/faculty/marks" || rawPath.includes("/marks") || typeLower === "marks") {
     if (isStudentRole(roleLower) || rawPath.startsWith("/student")) {
       return appendQueryParams("/student-dashboard/results", { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
     }
@@ -176,14 +176,14 @@ export function resolveNotificationTarget(notif, authUser = null) {
       return appendQueryParams("/parent-dashboard/academics", { tab: "results", ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
     }
     if (isAdminRole(roleLower) || isExamCellRole(roleLower)) {
-      const adminMarksBase = isExamCellRole(roleLower) ? "/exam-cell-dashboard/results" : "/dashboard/results";
+      const adminMarksBase = isExamCellRole(roleLower) ? "/exam-cell-dashboard/results" : "/admin-dashboard/results";
       return appendQueryParams(adminMarksBase, { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
     }
     return appendQueryParams("/faculty-dashboard/marks", { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
   }
 
   // 5. Examinations & Duties
-  if (rawPath === "/dashboard/examinations/duties" || titleLower.includes("duty") || titleLower.includes("invigilation")) {
+  if (rawPath === "/admin-dashboard/examinations/duties" || titleLower.includes("duty") || titleLower.includes("invigilation")) {
     const dutyBase = isExamCellRole(roleLower) ? "/exam-cell-dashboard/duties" : "/faculty-dashboard/exam-duties";
     return appendQueryParams(dutyBase, { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
   }
@@ -192,7 +192,7 @@ export function resolveNotificationTarget(notif, authUser = null) {
       return appendQueryParams("/parent-dashboard/examinations", { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
     }
     if (isAdminRole(roleLower)) {
-      return appendQueryParams("/dashboard/examinations", { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
+      return appendQueryParams("/admin-dashboard/examinations", { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
     }
     return appendQueryParams("/student-dashboard/examinations", { ...existingQueryObj, ...(refId ? { examinationId: refId } : {}) });
   }
@@ -205,18 +205,18 @@ export function resolveNotificationTarget(notif, authUser = null) {
     if (isParentRole(roleLower) || rawPath.startsWith("/parent")) {
       return appendQueryParams("/parent-dashboard/documents", { ...existingQueryObj, ...(refId ? { certificateId: refId } : {}) });
     }
-    const certBase = isExamCellRole(roleLower) ? "/exam-cell-dashboard/certificates" : "/dashboard/certificates";
+    const certBase = isExamCellRole(roleLower) ? "/exam-cell-dashboard/certificates" : "/admin-dashboard/certificates";
     return appendQueryParams(certBase, { ...existingQueryObj, ...(refId ? { certificateId: refId } : {}) });
   }
 
   // 7. Reimbursements
-  if (rawPath === "/dashboard/reimbursements" || rawPath === "/dashboard/reimbursement" || typeLower.includes("reimburse")) {
+  if (rawPath === "/admin-dashboard/reimbursements" || rawPath === "/admin-dashboard/reimbursement" || typeLower.includes("reimburse")) {
     const reimbBase = resolveFromList(ROLE_REIMBURSEMENT_PATHS, roleLower, "/faculty-dashboard/reimbursements");
     return appendQueryParams(reimbBase, { ...existingQueryObj, ...(refId ? { claimId: refId } : {}) });
   }
 
   // 8. Payroll / Payslips
-  if (rawPath.startsWith("/dashboard/payroll/payslips") || typeLower === "payroll") {
+  if (rawPath.startsWith("/admin-dashboard/payroll/payslips") || typeLower === "payroll") {
     const payslipBase = resolveFromList(ROLE_PAYSLIP_PATHS, roleLower, "/faculty-dashboard/payslips");
     return appendQueryParams(payslipBase, { ...existingQueryObj, ...(refId ? { payslipId: refId } : {}) });
   }
@@ -253,6 +253,6 @@ export function resolveNotificationTarget(notif, authUser = null) {
   // Safe portal landing fallback if ActionUrl was null on old/manual test notifications
   if (isStudentRole(roleLower)) return "/student-dashboard";
   if (isParentRole(roleLower)) return "/parent-dashboard";
-  if (isAdminRole(roleLower)) return "/dashboard";
+  if (isAdminRole(roleLower)) return "/admin-dashboard";
   return "/faculty-dashboard";
 }

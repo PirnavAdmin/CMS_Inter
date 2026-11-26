@@ -31,7 +31,7 @@ before(async () => {
     server: { middlewareMode: true, hmr: false, watch: null },
     optimizeDeps: { noDiscovery: true, include: [] },
   });
-  const base = "/src/components/pages/InventoryManagement/components/";
+  const base = "/src/modules/admin/AdminInventory/components/";
   screens = await server.ssrLoadModule(`${base}InventoryScreens.jsx`);
   Form = (await server.ssrLoadModule(`${base}InventoryForm.jsx`)).default;
   Details = (await server.ssrLoadModule(`${base}InventoryDetails.jsx`)).default;

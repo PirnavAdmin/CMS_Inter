@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import React, { useCallback, useLayoutEffect, useEffect, useMemo, useRef, useState, useId } from "react";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import apiClient, { getApiErrorMessage } from "@/api/apiClient.js";
+import { CANONICAL_GROUPS } from "@/modules/exam-cell/services/examCellMasterData.js";
 import { getCatalogGroups } from "@/modules/admin/AdminResults/services/resultsService.js";
 import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
@@ -1124,6 +1125,11 @@ function useAcademicFilterState(allBoards = [], guard = (fn) => fn(), onReset = 
           } catch {
             // fallback
           }
+        }
+
+        if (!rows.length) {
+          const matched = CANONICAL_GROUPS.filter((g) => !targetBoardId || !g.boardId || String(g.boardId) === String(targetBoardId));
+          rows = matched.length > 0 ? matched : CANONICAL_GROUPS;
         }
 
         if (!active) return;

@@ -1409,7 +1409,7 @@ export default function OfferLetterConfigurationPage() {
             <button
               type="button"
               className="cms-btn cms-btn-ghost"
-              onClick={() => navigate("/dashboard/settings")}
+              onClick={() => navigate("/admin-dashboard/settings")}
               style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
             >
               <ArrowLeft size={14} /> Back to Settings

@@ -81,7 +81,12 @@ export async function fetchUserPreferences({ force = false } = {}) {
       const endpoint = apiEndpoints?.userPreferences?.get || "/api/v1/user-preferences";
       const res = await apiClient.get(endpoint, {
         skipGlobalLoader: true,
+        validateStatus: (status) => status < 500,
       });
+
+      if (res?.status === 404) {
+        return cachedPreferences || { ...DEFAULT_PREFERENCES };
+      }
 
       const data = res?.data?.data || res?.data;
       if (data && typeof data === "object") {
@@ -136,7 +141,11 @@ export async function saveUserPreferences({ themeMode, palette, customColor, imm
       const endpoint = apiEndpoints?.userPreferences?.save || "/api/v1/user-preferences";
       const res = await apiClient.put(endpoint, payload, {
         skipGlobalLoader: true,
+        validateStatus: (status) => status < 500,
       });
+      if (res?.status === 404) {
+        return;
+      }
       const data = res?.data?.data || res?.data;
       if (data && typeof data === "object") {
         cachedPreferences = {

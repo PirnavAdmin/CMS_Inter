@@ -174,7 +174,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
             >
               <RefreshCw size={14} className={loading ? "dashboard-spin" : ""} /> Refresh
             </button>
-            <Link to="/dashboard/attendance/student" className="cms-btn cms-btn-primary">
+            <Link to="/admin-dashboard/attendance/student" className="cms-btn cms-btn-primary">
               Mark Attendance
             </Link>
           </div>
@@ -437,7 +437,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                   <Users size={36} className="empty-icon" />
                   <h3>No student records found</h3>
                   <p>Try adjusting your search query or filters above to view student attendance.</p>
-                  <Link to="/dashboard/attendance/student" className="cms-btn cms-btn-primary empty-action-btn">
+                  <Link to="/admin-dashboard/attendance/student" className="cms-btn cms-btn-primary empty-action-btn">
                     Mark Attendance
                   </Link>
                 </div>
@@ -466,7 +466,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                         <td><strong>{st.rollNumber}</strong></td>
                         <td>{st.admissionNumber}</td>
                         <td>
-                          <Link to={`/dashboard/students/${st.id}`} className="student-name-link">
+                          <Link to={`/admin-dashboard/students/${st.id}`} className="student-name-link">
                             {st.name}
                           </Link>
                         </td>
@@ -485,7 +485,7 @@ export default function DetailedStudentAttendance({ initialViewBy = "all" }) {
                         <td>{st.remarks || "—"}</td>
                         <td>
                           <div className="att-table-actions">
-                            <Link to={`/dashboard/students/${st.id}`} className="att-action-icon-btn" title="View Profile">
+                            <Link to={`/admin-dashboard/students/${st.id}`} className="att-action-icon-btn" title="View Profile">
                               <Eye size={14} />
                             </Link>
                             <button

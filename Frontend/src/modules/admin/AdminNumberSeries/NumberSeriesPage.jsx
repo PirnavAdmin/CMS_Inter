@@ -291,7 +291,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           <div className="ns-not-found">
             <h3>Series Not Found</h3>
             <p>The requested number series configuration does not exist.</p>
-            <Link to="/dashboard/settings/number-series" className="cms-btn cms-btn-primary">
+            <Link to="/admin-dashboard/settings/number-series" className="cms-btn cms-btn-primary">
               <ArrowLeft size={16} /> Back to ID & Number Series
             </Link>
           </div>
@@ -306,7 +306,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
         onSave={async (updated) => {
           const ok = await handleSaveConfig(updated);
           if (ok) {
-            setTimeout(() => navigate(`/dashboard/settings/number-series/${updated.id}`), 400);
+            setTimeout(() => navigate(`/admin-dashboard/settings/number-series/${updated.id}`), 400);
           }
         }}
         onPreviewModal={(s) => setPreviewModalSeries(s)}
@@ -326,7 +326,7 @@ export default function NumberSeriesPage({ mode = "dashboard" }) {
           <div className="ns-not-found">
             <h3>Series Not Found</h3>
             <p>The requested number series configuration does not exist.</p>
-            <Link to="/dashboard/settings/number-series" className="cms-btn cms-btn-primary">
+            <Link to="/admin-dashboard/settings/number-series" className="cms-btn cms-btn-primary">
               <ArrowLeft size={16} /> Back to ID & Number Series
             </Link>
           </div>
@@ -520,7 +520,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
         {/* BACK NAVIGATION TO SETTINGS */}
         <div className="cms-back-nav-bar" style={{ marginBottom: "14px" }}>
           <Link
-            to="/dashboard/settings"
+            to="/admin-dashboard/settings"
             className="cms-back-link"
             style={{
               display: "inline-flex",
@@ -642,7 +642,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                   <button
                     type="button"
                     className="ns-card-edit-btn"
-                    onClick={() => navigate(`/dashboard/settings/number-series/${series.id}/edit`)}
+                    onClick={() => navigate(`/admin-dashboard/settings/number-series/${series.id}/edit`)}
                     aria-label={`Edit ${series.name} number series`}
                   >
                     <span>Edit</span>
@@ -652,7 +652,7 @@ function NumberSeriesDashboardView({ seriesList, loading, onRefresh, forceSyncLo
                   <button
                     type="button"
                     className="ns-card-view-btn"
-                    onClick={() => navigate(`/dashboard/settings/number-series/${series.id}`)}
+                    onClick={() => navigate(`/admin-dashboard/settings/number-series/${series.id}`)}
                     title="View details and generated history"
                   >
                     <Eye size={15} />
@@ -745,7 +745,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
           <button
             type="button"
             className="ns-back-btn"
-            onClick={() => navigate("/dashboard/settings/number-series")}
+            onClick={() => navigate("/admin-dashboard/settings/number-series")}
           >
             <ArrowLeft size={16} />
             <span>Back to ID & Number Series</span>
@@ -772,7 +772,7 @@ function NumberSeriesDetailView({ series, onPreviewModal, toast, setToast, avail
             <button
               type="button"
               className="cms-btn cms-btn-primary"
-              onClick={() => navigate(`/dashboard/settings/number-series/${currentSeries.id}/edit`)}
+              onClick={() => navigate(`/admin-dashboard/settings/number-series/${currentSeries.id}/edit`)}
             >
               <Edit3 size={16} />
               <span>Edit Series</span>
@@ -1321,7 +1321,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
           <button
             type="button"
             className="ns-back-btn"
-            onClick={() => navigate(`/dashboard/settings/number-series/${series.id}`)}
+            onClick={() => navigate(`/admin-dashboard/settings/number-series/${series.id}`)}
           >
             <ArrowLeft size={16} />
             <span>Back to {series.name} Details</span>
@@ -1481,7 +1481,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                   <button
                     type="button"
                     className="cms-btn cms-btn-ghost"
-                    onClick={() => navigate(`/dashboard/settings/number-series/${series.id}`)}
+                    onClick={() => navigate(`/admin-dashboard/settings/number-series/${series.id}`)}
                   >
                     Cancel
                   </button>
@@ -1499,7 +1499,7 @@ function NumberSeriesEditView({ series, saving, onSave, forceSyncLocal, toast, s
                           // Deleted via backend API
                           setToast({ message: "Series deleted successfully.", type: "success" });
                           if (forceSyncLocal) forceSyncLocal();
-                          setTimeout(() => navigate("/dashboard/settings/number-series"), 200);
+                          setTimeout(() => navigate("/admin-dashboard/settings/number-series"), 200);
                         } catch (err) {
                           setToast({ message: "Failed to delete series: " + (err?.message || "Error"), type: "error" });
                         }
