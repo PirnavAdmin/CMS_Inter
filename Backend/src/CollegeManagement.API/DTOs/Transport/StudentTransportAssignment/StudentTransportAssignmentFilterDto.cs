@@ -3,6 +3,8 @@ namespace CollegeManagement.API.Dtos.Transport.StudentTransportAssignment
 	public class StudentTransportAssignmentFilterDto
 	{
         public string? Search { get; set; }
+        public int? CampusId { get; set; }
+        public int? CollegeId { get; set; }
         public string? AdmissionNo { get; set; }
         public long? RouteId { get; set; }
         public long? PickupPointId { get; set; }

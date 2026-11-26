@@ -26,7 +26,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<TransportDashboardReportResponseDto> GetDashboardReportAsync(ReportFilterDto filter)
         {
             var c = Connection;
-            using var multi = await c.QueryMultipleAsync("sp_GetTransportDashboard", commandType: CommandType.StoredProcedure);
+            using var multi = await c.QueryMultipleAsync(
+                "sp_GetTransportDashboard",
+                new { p_CampusId = (int?)filter.CampusId, p_CollegeId = (int?)null },
+                commandType: CommandType.StoredProcedure);
             var kpi = await multi.ReadFirstOrDefaultAsync<dynamic>();
 
             int fleet = (int)(kpi?.TotalVehicles ?? 0);
@@ -235,7 +238,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<VehicleStudentReportDto>> GetVehicleWiseAsync(ReportFilterDto filter)
         {
             var c = Connection;
-            using var multi = await c.QueryMultipleAsync("sp_GetTransportDashboard", commandType: CommandType.StoredProcedure);
+            using var multi = await c.QueryMultipleAsync(
+                "sp_GetTransportDashboard",
+                new { p_CampusId = (int?)filter.CampusId, p_CollegeId = (int?)null },
+                commandType: CommandType.StoredProcedure);
             await multi.ReadFirstOrDefaultAsync<dynamic>(); // skip KPI
             var occupancy = await multi.ReadAsync<dynamic>();
 
@@ -267,7 +273,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<RouteStudentReportDto>> GetRouteWiseAsync(ReportFilterDto filter)
         {
             var c = Connection;
-            using var multi = await c.QueryMultipleAsync("sp_GetTransportDashboard", commandType: CommandType.StoredProcedure);
+            using var multi = await c.QueryMultipleAsync(
+                "sp_GetTransportDashboard",
+                new { p_CampusId = (int?)filter.CampusId, p_CollegeId = (int?)null },
+                commandType: CommandType.StoredProcedure);
             await multi.ReadFirstOrDefaultAsync<dynamic>(); // skip KPI
             await multi.ReadAsync<dynamic>(); // skip occupancy
             var routes = await multi.ReadAsync<dynamic>();
@@ -310,7 +319,16 @@ namespace CollegeManagement.API.Repositories.Implementations
             var c = Connection;
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportVehicleAssignments",
-                new { p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_DriverId = filter.DriverId, p_Status = (byte?)null, p_Search = filter.Search ?? "" },
+                new
+                {
+                    p_RouteId = filter.RouteId,
+                    p_VehicleId = filter.VehicleId,
+                    p_DriverId = filter.DriverId,
+                    p_Status = (byte?)null,
+                    p_Search = filter.Search ?? "",
+                    p_CampusId = (int?)filter.CampusId,
+                    p_CollegeId = (int?)null
+                },
                 commandType: CommandType.StoredProcedure);
 
             return raw.Select(x => new DriverVehicleReportDto

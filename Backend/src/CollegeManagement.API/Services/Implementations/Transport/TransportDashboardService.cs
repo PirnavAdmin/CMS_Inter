@@ -14,9 +14,9 @@ namespace CollegeManagement.API.Services.Implementations
             _repository = repository;
         }
 
-        public async Task<TransportDashboardResponseDto> GetDashboardAsync()
+        public async Task<TransportDashboardResponseDto> GetDashboardAsync(int? campusId = null, int? collegeId = null)
         {
-            return await _repository.GetDashboardAsync();
+            return await _repository.GetDashboardAsync(campusId, collegeId);
         }
 
         public async Task<OperationDetailsDto?> GetOperationDetailsAsync(long assignmentId)

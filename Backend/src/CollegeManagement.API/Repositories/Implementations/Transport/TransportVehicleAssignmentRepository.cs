@@ -15,12 +15,28 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class TransportVehicleAssignmentRepository : ITransportVehicleAssignmentRepository
     {
         private readonly AppDbContext _context;
-        public TransportVehicleAssignmentRepository(AppDbContext context) { _context = context; }
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
+
+        public TransportVehicleAssignmentRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
+        {
+            _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
+        }
+
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
         public async Task<PagedResult<TransportVehicleAssignmentDto>> GetAllAsync(TransportVehicleAssignmentFilterDto filter)
         {
             var c = Connection;
+            var collegeId = filter.CollegeId ?? ResolveCollegeId();
             var all = await c.QueryAsync<TransportVehicleAssignmentDto>(
                 "sp_GetTransportVehicleAssignments",
                 new
@@ -28,8 +44,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_RouteId = filter.RouteId,
                     p_VehicleId = filter.VehicleId,
                     p_DriverId = filter.DriverId,
-                    p_Status = filter.Status,
-                    p_Search = filter.Search ?? ""
+                    p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
+                    p_Search = filter.Search ?? "",
+                    p_CampusId = filter.CampusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -68,7 +86,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_IsActive = (byte)1,
                     p_CreatedBy = userId,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CampusId = dto.CampusId,
+                    p_CollegeId = dto.CollegeId
                 },
                 commandType: CommandType.StoredProcedure);
         }

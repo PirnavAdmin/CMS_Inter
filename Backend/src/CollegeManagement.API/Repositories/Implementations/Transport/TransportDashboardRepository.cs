@@ -22,11 +22,16 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        public async Task<TransportDashboardResponseDto> GetDashboardAsync()
+        public async Task<TransportDashboardResponseDto> GetDashboardAsync(int? campusId = null, int? collegeId = null)
         {
             var c = Connection;
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDashboard",
+                new
+                {
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
+                },
                 commandType: CommandType.StoredProcedure);
 
             var kpi = await multi.ReadFirstOrDefaultAsync<dynamic>();

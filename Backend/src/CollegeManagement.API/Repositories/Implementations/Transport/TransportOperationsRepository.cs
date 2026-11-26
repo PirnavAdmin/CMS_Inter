@@ -149,7 +149,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_VehicleId = (long?)null,
                     p_DriverId = (long?)null,
                     p_Status = (byte)1,
-                    p_Search = ""
+                    p_Search = "",
+                    p_CampusId = (int?)null,
+                    p_CollegeId = (int?)null
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);

@@ -14,10 +14,20 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class TransportAttendantRepository : ITransportAttendantRepository
     {
         private readonly AppDbContext _context;
+        private readonly Microsoft.AspNetCore.Http.IHttpContextAccessor? _httpContextAccessor;
 
-        public TransportAttendantRepository(AppDbContext context)
+        public TransportAttendantRepository(AppDbContext context, Microsoft.AspNetCore.Http.IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
@@ -25,26 +35,33 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PagedResult<TransportAttendantDto>> GetAllAsync(TransportAttendantFilterDto filter)
         {
             var c = Connection;
+            var collegeId = filter.CollegeId ?? ResolveCollegeId();
             IEnumerable<TransportAttendantDto> all;
             try
             {
-                const string sql = "CALL sp_GetTransportAttendants(@p_Search, @p_Status, @p_CampusId);";
+                const string sql = "CALL sp_GetTransportAttendants(@p_Search, @p_Status, @p_CampusId, @p_CollegeId);";
                 all = await c.QueryAsync<TransportAttendantDto>(
                     sql,
                     new 
                     { 
                         p_Search = filter.Search ?? "",
                         p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
-                        p_CampusId = filter.CampusId
+                        p_CampusId = filter.CampusId,
+                        p_CollegeId = collegeId
                     },
                     commandType: CommandType.Text);
             }
-            catch (Exception ex) when (ex.Message.Contains("Incorrect number of arguments") || ex.Message.Contains("not found in the collection"))
+            catch (Exception ex) when (ex.Message.Contains("Incorrect number of arguments") || ex.Message.Contains("p_CollegeId") || ex.Message.Contains("not found in the collection"))
             {
-                const string sql1 = "CALL sp_GetTransportAttendants(@p_Search);";
+                const string sql1 = "CALL sp_GetTransportAttendants(@p_Search, @p_Status, @p_CampusId);";
                 all = await c.QueryAsync<TransportAttendantDto>(
                     sql1,
-                    new { p_Search = filter.Search ?? "" },
+                    new 
+                    { 
+                        p_Search = filter.Search ?? "",
+                        p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
+                        p_CampusId = filter.CampusId
+                    },
                     commandType: CommandType.Text);
             }
                 
