@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { NavLink, Navigate, useLocation, useSearchParams } from "react-router-dom";
@@ -31,7 +32,7 @@ import {
 import { useDialogFocus } from "./components/InventoryUi.jsx";
 import "./InventoryManagement.css";
 
-const BASE = "/dashboard/inventory-management";
+const BASE = "/admin-dashboard/inventory-management";
 const TABS = [
   ["", "Dashboard", LayoutDashboard, "Manage college inventory, stock, supplies and assets."],
   ["items", "Items", List, "View and manage all college inventory items."],
@@ -96,6 +97,11 @@ export default function InventoryManagementPage() {
       if (version === requestVersion.current) setLoading(false);
     }
   }, []);
+
+  useLiveModuleSync({
+    moduleName: "Inventory",
+    onRefresh: refresh,
+  });
   const [modal, setModal] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const location = useLocation();

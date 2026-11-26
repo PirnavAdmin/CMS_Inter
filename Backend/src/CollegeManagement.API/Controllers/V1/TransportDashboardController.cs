@@ -1,3 +1,6 @@
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Services.Interfaces;
@@ -32,7 +35,7 @@ namespace CollegeManagement.API.Controllers.V1
                     collegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
                 }
 
-                var result = await _service.GetDashboardAsync(campusId, collegeId);
+                var result = await _service.GetDashboardAsync(collegeId, campusId);
 
                 return Ok(new
                 {
@@ -60,7 +63,11 @@ namespace CollegeManagement.API.Controllers.V1
                 var result = await _service.GetOperationDetailsAsync(assignmentId);
                 if (result == null)
                 {
-                    return NotFound(new { success = false, message = "Operation details not found." });
+                    return NotFound(new
+                    {
+                        success = false,
+                        message = $"No operation details found for assignment ID {assignmentId}."
+                    });
                 }
 
                 return Ok(new
@@ -74,7 +81,7 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(500, new
                 {
                     success = false,
-                    message = "Failed to retrieve operation details.",
+                    message = "An error occurred while retrieving operation details.",
                     error = ex.Message
                 });
             }

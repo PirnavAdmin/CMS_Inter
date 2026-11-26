@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link } from "react-router-dom";
 import {
   AlertCircle,
@@ -424,6 +425,10 @@ export default function LOPConfigurationPage() {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
 
+  useLiveModuleSync(["LopConfiguration", "Payroll", "Attendance"], () => {
+    setRevision((v) => v + 1);
+  });
+
   const campusParam = selectedCampusId ? Number(selectedCampusId) : undefined;
 
   // Fetch Campus Staff Dropdown
@@ -581,7 +586,7 @@ export default function LOPConfigurationPage() {
       breadcrumb={["Settings", "LOP Configuration"]}
       backLinkPosition="below"
       backLink={
-        <Link to="/dashboard/settings" className="lop-back-link">
+        <Link to="/admin-dashboard/settings" className="lop-back-link">
           <ArrowLeft size={16} /> Back to Settings
         </Link>
       }

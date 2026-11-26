@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using CollegeManagement.API.DTOs.Marks;
 using CollegeManagement.API.Services.Interfaces;
+using CollegeManagement.API.DTOs.Realtime;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -21,11 +22,13 @@ namespace CollegeManagement.API.Controllers.V1
     {
         private readonly IMarksService _marksService;
         private readonly INotificationService _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public MarksController(IMarksService marksService, INotificationService notificationService)
+        public MarksController(IMarksService marksService, INotificationService notificationService, IRealtimeEventService? realtimeEventService = null)
         {
             _marksService = marksService;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet]
@@ -57,6 +60,15 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var result = await _marksService.SaveMarkAsync(dto);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "MarkSaved",
+                    EntityId = result.MarkId.ToString()
+                });
+            }
             return CreatedAtAction(nameof(GetMarkById), new { id = result.MarkId }, result);
         }
 
@@ -155,11 +167,32 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
             catch { }
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "BulkMarksSaved"
+                });
+            }
             return Ok(saveResult);
         }
 
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> UpdateMark(int id, [FromBody] UpdateMarkDto dto) => Ok(await _marksService.UpdateMarkAsync(id, dto));
+        public async Task<IActionResult> UpdateMark(int id, [FromBody] UpdateMarkDto dto)
+        {
+            var res = await _marksService.UpdateMarkAsync(id, dto);
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "MarkUpdated",
+                    EntityId = id.ToString()
+                });
+            }
+            return Ok(res);
+        }
 
         [HttpDelete("{id:int}")]
         [Authorize(Roles = "Admin,Super Admin,Principal")]
@@ -212,6 +245,15 @@ namespace CollegeManagement.API.Controllers.V1
                 await _notificationService.SendToRoleAsync("Faculty", null, "Marks Approved", $"Examination #{dto.ExaminationId} marks have been verified & approved by Admin.", "Marks", dto.ExaminationId, $"/faculty-dashboard/marks?examinationId={dto.ExaminationId}");
             }
             catch { }
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "MarksVerified",
+                    EntityId = dto.ExaminationId.ToString()
+                });
+            }
             return Ok(new { Count = count });
         }
 
@@ -226,6 +268,15 @@ namespace CollegeManagement.API.Controllers.V1
                 await _notificationService.SendToRoleAsync("Parent", null, "Examination Results Published", $"Results for Examination #{dto.ExaminationId} have been published.", "Marks", dto.ExaminationId, $"/parent-dashboard/academics?tab=results&examinationId={dto.ExaminationId}");
             }
             catch { }
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Examinations",
+                    Action = "MarksPublished",
+                    EntityId = dto.ExaminationId.ToString()
+                });
+            }
             return Ok(new { Count = count });
         }
 

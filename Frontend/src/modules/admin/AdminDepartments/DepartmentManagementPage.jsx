@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -280,6 +281,7 @@ export const normalizeDepartment = (row) => {
     ? String(rawStaffType).trim()
     : (isNonTeachingDeptName(name) ? "Non-Teaching" : "Teaching");
   const campusId = pick(row, "campusId", "CampusId") || null;
+  const collegeId = pick(row, "collegeId", "CollegeId") || null;
   const campusName = pick(row, "campusName", "CampusName", "campus", "Campus") || "";
   const boardId = pick(row, "boardId", "BoardId") || null;
   const boardName = pick(row, "boardName", "BoardName", "board", "Board") || "";
@@ -293,6 +295,7 @@ export const normalizeDepartment = (row) => {
     staffType,
     campusId,
     campusName,
+    collegeId,
     boardId,
     boardName,
     board: boardName,
@@ -318,6 +321,7 @@ export const normalizeDesignation = (row) => {
     ? String(rawStaffType).trim()
     : (isNonTeachingDesigName(name) ? "Non-Teaching" : "Teaching");
   const campusId = pick(row, "campusId", "CampusId") || null;
+  const collegeId = pick(row, "collegeId", "CollegeId") || null;
   const campusName = pick(row, "campusName", "CampusName", "campus", "Campus") || "";
   const boardId = pick(row, "boardId", "BoardId") || null;
   const boardName = pick(row, "boardName", "BoardName", "board", "Board") || "";
@@ -333,6 +337,7 @@ export const normalizeDesignation = (row) => {
     staffType,
     campusId,
     campusName,
+    collegeId,
     boardId,
     boardName,
     board: boardName,
@@ -588,8 +593,13 @@ function MasterCreateModal({ kind, staffType, departments = [], selectedCampus, 
 
   useEffect(() => {
     if (kind === "designation" && (!departments || departments.length === 0)) {
+
+      const authUser = getAuthUser();
+      const params = {};
+      if (activeCampusId) params.campusId = activeCampusId;
+      if (authUser?.collegeId) params.collegeId = authUser.collegeId;
       apiClient
-        .get(apiEndpoints.departments.getAll, { skipGlobalLoader: true })
+        .get(apiEndpoints.departments.getAll, { params, skipGlobalLoader: true })
         .then((res) => {
           setAvailableDepartments(unwrapRows(res.data).map(normalizeDepartment).filter((d) => d.name));
         })
@@ -621,6 +631,7 @@ function MasterCreateModal({ kind, staffType, departments = [], selectedCampus, 
     if (Object.keys(nextErrors).length > 0) return;
 
     setSubmitting(true);
+    const authUser = getAuthUser();
     try {
       if (kind === "department") {
         const deptCode = values.departmentCode?.trim() || values.departmentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 10);
@@ -630,6 +641,7 @@ function MasterCreateModal({ kind, staffType, departments = [], selectedCampus, 
           departmentCode: deptCode,
           staffType: toApiStaffType(values.staffType || staffType),
           campusId: activeCampusId ? Number(activeCampusId) : undefined,
+          collegeId: authUser?.collegeId ? Number(authUser.collegeId) : undefined,
           campusName: activeCampusName || undefined,
           boardId: activeBoardId ? Number(activeBoardId) : undefined,
           boardName: activeBoardName || undefined,
@@ -659,6 +671,7 @@ function MasterCreateModal({ kind, staffType, departments = [], selectedCampus, 
           departmentId: values.departmentId ? Number(values.departmentId) : null,
           staffType: toApiStaffType(values.staffType),
           campusId: activeCampusId ? Number(activeCampusId) : undefined,
+          collegeId: authUser?.collegeId ? Number(authUser.collegeId) : undefined,
           campusName: activeCampusName || undefined,
           boardId: activeBoardId ? Number(activeBoardId) : undefined,
           boardName: activeBoardName || undefined,
@@ -794,7 +807,7 @@ const withDepartmentContext = (path, params) => {
 export default function DepartmentManagementPage() {
   const navigate = useNavigate();
   const [routeParams, setRouteParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const { selectedCampus } = useCampusContext();
   const { selectedBoard } = useAcademicContext();
 
@@ -931,6 +944,7 @@ export default function DepartmentManagementPage() {
       const deptParams = {};
       if (curCampusId) deptParams.campusId = curCampusId;
       if (curBoardId) deptParams.boardId = curBoardId;
+      if (authUser?.collegeId) deptParams.collegeId = authUser.collegeId;
 
       const deptRes = await apiClient.get(apiEndpoints.departments.getAll, {
         params: deptParams,
@@ -959,6 +973,7 @@ export default function DepartmentManagementPage() {
       const desigParams = { includeInactive: true };
       if (curCampusId) desigParams.campusId = curCampusId;
       if (curBoardId) desigParams.boardId = curBoardId;
+      if (authUser?.collegeId) desigParams.collegeId = authUser.collegeId;
 
       const desigRes = await apiClient.get(apiEndpoints.designations.getAll, {
         params: desigParams,
@@ -995,6 +1010,10 @@ export default function DepartmentManagementPage() {
       }
     }
   }, [selectedCampus?.id, selectedCampus?.campusId, selectedBoard?.id, selectedBoard?.boardId]);
+
+  useLiveModuleSync(["Departments", "Designations"], () => {
+    fetchMasterData(false);
+  });
 
   // Fetch initial data on mount or when navbar campus/board selection changes
   useEffect(() => {
@@ -1044,6 +1063,16 @@ export default function DepartmentManagementPage() {
         : (isTeaching ? !isNonTeachingDeptName(norm) : isNonTeachingDeptName(norm));
 
       if (!matchesStaffType) continue;
+
+      // Multi-tenant college isolation
+      if (isTenantCollege) {
+        if (item.collegeId && Number(item.collegeId) !== Number(authUser.collegeId)) {
+          continue;
+        }
+        if (!item.collegeId) {
+          continue;
+        }
+      }
 
       // Filter by campus if item has campus mapping
       if (item.campusId && curCampusId && String(item.campusId) !== String(curCampusId)) {
@@ -1112,6 +1141,16 @@ export default function DepartmentManagementPage() {
         : (isTeaching ? !isNonTeachingDesigName(norm) : isNonTeachingDesigName(norm));
 
       if (!matchesStaffType) continue;
+
+      // Multi-tenant college isolation
+      if (isTenantCollege) {
+        if (item.collegeId && Number(item.collegeId) !== Number(authUser.collegeId)) {
+          continue;
+        }
+        if (!item.collegeId) {
+          continue;
+        }
+      }
 
       // Filter by campus if item has campus mapping
       if (item.campusId && curCampusId && String(item.campusId) !== String(curCampusId)) {
@@ -1300,7 +1339,7 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  onClick={() => navigate(withDepartmentContext("/dashboard/departments/import", routeParams))}
+                  onClick={() => navigate(withDepartmentContext("/admin-dashboard/departments/import", routeParams))}
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
@@ -1361,7 +1400,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-view"
                                 title={`View ${item.name}`}
                                 aria-label={`View ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${item.id}/view`, routeParams), { state: { department: item } })}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/departments/${item.id}/view`, routeParams), { state: { department: item } })}
                               >
                                 <Eye size={12} />
                               </button>
@@ -1370,7 +1409,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-edit"
                                 title={`Edit ${item.name}`}
                                 aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${item.id}/edit`, routeParams))}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/departments/${item.id}/edit`, routeParams))}
                               >
                                 <Pencil size={12} />
                               </button>
@@ -1433,7 +1472,7 @@ export default function DepartmentManagementPage() {
                 <button
                   type="button"
                   className="cms-btn secondary"
-                  onClick={() => navigate(withDepartmentContext("/dashboard/designations/import", routeParams))}
+                  onClick={() => navigate(withDepartmentContext("/admin-dashboard/designations/import", routeParams))}
                 >
                   <img className="master-action-icon" src={importExcelIcon} alt="" aria-hidden="true" width={24} height={24} /> Import Excel
                 </button>
@@ -1500,7 +1539,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-view"
                                 title={`View ${item.name}`}
                                 aria-label={`View ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${item.id}/view`, routeParams), { state: { designation: item } })}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/designations/${item.id}/view`, routeParams), { state: { designation: item } })}
                               >
                                 <Eye size={12} />
                               </button>
@@ -1509,7 +1548,7 @@ export default function DepartmentManagementPage() {
                                 className="master-icon-button is-edit"
                                 title={`Edit ${item.name}`}
                                 aria-label={`Edit ${item.name}`}
-                                onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${item.id}/edit`, routeParams))}
+                                onClick={() => navigate(withDepartmentContext(`/admin-dashboard/designations/${item.id}/edit`, routeParams))}
                               >
                                 <Pencil size={12} />
                               </button>
@@ -1633,7 +1672,7 @@ export default function DepartmentManagementPage() {
 export function DepartmentDetailsPage() {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const location = useLocation();
   const { id } = useParams();
   const [department, setDepartment] = useState(location.state?.department || null);
@@ -1722,7 +1761,7 @@ export function DepartmentDetailsPage() {
         department ? (
           <button
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate(withDepartmentContext(`/dashboard/departments/${department.id}/edit`, routeParams))}
+            onClick={() => navigate(withDepartmentContext(`/admin-dashboard/departments/${department.id}/edit`, routeParams))}
           >
             <Pencil /> Edit Department
           </button>
@@ -1787,7 +1826,7 @@ export function DepartmentDetailsPage() {
                     type="button"
                     className="cms-btn secondary"
                     style={{ height: 32, fontSize: "12px", padding: "0 10px" }}
-                    onClick={() => navigate(withDepartmentContext("/dashboard/designations/add", routeParams))}
+                    onClick={() => navigate(withDepartmentContext("/admin-dashboard/designations/add", routeParams))}
                   >
                     + Add Designation
                   </button>
@@ -1842,7 +1881,7 @@ export function DepartmentDetailsPage() {
 export function DesignationDetailsPage() {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const location = useLocation();
   const { id } = useParams();
   const [designation, setDesignation] = useState(location.state?.designation || null);
@@ -1880,7 +1919,7 @@ export function DesignationDetailsPage() {
         designation ? (
           <button
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate(withDepartmentContext(`/dashboard/designations/${id}/edit`, routeParams))}
+            onClick={() => navigate(withDepartmentContext(`/admin-dashboard/designations/${id}/edit`, routeParams))}
           >
             <Pencil /> Edit Designation
           </button>
@@ -1949,7 +1988,7 @@ export function DesignationDetailsPage() {
 export function MasterFormPage({ kind }) {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const { id } = useParams();
   const edit = Boolean(id);
   const label = kind === "department" ? "Department" : "Designation";
@@ -1980,8 +2019,13 @@ export function MasterFormPage({ kind }) {
   // Load available departments for designation form
   useEffect(() => {
     if (kind === "designation") {
+
+      const authUser = getAuthUser();
+      const params = {};
+      if (activeCampusId) params.campusId = activeCampusId;
+      if (authUser?.collegeId) params.collegeId = authUser.collegeId;
       apiClient
-        .get(apiEndpoints.departments.getAll, { skipGlobalLoader: true })
+        .get(apiEndpoints.departments.getAll, { params, skipGlobalLoader: true })
         .then((res) => {
           setAvailableDepartments(unwrapRows(res.data).map(normalizeDepartment).filter((d) => d.name));
         })
@@ -2040,6 +2084,7 @@ export function MasterFormPage({ kind }) {
       loadDept();
     } else {
       // Edit Designation: GET /api/v1/designations/{id}
+
       apiClient
         .get(apiEndpoints.designations.getById(id), { skipGlobalLoader: true })
         .then((res) => {
@@ -2081,6 +2126,7 @@ export function MasterFormPage({ kind }) {
     if (Object.keys(nextErrors).length > 0) return;
 
     setSubmitting(true);
+    const authUser = getAuthUser();
     try {
       if (kind === "department") {
         const deptCode = values.departmentCode?.trim() || values.departmentName.trim().toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 10);
@@ -2090,6 +2136,7 @@ export function MasterFormPage({ kind }) {
           departmentCode: deptCode,
           staffType: toApiStaffType(values.staffType || "Teaching"),
           campusId: activeCampusId ? Number(activeCampusId) : undefined,
+          collegeId: authUser?.collegeId ? Number(authUser.collegeId) : undefined,
           campusName: activeCampusName || undefined,
           boardId: activeBoardId ? Number(activeBoardId) : undefined,
           boardName: activeBoardName || undefined,
@@ -2111,6 +2158,7 @@ export function MasterFormPage({ kind }) {
           departmentId: values.departmentId ? Number(values.departmentId) : null,
           staffType: toApiStaffType(values.staffType),
           campusId: activeCampusId ? Number(activeCampusId) : undefined,
+          collegeId: authUser?.collegeId ? Number(authUser.collegeId) : undefined,
           campusName: activeCampusName || undefined,
           boardId: activeBoardId ? Number(activeBoardId) : undefined,
           boardName: activeBoardName || undefined,
@@ -2284,7 +2332,7 @@ const importColumns = {
 export function MasterImportPage({ kind = "department" }) {
   const navigate = useNavigate();
   const [routeParams] = useSearchParams();
-  const listUrl = withDepartmentContext("/dashboard/departments", routeParams);
+  const listUrl = withDepartmentContext("/admin-dashboard/departments", routeParams);
   const [rows, setRows] = useState([]);
   const [rawFile, setRawFile] = useState(null);
   const [parsing, setParsing] = useState(false);

@@ -36,6 +36,7 @@ namespace CollegeManagement.API.DTOs.NumberSeries
         public string? FormatPattern { get; set; }
         public int? NumberLength { get; set; }
         public int? StartNumber { get; set; }
+        public int? CurrentSequence { get; set; }
         public string? Description { get; set; }
     }
 

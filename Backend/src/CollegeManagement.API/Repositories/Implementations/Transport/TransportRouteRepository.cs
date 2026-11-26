@@ -171,9 +171,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 new
                 {
                     p_Search = search ?? "",
-                    p_BusType = busType ?? "",
-                    p_Limit = limit > 0 ? limit : 100,
-                    p_CampusId = (int?)null
+                    p_Limit = limit > 0 ? limit : 100
                 },
                 commandType: CommandType.StoredProcedure);
         }

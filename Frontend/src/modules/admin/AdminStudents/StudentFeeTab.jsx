@@ -609,6 +609,29 @@ export default function StudentFeeTab({ student, compactContext = false, hideCou
     "discountAmount",
     "DiscountAmount",
   );
+  const componentAmount = (row) => readNumber(row, "originalAmount", "OriginalAmount", "amount", "Amount", "feeAmount", "FeeAmount", "totalAmount", "TotalAmount", "baseAmount", "BaseAmount") ?? 0;
+  const sumComponents = (predicate) => components.filter(predicate).reduce((sum, row) => sum + componentAmount(row), 0);
+  const admissionComponents = components.filter((row) => getFeeTypeName(row).toLowerCase().includes("admission"));
+  const courseComponents = components.filter((row) => getFeeTypeName(row).toLowerCase().includes("course"));
+  const facilityComponents = components.filter(isFacilityFeeItem);
+  const admissionFee = readNumber(account, "admissionFee", "AdmissionFee") ?? sumComponents((row) => admissionComponents.includes(row));
+  const courseFeeBeforeScholarship = readNumber(account, "courseFeeBeforeScholarship", "CourseFeeBeforeScholarship", "courseFee", "CourseFee", "courseFeeAmount", "CourseFeeAmount") ?? sumComponents((row) => courseComponents.includes(row));
+  const feeConcession = concessionAmount ?? 0;
+  const courseFeePayable = readNumber(account, "courseFeePayable", "CourseFeePayable") ?? Math.max(courseFeeBeforeScholarship - feeConcession, 0);
+  const optionalFees = readNumber(account, "optionalFeesTotal", "OptionalFeesTotal", "optionalFees", "OptionalFees") ?? sumComponents((row) => !admissionComponents.includes(row) && !courseComponents.includes(row) && !isFacilityFeeItem(row));
+  const facilityFees = sumComponents((row) => facilityComponents.includes(row)) || (!facilityComponents.length && facility.fee ? Number(facility.fee.amount || 0) : 0);
+  const transportItem = facilityComponents.find((row) => feeTypeIdentity(row).includes("transport"));
+  const transportFee = transportItem ? componentAmount(transportItem) : facility.fee?.type?.toLowerCase().includes("transport") ? Number(facility.fee.amount || 0) : 0;
+  const transportDescription = transportItem ? readText(transportItem, "routeName", "RouteName", "pickupPointName", "PickupPointName", "stopName", "StopName") : facility.fee?.type?.toLowerCase().includes("transport") ? facility.fee.detail : "";
+  const totalFeeCommitment = readNumber(account, "totalFeeCommitment", "TotalFeeCommitment", "totalPayable", "TotalPayable") ?? admissionFee + courseFeePayable + optionalFees + facilityFees;
+  const amountPaidNow = readNumber(account, "amountPaidNow", "AmountPaidNow", "amountPaid", "AmountPaid", "paidAmount", "PaidAmount", "totalPaid", "TotalPaid") ?? 0;
+  const futureScheduledCourseFee = schedules.reduce((sum, row) => {
+    const amount = readNumber(row, "amount", "Amount", "installmentAmount", "InstallmentAmount", "scheduledAmount", "ScheduledAmount", "dueAmount", "DueAmount") ?? 0;
+    const paid = readNumber(row, "paidAmount", "PaidAmount", "amountPaid", "AmountPaid", "totalPaid", "TotalPaid") ?? 0;
+    const balance = readNumber(row, "balance", "Balance", "balanceAmount", "BalanceAmount", "remainingBalance", "RemainingBalance");
+    return sum + Math.max(balance ?? amount - paid, 0);
+  }, 0) || (plan === "Installment Payment" ? Math.max(courseFeePayable - amountPaidNow, 0) : 0);
+  const remainingBalance = readNumber(account, "remainingBalance", "RemainingBalance", "balanceAmount", "BalanceAmount", "outstandingBalance", "OutstandingBalance", "balance", "Balance") ?? Math.max(totalFeeCommitment - amountPaidNow, 0);
   const hasAccount =
     components.length ||
     schedules.length ||
@@ -786,16 +809,6 @@ export default function StudentFeeTab({ student, compactContext = false, hideCou
               </div>
             </section>
           ) : null}
-          {!hideCourseFeeSchedule && <section className="cms-fee-block">
-           
-            <strong>
-              {plan === "Full Payment"
-                ? "Full Course Payment"
-                : plan === "Installment Payment"
-                  ? "Course Fee Schedule"
-                  : "Not provided"}
-            </strong>
-          </section>}
           {!hideCourseFeeSchedule && plan === "Installment Payment" && schedules.length > 0 ? (
             <section className="cms-fee-block">
               <h3>Course Fee Schedule</h3>
@@ -860,42 +873,19 @@ export default function StudentFeeTab({ student, compactContext = false, hideCou
             </section>
           ) : null}
           <section className="cms-fee-block">
-            <h3>Fee Summary</h3>
+            <h3>Final Fee Summary</h3>
             <div className="cms-fee-summary">
-              {[
-                [
-                  "Original Fee",
-                  [
-                    "totalAmount",
-                    "TotalAmount",
-                    "originalFee",
-                    "OriginalFee",
-                    "originalAmount",
-                    "OriginalAmount",
-                    "totalFee",
-                    "TotalFee",
-                  ],
-                ],
-                ["Concession", amountColumns[1][1]],
-                [
-                  "Net Payable",
-                  [
-                    "payableAmount",
-                    "PayableAmount",
-                    "netPayable",
-                    "NetPayable",
-                    "totalPayable",
-                    "TotalPayable",
-                  ],
-                ],
-                ["Paid", amountColumns[3][1]],
-                ["Balance", amountColumns[4][1]],
-              ].map(([label, keys]) => (
-                <div key={label}>
-                  <span>{label}</span>
-                  <strong>{money(account, ...keys)}</strong>
-                </div>
-              ))}
+              <div><span>Admission Fee</span><strong>{formatCurrency(admissionFee)}</strong></div>
+              <div><span>Course Fee Before Scholarship</span><strong>{formatCurrency(courseFeeBeforeScholarship)}</strong></div>
+              <div><span>Scholarship / Concession</span><strong>{formatCurrency(-feeConcession)}</strong></div>
+              <div><span>Course Fee Payable</span><strong>{formatCurrency(courseFeePayable)}</strong></div>
+              <div><span>Optional Selected Fees</span><strong>{formatCurrency(optionalFees)}</strong></div>
+              {transportFee > 0 ? <div><span>Transport Fee{transportDescription ? ` (${transportDescription})` : ""}</span><strong>{formatCurrency(transportFee)}</strong></div> : null}
+              <div className="is-total"><span>Total Fee Commitment</span><strong>{formatCurrency(totalFeeCommitment)}</strong></div>
+              <div><span>Amount Paid Now</span><strong>{formatCurrency(amountPaidNow)}</strong></div>
+              <div><span>Future Scheduled Course Fee</span><strong>{formatCurrency(futureScheduledCourseFee)}</strong></div>
+              <div className="is-total"><span>Remaining Balance</span><strong>{formatCurrency(remainingBalance)}</strong></div>
+              <div><span>Payment Plan</span><strong>{plan === "Full Payment" ? "Full Course Payment" : plan === "Installment Payment" ? "Course Fee Schedule" : "Not provided"}</strong></div>
             </div>
           </section>
         </>

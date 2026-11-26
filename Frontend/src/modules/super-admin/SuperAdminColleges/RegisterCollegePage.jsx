@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
-import { isValidSuperAdminEmail, isValidIndianMobile, isStrongSuperAdminPassword } from "../superAdminValidation.js";
+import { isValidSuperAdminEmail, isValidIndianMobile, isStrongSuperAdminPassword, formatProperCollegeName, validateCollegeNameCapitalization } from "../superAdminValidation.js";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
   getCollegeCodeSeriesSettings,
@@ -375,6 +375,8 @@ export default function RegisterCollegePage() {
   /* ── Validation ── */
   const v1 = () => {
     if (profile.name.trim().length < 2) return "College Name must be at least 2 characters.";
+    const capErr = validateCollegeNameCapitalization(profile.name);
+    if (capErr) return capErr;
     if ((data?.colleges || []).some((college) => String(college.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase())) return "A college with this name is already registered.";
     if (!profile.code.trim()) return "Registration Code is required.";
     if (!/^[A-Z0-9-]{3,30}$/.test(profile.code.trim().toUpperCase())) return "Registration Code must use 3–30 letters, numbers, or hyphens.";
@@ -440,7 +442,7 @@ export default function RegisterCollegePage() {
     }
     setSubmitting(true);
     const payload = {
-      name: profile.name.trim(),
+      name: formatProperCollegeName(profile.name.trim()),
       code: profile.code.trim().toUpperCase(),
       email: profile.email.trim().toLowerCase(),
       phone: profile.phone.trim(),
@@ -562,7 +564,7 @@ export default function RegisterCollegePage() {
                 label="College Name"
                 required
                 icon={Building2}
-                badge={profile.name.trim() ? <span className="rcf-auto-badge rcf-auto-success"><Check size={10} strokeWidth={3} /> Valid</span> : null}
+                badge={profile.name.trim() ? (validateCollegeNameCapitalization(profile.name) ? <span className="rcf-auto-badge" style={{ background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca" }}><AlertTriangle size={10} strokeWidth={3} /> Invalid Casing</span> : <span className="rcf-auto-badge rcf-auto-success"><Check size={10} strokeWidth={3} /> Valid</span>) : null}
               >
                 <input
                   type="text"
@@ -572,8 +574,14 @@ export default function RegisterCollegePage() {
                   placeholder="e.g. ABC Degree College"
                   value={profile.name}
                   onChange={(e) => handleCollegeNameChange(e.target.value)}
+                  onBlur={() => setProfile((p) => ({ ...p, name: formatProperCollegeName(p.name || "") }))}
                   autoComplete="off"
                 />
+                {profile.name.trim() && validateCollegeNameCapitalization(profile.name) ? (
+                  <span style={{ display: "block", color: "#dc2626", fontSize: "11.5px", marginTop: "4px", fontWeight: "500" }}>
+                    {validateCollegeNameCapitalization(profile.name)}
+                  </span>
+                ) : null}
               </Field>
 
               {/* Registration Code */}
@@ -645,7 +653,7 @@ export default function RegisterCollegePage() {
                     onChange={(e) => handlePincodeChange(e.target.value)}
                     className={pincodeStatus === "success" ? "is-valid" : ""}
                     autoComplete="off"
-                  />
+                />
                   {pincodeLoading && (
                     <Loader2 size={15} className="rcf-spin rcf-pin-trailing" />
                   )}

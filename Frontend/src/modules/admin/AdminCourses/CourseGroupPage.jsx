@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Plus } from "lucide-react";
 import apiClient, { getApiErrorMessage } from "@/api/axios.js";
@@ -372,7 +373,7 @@ function CourseGroupFormPage() {
     status: "Active",
   });
   const mode = id ? "Edit" : "Add";
-  const listPath = "/dashboard/courses";
+  const listPath = "/admin-dashboard/courses";
   const showProgramError = useCallback((message) => {
     setToastType("error");
     setToast(message);
@@ -644,6 +645,10 @@ function CourseGroupListPage() {
     loadRows(search);
   }, [loadRows, search]);
 
+  useLiveModuleSync("Courses", () => {
+    loadRows(search);
+  });
+
   const handleSearch = (value) => {
     if (value === search) return;
     setSearch(value);
@@ -698,7 +703,7 @@ function CourseGroupListPage() {
   };
 
   const addGroup = () => {
-    navigate("/dashboard/courses/add");
+    navigate("/admin-dashboard/courses/add");
   };
 
   const columns = useMemo(
@@ -747,7 +752,7 @@ function CourseGroupListPage() {
           onSearchChange={handleSearch}
           onAdd={addGroup}
           enableExport={false}
-          onEdit={(row) => navigate(`/dashboard/courses/${row.id}/edit`)}
+          onEdit={(row) => navigate(`/admin-dashboard/courses/${row.id}/edit`)}
           onDelete={requestDeleteGroup}
         />
       </div>

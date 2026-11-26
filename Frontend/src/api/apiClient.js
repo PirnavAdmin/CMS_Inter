@@ -202,7 +202,11 @@ apiClient.interceptors.request.use(
     }
 
     try {
-      const selectedCampusId = window.localStorage.getItem("cms_selected_campus_id");
+      const u = getAuthUser();
+      const suffix = u?.collegeId ? `_c${u.collegeId}` : "";
+      const selectedCampusId =
+        (suffix ? window.localStorage.getItem(`cms_selected_campus_id${suffix}`) : null) ||
+        window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
       const clientIp = window.localStorage.getItem("cms_client_ip") || window.sessionStorage.getItem("cms_client_ip");
       if (clientIp) config.headers["X-Client-IP"] = clientIp;
@@ -311,7 +315,7 @@ apiClient.interceptors.response.use(
     const is404 = error.response?.status === 404;
     const is403 = error.response?.status === 403;
     const is400 = error.response?.status === 400;
-    const isExamCellRoute = /\/api\/v1\/(timetable|reports|promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|leave-categories|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years|fee-setup|fees)/i.test(
+    const isExamCellRoute = /\/api\/v1\/(groups|master-groups|sections|academic-levels|boards|user-preferences|landing-page|timetable|reports|promotions|campus-transfers|examinations|attendance|subjects|results|certificates|staff-attendance|leave-categories|attendance-timing-config|marks|evaluations|student-analysis|student-results|inventory|departments|designations|holidays|staff|faculty|academic-years|fee-setup|fees)/i.test(
       originalRequest?.url || ""
     );
     const shouldLogDevError =

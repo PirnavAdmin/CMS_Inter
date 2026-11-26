@@ -3,7 +3,7 @@ import CertificatesManagementView from "./components/CertificatesManagementView.
 
 export const pageConfig = {
   title: "Certificates",
-  route: "/dashboard/certificates",
+  route: "/admin-dashboard/certificates",
 };
 
 export default function AdminCertificatesPage() {

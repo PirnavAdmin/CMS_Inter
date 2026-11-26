@@ -2053,7 +2053,8 @@ CREATE PROCEDURE sp_StudentFee_GetLedger(
     IN p_PaymentPlan VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_Status VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_Search VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-    IN p_BoardId INT
+    IN p_BoardId INT,
+    IN p_CollegeId INT
 )
 BEGIN
     SELECT
@@ -2093,7 +2094,8 @@ BEGIN
         WHERE fpp.IsActive = 1 AND fi.BalanceAmount > 0 AND fi.Status <> 'Paid'
         GROUP BY fpp.StudentFeeId
     ) next_due ON next_due.StudentFeeId = sf.StudentFeeId
-    WHERE (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
+    WHERE (p_CollegeId IS NULL OR p_CollegeId <= 0 OR c.CollegeId = p_CollegeId)
+      AND (p_CampusId IS NULL OR p_CampusId = 0 OR s.CampusId = p_CampusId)
       AND (p_BoardId IS NULL OR p_BoardId = 0 OR s.BoardId = p_BoardId)
       AND (p_AcademicYearId IS NULL OR p_AcademicYearId = 0 OR s.AcademicYearId = p_AcademicYearId)
       AND (p_GroupId IS NULL OR p_GroupId = 0 OR s.GroupId = p_GroupId)
@@ -2119,10 +2121,11 @@ CREATE PROCEDURE sp_GetStudentFeeLedger(
     IN p_PaymentPlan VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_Status VARCHAR(30) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
     IN p_Search VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
-    IN p_BoardId INT
+    IN p_BoardId INT,
+    IN p_CollegeId INT
 )
 BEGIN
-    CALL sp_StudentFee_GetLedger(p_CampusId, p_AcademicYearId, p_GroupId, p_SectionId, p_PaymentPlan, p_Status, p_Search, p_BoardId);
+    CALL sp_StudentFee_GetLedger(p_CampusId, p_AcademicYearId, p_GroupId, p_SectionId, p_PaymentPlan, p_Status, p_Search, p_BoardId, p_CollegeId);
 END //
 DELIMITER ;
 

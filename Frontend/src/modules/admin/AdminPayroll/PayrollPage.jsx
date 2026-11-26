@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -171,6 +172,13 @@ export default function PayrollPage({ mode = "payroll", layout = true, menuOverr
   const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
 
   const [store, setStore] = useState(createEmptyPayrollStore);
+  const [liveRefreshKey, setLiveRefreshKey] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Payroll",
+    campusId: selectedCampusId,
+    onRefresh: () => setLiveRefreshKey((k) => k + 1),
+  });
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
   const [viewingPayslip, setViewingPayslip] = useState(null);
@@ -416,7 +424,7 @@ export default function PayrollPage({ mode = "payroll", layout = true, menuOverr
       isMounted = false;
       if (payrollRequestRef.current === requestId) payrollRequestRef.current += 1;
     };
-  }, [selectedCampusId, mode]);
+  }, [selectedCampusId, mode, liveRefreshKey]);
 
   // Derived KPI metrics
   const kpiData = useMemo(() => {
@@ -712,14 +720,14 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => navigate("/dashboard/payroll/assign/teaching")}
+            onClick={() => navigate("/admin-dashboard/payroll/assign/teaching")}
           >
             <img src={createGroup3d} alt="" className="payroll-3d-icon" width={16} height={16} /> + Assign Teaching
           </button>
           <button
             type="button"
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate("/dashboard/payroll/assign/non-teaching")}
+            onClick={() => navigate("/admin-dashboard/payroll/assign/non-teaching")}
           >
             <img src={createSection3d} alt="" className="payroll-3d-icon" width={16} height={16} /> + Assign Non-Teaching
           </button>
@@ -732,7 +740,7 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate("/dashboard/payroll/structures/add")}
+            onClick={() => navigate("/admin-dashboard/payroll/structures/add")}
           >
             <img src={numberSeries3d} alt="" className="payroll-3d-icon" width={16} height={16} /> + Add Salary Structure
           </button>
@@ -752,7 +760,7 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-primary"
-            onClick={() => navigate("/dashboard/payroll/process")}
+            onClick={() => navigate("/admin-dashboard/payroll/process")}
           >
             <img src={markAttendance3d} alt="" className="payroll-3d-icon" width={16} height={16} /> Full Batch Process
           </button>
@@ -772,7 +780,7 @@ function AuthoritativePayrollScreen({
           <button
             type="button"
             className="cms-btn cms-btn-ghost"
-            onClick={() => navigate("/dashboard/payroll/reports")}
+            onClick={() => navigate("/admin-dashboard/payroll/reports")}
           >
             <img src={promotion3d} alt="" className="payroll-3d-icon" width={16} height={16} /> Analytics & Reports
           </button>
@@ -1073,7 +1081,7 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
               type="button"
               className="cms-btn cms-btn-ghost"
               style={{ fontSize: "12px", padding: "6px 12px", whiteSpace: "nowrap", height: "36px" }}
-              onClick={() => navigate("/dashboard/payroll/import")}
+              onClick={() => navigate("/admin-dashboard/payroll/import")}
             >
               <img src={boardAcademicYear3d} alt="" className="payroll-3d-icon" width={16} height={16} /> Import Salary Data
             </button>
@@ -1140,7 +1148,7 @@ function PayrollEmployeesTab({ store, kpiData, navigate, setToast, handleHoldTog
                     className="cms-btn cms-btn-ghost"
                     style={{ padding: "2px 6px", fontSize: "11px" }}
                     title="View Assignment"
-                    onClick={() => navigate(`/dashboard/payroll/assignments/${r.id}`)}
+                    onClick={() => navigate(`/admin-dashboard/payroll/assignments/${r.id}`)}
                   >
                     <Eye size={12} /> View
                   </button>
@@ -1292,7 +1300,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
                   type="button"
                   className="cms-btn cms-btn-ghost"
                   style={{ padding: "3px 7px", fontSize: "11px" }}
-                  onClick={() => navigate(`/dashboard/payroll/structures/${r.id}`)}
+                  onClick={() => navigate(`/admin-dashboard/payroll/structures/${r.id}`)}
                 >
                   <Eye size={12} />
                 </button>
@@ -1300,7 +1308,7 @@ function PayrollStructuresTab({ store, navigate, setModal, setToast, handleDelet
                   type="button"
                   className="cms-btn cms-btn-ghost"
                   style={{ padding: "3px 7px", fontSize: "11px" }}
-                  onClick={() => navigate(`/dashboard/payroll/structures/${r.id}/edit`)}
+                  onClick={() => navigate(`/admin-dashboard/payroll/structures/${r.id}/edit`)}
                 >
                   <Edit3 size={12} />
                 </button>
@@ -2166,14 +2174,14 @@ function SalaryStructureListScreen({ store, navigate, setModal, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Salary Structures"]}
       actions={
         <div style={{ display: "flex", gap: "8px" }}>
-          <button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate("/dashboard/payroll/structures/add")}>
+          <button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate("/admin-dashboard/payroll/structures/add")}>
             <Plus size={14} /> Add Salary Structure
           </button>
         </div>
       }
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=structures" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=structures" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Payroll
         </Link>
         <PayrollStructuresTab store={store} navigate={navigate} setModal={setModal} setToast={setToast} handleDeleteStructure={() => {}} />
@@ -2496,7 +2504,7 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
       }
       setToast("Salary structure created successfully.");
     }
-    navigate("/dashboard/payroll?tab=structures");
+    navigate("/admin-dashboard/payroll?tab=structures");
     } finally { saveLock.current = false; setSaving(false); }
   };
 
@@ -2507,7 +2515,7 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Structures", existing ? "Edit" : "Add"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=structures" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=structures" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Salary Structures
         </Link>
 
@@ -2647,7 +2655,7 @@ function AddSalaryStructureScreen({ id, store, navigate, setToast }) {
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
-                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/payroll?tab=structures")}>Cancel</button>
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/admin-dashboard/payroll?tab=structures")}>Cancel</button>
                 <button type="submit" disabled={saving} className="cms-btn cms-btn-primary"><Plus size={14} /> {saving ? "Saving..." : "Save Structure"}</button>
               </div>
               {saveError && <p className="salary-field-error" role="alert">{saveError}</p>}
@@ -2697,7 +2705,7 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
         breadcrumb={["Home", "Finance", "Payroll", "Structures"]}
       >
         <main className="salary-page-container">
-          <Link to="/dashboard/payroll?tab=structures" className="cms-back-link">
+          <Link to="/admin-dashboard/payroll?tab=structures" className="cms-back-link">
             <ArrowLeft size={14} /> Back to Salary Structures
           </Link>
           <div className="salary-card-panel">Structure not found.</div>
@@ -2713,17 +2721,17 @@ function SalaryStructureDetailsScreen({ id, store, navigate, setModal, setToast 
       breadcrumb={["Home", "Finance", "Payroll", "Structures", struct.name]}
       actions={
         <div style={{ display: "flex", gap: "8px" }}>
-          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate(`/dashboard/payroll/structures/${struct.id}/edit`)}>
+          <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate(`/admin-dashboard/payroll/structures/${struct.id}/edit`)}>
             <Edit3 size={14} /> Edit Structure
           </button>
-          <button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate(`/dashboard/payroll/assign/${struct.staffType.toLowerCase()}`)}>
+          <button type="button" className="cms-btn cms-btn-primary" onClick={() => navigate(`/admin-dashboard/payroll/assign/${struct.staffType.toLowerCase()}`)}>
             <UserCheck size={14} /> Assign Staff
           </button>
         </div>
       }
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=structures" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=structures" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Salary Structures
         </Link>
 
@@ -2991,7 +2999,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
         createdNumericId = getNumericApiId(getPayrollField(getPayrollRecord(res), "assignmentId", "id"));
         if (!createdNumericId) {
           setToast("The API accepted the assignment but did not return its ID. Refresh the page to load it from the server.");
-          navigate("/dashboard/payroll?tab=employees");
+          navigate("/admin-dashboard/payroll?tab=employees");
           return;
         }
         createdAsgnId = `asgn-${createdNumericId}`;
@@ -3033,7 +3041,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
     }));
 
     setToast(`Salary assigned successfully to ${chosenStaff.name}!`);
-    navigate("/dashboard/payroll?tab=employees");
+    navigate("/admin-dashboard/payroll?tab=employees");
   };
 
   return (
@@ -3043,7 +3051,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
       breadcrumb={["Home", "Finance", "Payroll", "Assignments", `Assign ${staffType}`]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=employees" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=employees" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Employees
         </Link>
 
@@ -3119,7 +3127,7 @@ function AssignSalaryScreen({ id, staffType = "Teaching", store, setStore, navig
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
-                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/dashboard/payroll?tab=employees")}>Cancel</button>
+                <button type="button" className="cms-btn cms-btn-ghost" onClick={() => navigate("/admin-dashboard/payroll?tab=employees")}>Cancel</button>
                 <button type="submit" disabled={saving} className="cms-btn cms-btn-primary"><UserCheck size={14} /> {saving ? "Saving..." : "Assign Salary"}</button>
               </div>
               {saveError && <p className="salary-field-error" role="alert">{saveError}</p>}
@@ -3161,7 +3169,7 @@ function SalaryAssignmentsScreen({ store, navigate, handleHoldToggle, setToast }
       breadcrumb={["Home", "Finance", "Payroll", "Assignments"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=employees" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=employees" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Payroll
         </Link>
         <PayrollEmployeesTab
@@ -3187,7 +3195,7 @@ function SalaryAssignmentDetailsScreen({ id, store, navigate }) {
       breadcrumb={["Home", "Finance", "Payroll", "Assignments", asgn.staffName]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=employees" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=employees" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Employees
         </Link>
 
@@ -3238,7 +3246,7 @@ function MonthlyPayrollScreen({ store, setStore, navigate, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Process"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=generate" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=generate" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Generate Payslips
         </Link>
         <PayrollGenerateTab store={store} setStore={setStore} navigate={navigate} setToast={setToast} onPreviewPayslip={() => {}} />
@@ -3255,7 +3263,7 @@ function PayslipManagementScreen({ store, navigate }) {
       breadcrumb={["Home", "Finance", "Payroll", "Payslips"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=history" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=history" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Payslip History
         </Link>
         <PayrollHistoryTab store={store} navigate={navigate} setToast={() => {}} onPreviewPayslip={() => {}} />
@@ -3274,10 +3282,10 @@ function PayslipPreviewScreen({ staffId, month, store, navigate, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Payslips", asgn?.staffName]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll?tab=history" className="cms-back-link">
+        <Link to="/admin-dashboard/payroll?tab=history" className="cms-back-link">
           <ArrowLeft size={14} /> Back to Payroll
         </Link>
-        <InteractivePayslipModal record={asgn} onClose={() => navigate("/dashboard/payroll?tab=history")} setToast={setToast} />
+        <InteractivePayslipModal record={asgn} onClose={() => navigate("/admin-dashboard/payroll?tab=history")} setToast={setToast} />
       </main>
     </DashboardLayout>
   );
@@ -3291,7 +3299,7 @@ function SalaryRevisionsScreen({ store, navigate, handleApproveItem }) {
       breadcrumb={["Home", "Finance", "Payroll", "Revisions"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <DataTable
             rows={store.revisions || []}
@@ -3318,7 +3326,7 @@ function BonusIncentivesScreen({ store, navigate, handleApproveItem }) {
       breadcrumb={["Home", "Finance", "Payroll", "Bonus"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <DataTable
             rows={store.bonuses || []}
@@ -3344,7 +3352,7 @@ function SalaryAdvancesScreen({ store, navigate, handleApproveItem }) {
       breadcrumb={["Home", "Finance", "Payroll", "Advances"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <DataTable
             rows={store.loans || []}
@@ -3370,7 +3378,7 @@ function ReimbursementsScreen({ store, navigate, handleApproveItem }) {
       breadcrumb={["Home", "Finance", "Payroll", "Reimbursements"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <DataTable
             rows={store.reimbursements || []}
@@ -3396,7 +3404,7 @@ function PayrollApprovalsScreen({ store, handleApproveItem, navigate }) {
       breadcrumb={["Home", "Finance", "Payroll", "Approvals"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <h3>Pending Approvals Queue</h3>
           <p style={{ color: "var(--cms-muted)" }}>All pending approvals have been processed.</p>
@@ -3414,7 +3422,7 @@ function PayrollReportsScreen({ store, navigate, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Reports"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-kpi-grid">
           <div className="salary-kpi-card" onClick={() => setToast("The supplied Payroll APIs do not include a salary register export endpoint.")}>
             <div className="salary-kpi-icon"><FileSpreadsheet size={20} /></div>
@@ -3442,7 +3450,7 @@ function PayrollSettingsScreen({ store, setStore, navigate, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Settings"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <div className="salary-form-section-title">Statutory Contribution Rules</div>
           <div className="salary-form-grid-3">
@@ -3464,7 +3472,7 @@ function SalaryImportScreen({ navigate, setToast }) {
       breadcrumb={["Home", "Finance", "Payroll", "Import"]}
     >
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">
           <div style={{ textAlign: "center", padding: "40px" }}>
             <Upload size={40} color="var(--cms-primary)" style={{ marginBottom: "12px" }} />
@@ -3484,7 +3492,7 @@ function AddSalaryRevisionScreen({ store, setStore, navigate, setToast }) {
   return (
     <DashboardLayout title="Request Salary Revision" breadcrumb={["Home", "Finance", "Payroll", "Revisions", "New"]}>
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">Feature integrated in Payroll.</div>
       </main>
     </DashboardLayout>
@@ -3495,7 +3503,7 @@ function AddBonusScreen({ store, setStore, navigate, setToast }) {
   return (
     <DashboardLayout title="Add Bonus" breadcrumb={["Home", "Finance", "Payroll", "Bonus", "Add"]}>
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">Feature integrated in Payroll.</div>
       </main>
     </DashboardLayout>
@@ -3506,7 +3514,7 @@ function AddSalaryAdvanceScreen({ store, setStore, navigate, setToast }) {
   return (
     <DashboardLayout title="Request Advance" breadcrumb={["Home", "Finance", "Payroll", "Advances", "New"]}>
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">Feature integrated in Payroll.</div>
       </main>
     </DashboardLayout>
@@ -3517,7 +3525,7 @@ function AddReimbursementScreen({ store, setStore, navigate, setToast }) {
   return (
     <DashboardLayout title="Claim Reimbursement" breadcrumb={["Home", "Finance", "Payroll", "Reimbursements", "New"]}>
       <main className="salary-page-container">
-        <Link to="/dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
+        <Link to="/admin-dashboard/payroll" className="cms-back-link"><ArrowLeft size={14} /> Back to Payroll</Link>
         <div className="salary-card-panel">Feature integrated in Payroll.</div>
       </main>
     </DashboardLayout>

@@ -12,14 +12,17 @@ import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./SectionAllocationPage.css";
 
 const SECTION_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
-function SectionAllocationPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange }) {
+function SectionAllocationPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, unit = "students" }) {
   const [customMode, setCustomMode] = useState(!SECTION_PAGE_SIZE_OPTIONS.includes(pageSize));
   const [customSize, setCustomSize] = useState(String(pageSize));
   const pages = Math.max(1, Math.ceil(totalRows / pageSize));
   const current = Math.min(page, pages);
-  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const navStyle = { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
   const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
   return <nav aria-label="Section allocation pagination" style={navStyle}>
+    <span className="cms-page-info" aria-live="polite" style={{ marginRight: "auto" }}>
+      Showing {totalRows === 0 ? 0 : (current - 1) * pageSize + 1}-{Math.min(current * pageSize, totalRows)} of {totalRows} {unit}
+    </span>
     <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
       <select aria-label="Rows per page" value={customMode || !SECTION_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
         if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
@@ -504,7 +507,7 @@ export default function SectionAllocationPage() {
     finally { setBusy(""); }
   };
   const selectOptions = (items, ids, labels) => items.map((item) => <option key={get(item, ...ids)} value={get(item, ...ids)}>{get(item, ...labels) ?? "Unnamed"}</option>);
-  const tabPath = (tab) => tab === "allocated" ? "/dashboard/section-allocation/allocated" : tab === "roll" ? "/dashboard/section-allocation/roll-numbers" : "/dashboard/section-allocation";
+  const tabPath = (tab) => tab === "allocated" ? "/admin-dashboard/section-allocation/allocated" : tab === "roll" ? "/admin-dashboard/section-allocation/roll-numbers" : "/admin-dashboard/section-allocation";
   const rollPreviewRows = list(get(rollPreview, "students", "Students") ?? rollPreview);
   const rollPreviewDialog = confirming === "roll" ? <Modal title="Review Roll Number Generation" onClose={() => !busy && setConfirming("")} footer={<>
     <button className="cms-btn cms-btn-ghost" disabled={Boolean(busy)} onClick={() => setConfirming("")}>Cancel</button>

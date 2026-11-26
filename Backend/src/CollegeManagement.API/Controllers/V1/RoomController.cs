@@ -21,10 +21,12 @@ namespace CollegeManagement.API.Controllers.V1
     public class RoomController : ControllerBase
     {
         private readonly IRoomService _roomService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
-        public RoomController(IRoomService roomService)
+        public RoomController(IRoomService roomService, IRealtimeEventService? realtimeEventService = null)
         {
             _roomService = roomService;
+            _realtimeEventService = realtimeEventService;
         }
 
         /// <summary>
@@ -92,6 +94,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var result = await _roomService.CreateAsync(dto);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Sections", "create", result.CampusId, result.RoomId.ToString());
                 return CreatedAtAction(nameof(GetById), new { id = result.RoomId }, result);
             }
             catch (InvalidOperationException ex)
@@ -116,6 +119,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
 
                 var result = await _roomService.BulkCreateAsync(request);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Sections", "bulk-create", request.CampusId);
                 return Created(string.Empty, result);
             }
             catch (InvalidOperationException ex)
@@ -165,6 +169,7 @@ namespace CollegeManagement.API.Controllers.V1
 
                 var result = await _roomService.UpdateAsync(id, dto);
                 if (result == null) return NotFound(new { message = $"Room with ID {id} not found." });
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Sections", "update", result.CampusId, result.RoomId.ToString());
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -183,6 +188,7 @@ namespace CollegeManagement.API.Controllers.V1
         {
             var success = await _roomService.DeleteAsync(id);
             if (!success) return NotFound(new { message = $"Room with ID {id} not found." });
+            _ = _realtimeEventService?.PublishDomainChangeAsync("Sections", "delete", null, id.ToString());
             return NoContent();
         }
 

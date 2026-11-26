@@ -1,5 +1,6 @@
 import { SkeletonPage } from "@/shared/components/Skeleton.jsx";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import {
@@ -3381,6 +3382,13 @@ export default function RolesPermissionsPage() {
     selectedRoleIdRef.current = selectedRole?.id;
   }, [selectedRole?.id]);
 
+  useLiveModuleSync("Roles", () => {
+    refreshRoleCounts();
+    if (selectedRole && !dirty && !saving) {
+      loadPermissions(selectedRole);
+    }
+  });
+
   const refreshRoleCounts = useCallback(async () => {
     const requestId = roleCountsRequestRef.current + 1;
     roleCountsRequestRef.current = requestId;
@@ -3718,7 +3726,7 @@ export default function RolesPermissionsPage() {
       backLink={
         <div className="cms-back-nav-bar">
           <Link
-            to="/dashboard/settings"
+            to="/admin-dashboard/settings"
             className="cms-back-link"
             onClick={(event) => { if (!guardDirty()) event.preventDefault(); }}
             style={{

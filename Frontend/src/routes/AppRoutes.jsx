@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from "react";
-import { Navigate, Outlet, Route, Routes, useParams, useSearchParams } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes, useLocation, useParams, useSearchParams } from "react-router-dom";
 import LandingPage from "@/modules/landing/LandingPage.jsx";
 import { PublicRouteFallback, PublicWebsitePage } from "@/modules/landing/PublicWebsitePages.jsx";
 import ExamCellPortalRoutes from "@/modules/exam-cell/ExamCellPortalRoutes.jsx";
@@ -114,9 +114,17 @@ const moduleConfigs = {
 
 const listSlugs = Object.keys(moduleConfigs);
 
+
+function LegacyDashboardRedirect() {
+  const location = useLocation();
+  const subPath = location.pathname.replace(/^\/dashboard\/?/, "");
+  const target = subPath ? `/admin-dashboard/${subPath}` : "/admin-dashboard";
+  return <Navigate to={`${target}${location.search}${location.hash}`} replace />;
+}
+
 function ModuleListRoute({ slug }) {
   const config = moduleConfigs[slug];
-  if (!config) return <Navigate to="/dashboard" replace />;
+  if (!config) return <Navigate to="/admin-dashboard" replace />;
   return <ListPage slug={slug} config={config} />;
 }
 
@@ -138,8 +146,8 @@ function ModuleFormRoute({ slug }) {
   const [searchParams] = useSearchParams();
   const secondary = searchParams.get("section") === "secondary";
   const config = moduleConfigs[slug];
-  if (!config) return <Navigate to="/dashboard" replace />;
-  return <FormPage slug={slug} config={config} id={id || null} secondary={secondary} listPath={`/dashboard/${slug}`} />;
+  if (!config) return <Navigate to="/admin-dashboard" replace />;
+  return <FormPage slug={slug} config={config} id={id || null} secondary={secondary} listPath={`/admin-dashboard/${slug}`} />;
 }
 
 function StudentProfileRoute() {
@@ -228,332 +236,334 @@ export default function AppRoutes() {
       </Route>
 
       <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="payment-gateway" />}>
-        <Route path="/dashboard/settings/payment-gateway" element={<Suspense fallback={<SettingsFallback />}><PaymentGatewayConfigPage /></Suspense>} />
+        <Route path="/admin-dashboard/settings/payment-gateway" element={<Suspense fallback={<SettingsFallback />}><PaymentGatewayConfigPage /></Suspense>} />
       </Route>
 
       <Route element={<ProtectedRoute requireAdmin />}>
-        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/admin-dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<Navigate to="/admin-dashboard" replace />} />
+        <Route path="/dashboard/*" element={<LegacyDashboardRedirect />} />
         <Route element={<ProtectedRoute requiredModule="timetable" />}>
-          <Route path="/dashboard/academic-calendar" element={<AcademicCalendarPage />} />
+          <Route path="/admin-dashboard/academic-calendar" element={<AcademicCalendarPage />} />
         </Route>
         {/* Board & Academic Year */}
         <Route element={<ProtectedRoute requiredModule="board-academic-year" />}>
-          <Route path="/dashboard/board-academic-year" element={<BoardAcademicYearManagementPage />} />
-          <Route path="/dashboard/boards" element={<Navigate to="/dashboard/board-academic-year" replace />} />
-          <Route path="/dashboard/academic-years" element={<Navigate to="/dashboard/board-academic-year" replace />} />
+          <Route path="/admin-dashboard/board-academic-year" element={<BoardAcademicYearManagementPage />} />
+          <Route path="/admin-dashboard/boards" element={<Navigate to="/admin-dashboard/board-academic-year" replace />} />
+          <Route path="/admin-dashboard/academic-years" element={<Navigate to="/admin-dashboard/board-academic-year" replace />} />
         </Route>
         {/* Group Management */}
         <Route element={<ProtectedRoute requiredModule="group-management" />}>
-          <Route path="/dashboard/courses" element={<CourseGroupPage />} />
-          <Route path="/dashboard/courses/add" element={<CourseGroupFormRoute />} />
-          <Route path="/dashboard/courses/:id/edit" element={<CourseGroupFormRoute />} />
+          <Route path="/admin-dashboard/courses" element={<CourseGroupPage />} />
+          <Route path="/admin-dashboard/courses/add" element={<CourseGroupFormRoute />} />
+          <Route path="/admin-dashboard/courses/:id/edit" element={<CourseGroupFormRoute />} />
         </Route>
 
         {/* Subject Management */}
         <Route element={<ProtectedRoute requiredModule="subject-management" />}>
-          <Route path="/dashboard/subjects" element={<SubjectManagementPage />} />
-          <Route path="/dashboard/subjects/add" element={<SubjectManagementPage screen="assign" />} />
-          <Route path="/dashboard/subjects/assign" element={<SubjectManagementPage screen="assign" />} />
+          <Route path="/admin-dashboard/subjects" element={<SubjectManagementPage />} />
+          <Route path="/admin-dashboard/subjects/add" element={<SubjectManagementPage screen="assign" />} />
+          <Route path="/admin-dashboard/subjects/assign" element={<SubjectManagementPage screen="assign" />} />
         </Route>
 
         {/* Section & Room */}
         <Route element={<ProtectedRoute requiredModule="section-room" />}>
-          <Route path="/dashboard/sections" element={<SectionManagementPage />} />
+          <Route path="/admin-dashboard/sections" element={<SectionManagementPage />} />
         </Route>
         {/* Staff Management */}
         <Route element={<ProtectedRoute requiredModule="staff-management" />}>
-          <Route path="/dashboard/faculty" element={<Navigate to="/dashboard/staff" replace />} />
-          <Route path="/dashboard/faculty/add" element={<Navigate to="/dashboard/staff/add" replace />} />
-          <Route path="/dashboard/faculty/:id/edit" element={<Navigate to="/dashboard/staff" replace />} />
-          <Route path="/dashboard/staff" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/list" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/teaching" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/non-teaching" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/pending" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/completed" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/add" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/add-teaching" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/add-non-teaching" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/:id/send-link" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/:id/edit" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/:id/review" element={<StaffManagementPage />} />
-          <Route path="/dashboard/staff/:id" element={<StaffManagementPage />} />
-          <Route path="/dashboard/faculty-allocation" element={<Navigate to="/dashboard/faculty" replace />} />
+          <Route path="/admin-dashboard/faculty" element={<Navigate to="/dashboard/staff" replace />} />
+          <Route path="/admin-dashboard/faculty/add" element={<Navigate to="/dashboard/staff/add" replace />} />
+          <Route path="/admin-dashboard/faculty/:id/edit" element={<Navigate to="/dashboard/staff" replace />} />
+          <Route path="/admin-dashboard/staff" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/list" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/teaching" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/non-teaching" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/pending" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/completed" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/add" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/add-teaching" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/add-non-teaching" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/:id/send-link" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/:id/edit" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/:id/review" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/staff/:id" element={<StaffManagementPage />} />
+          <Route path="/admin-dashboard/faculty-allocation" element={<Navigate to="/dashboard/faculty" replace />} />
         </Route>
 
         {/* Department & Designation */}
         <Route element={<ProtectedRoute requiredModule="department-designation" />}>
-          <Route path="/dashboard/departments" element={<DepartmentManagementPage />} />
-          <Route path="/dashboard/departments/add" element={<MasterFormPage kind="department" />} />
-          <Route path="/dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />
-          <Route path="/dashboard/departments/:id/view" element={<DepartmentDetailsPage />} />
-          <Route path="/dashboard/departments/import" element={<MasterImportPage kind="department" />} />
-          <Route path="/dashboard/designations/add" element={<MasterFormPage kind="designation" />} />
-          <Route path="/dashboard/designations/:id/edit" element={<MasterFormPage kind="designation" />} />
-          <Route path="/dashboard/designations/:id/view" element={<DesignationDetailsPage />} />
-          <Route path="/dashboard/designations/import" element={<MasterImportPage kind="designation" />} />
+          <Route path="/admin-dashboard/departments" element={<DepartmentManagementPage />} />
+          <Route path="/admin-dashboard/departments/add" element={<MasterFormPage kind="department" />} />
+          <Route path="/admin-dashboard/departments/:id/edit" element={<MasterFormPage kind="department" />} />
+          <Route path="/admin-dashboard/departments/:id/view" element={<DepartmentDetailsPage />} />
+          <Route path="/admin-dashboard/departments/import" element={<MasterImportPage kind="department" />} />
+          <Route path="/admin-dashboard/designations/add" element={<MasterFormPage kind="designation" />} />
+          <Route path="/admin-dashboard/designations/:id/edit" element={<MasterFormPage kind="designation" />} />
+          <Route path="/admin-dashboard/designations/:id/view" element={<DesignationDetailsPage />} />
+          <Route path="/admin-dashboard/designations/import" element={<MasterImportPage kind="designation" />} />
         </Route>
 
         {/* Student Admission */}
         <Route element={<ProtectedRoute requiredModule="student-admission" />}>
-          <Route path="/dashboard/admission" element={<StudentAdmissionPage />} />
+          <Route path="/admin-dashboard/admission" element={<StudentAdmissionPage />} />
         </Route>
 
         {/* Section Allocation */}
         <Route element={<ProtectedRoute requiredModule="section-allocation" />}>
-          <Route path="/dashboard/section-allocation" element={<SectionAllocationPage />} />
-          <Route path="/dashboard/section-allocation/allocated" element={<SectionAllocationPage />} />
-          <Route path="/dashboard/section-allocation/roll-numbers" element={<SectionAllocationPage />} />
+          <Route path="/admin-dashboard/section-allocation" element={<SectionAllocationPage />} />
+          <Route path="/admin-dashboard/section-allocation/allocated" element={<SectionAllocationPage />} />
+          <Route path="/admin-dashboard/section-allocation/roll-numbers" element={<SectionAllocationPage />} />
         </Route>
 
         {/* Student Management */}
         <Route element={<ProtectedRoute requiredModule="student-management" />}>
-          <Route path="/dashboard/students" element={<StudentManagementPage />} />
-          <Route path="/dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
+          <Route path="/admin-dashboard/students" element={<StudentManagementPage />} />
+          <Route path="/admin-dashboard/students/:id/enroll" element={<StudentEnrollmentRoute />} />
         </Route>
         {/* Timetable */}
         <Route element={<ProtectedRoute requiredModule="timetable" />}>
-          <Route path="/dashboard/timetable" element={<TimetablePage />} />
-          <Route path="/dashboard/timetable/setup" element={<TimetablePage screen="setup" />} />
-          <Route path="/dashboard/timetable/draft" element={<TimetablePage screen="draft" />} />
-          <Route path="/dashboard/timetable/generate" element={<TimetablePage screen="generate" />} />
-          <Route path="/dashboard/timetable/faculty" element={<Navigate to="/dashboard/timetable/generate" replace />} />
+          <Route path="/admin-dashboard/timetable" element={<TimetablePage />} />
+          <Route path="/admin-dashboard/timetable/setup" element={<TimetablePage screen="setup" />} />
+          <Route path="/admin-dashboard/timetable/draft" element={<TimetablePage screen="draft" />} />
+          <Route path="/admin-dashboard/timetable/generate" element={<TimetablePage screen="generate" />} />
+          <Route path="/admin-dashboard/timetable/faculty" element={<Navigate to="/dashboard/timetable/generate" replace />} />
         </Route>
 
         {/* Holiday Management */}
         <Route element={<ProtectedRoute requiredModule="holiday-management" />}>
-          <Route path="/dashboard/holidays" element={<HolidayManagementPage />} />
+          <Route path="/admin-dashboard/holidays" element={<HolidayManagementPage />} />
         </Route>
 
         {/* Inventory Management */}
         <Route element={<ProtectedRoute requiredModule="inventory-management" />}>
-          <Route path="/dashboard/inventory-management/*" element={<InventoryManagementPage />} />
-          <Route path="/dashboard/inventory-management" element={<InventoryManagementPage />} />
-          <Route path="/dashboard/inventory/*" element={<Navigate to="/dashboard/inventory-management" replace />} />
-          <Route path="/dashboard/inventory" element={<Navigate to="/dashboard/inventory-management" replace />} />
+          <Route path="/admin-dashboard/inventory-management/*" element={<InventoryManagementPage />} />
+          <Route path="/admin-dashboard/inventory-management" element={<InventoryManagementPage />} />
+          <Route path="/admin-dashboard/inventory/*" element={<Navigate to="/dashboard/inventory-management" replace />} />
+          <Route path="/admin-dashboard/inventory" element={<Navigate to="/dashboard/inventory-management" replace />} />
         </Route>
 
         {/* Attendance (Student & Staff) */}
-        <Route path="/dashboard/attendance" element={<Navigate to="/dashboard/attendance/student" replace />} />
+        <Route path="/admin-dashboard/attendance" element={<Navigate to="/dashboard/attendance/student" replace />} />
         <Route element={<ProtectedRoute requiredModule="attendance" />}>
-          <Route path="/dashboard/attendance/student" element={<AttendancePage area="student" />} />
-          <Route path="/dashboard/attendance/student/:studentId/overview" element={<AttendanceOverviewPage />} />
+          <Route path="/admin-dashboard/attendance/student" element={<AttendancePage area="student" />} />
+          <Route path="/admin-dashboard/attendance/student/:studentId/overview" element={<AttendanceOverviewPage />} />
         </Route>
         <Route element={<ProtectedRoute requiredModule="staff-attendance" />}>
-          <Route path="/dashboard/attendance/staff" element={<AttendancePage area="staff" />} />
-          <Route path="/dashboard/attendance/staff/:staffId/overview" element={<AttendanceOverviewPage />} />
+          <Route path="/admin-dashboard/attendance/staff" element={<AttendancePage area="staff" />} />
+          <Route path="/admin-dashboard/attendance/staff/:staffId/overview" element={<AttendanceOverviewPage />} />
         </Route>
         <Route element={<ProtectedRoute requiredModule="attendance" />}>
-          <Route path="/dashboard/attendance/:area" element={<AttendancePage />} />
+          <Route path="/admin-dashboard/attendance/:area" element={<AttendancePage />} />
         </Route>
 
         {/* Staff Leave Management */}
         <Route element={<ProtectedRoute requiredModule="staff-leave-management" />}>
-          <Route path="/dashboard/leave-management" element={<LeaveManagementPage />} />
+          <Route path="/admin-dashboard/leave-management" element={<LeaveManagementPage />} />
         </Route>
 
         {/* Examination */}
         <Route element={<ProtectedRoute requiredModule="examination" />}>
-          <Route path="/dashboard/examinations" element={<ExaminationPage />} />
-          <Route path="/dashboard/examinations/add" element={<ExaminationPage />} />
+          <Route path="/admin-dashboard/examinations" element={<ExaminationPage />} />
+          <Route path="/admin-dashboard/examinations/add" element={<ExaminationPage />} />
         </Route>
 
         {/* Marks Evaluation */}
         <Route element={<ProtectedRoute requiredModule="marks-evaluation" />}>
-          <Route path="/dashboard/marks-entry" element={<MarksEntryPage />} />
+          <Route path="/admin-dashboard/marks-entry" element={<MarksEntryPage />} />
         </Route>
 
         {/* Results */}
         <Route element={<ProtectedRoute requiredModule="results" />}>
-          <Route path="/dashboard/results" element={<ResultProcessingPage />} />
+          <Route path="/admin-dashboard/results" element={<ResultProcessingPage />} />
         </Route>
 
         {/* Promotion */}
         <Route element={<ProtectedRoute requiredModule="promotion" />}>
-          <Route path="/dashboard/promotion" element={<PromotionPage screen="promotion" />} />
-          <Route path="/dashboard/promotions/eligible" element={<PromotionPage screen="promotion" />} />
-          <Route path="/dashboard/promotions/single" element={<PromotionPage screen="single" />} />
-          <Route path="/dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
-          <Route path="/dashboard/promotions/transfer" element={<PromotionPage screen="transfer" />} />
-          <Route path="/dashboard/promotions/history" element={<PromotionPage screen="history" />} />
-          <Route path="/dashboard/promotions/report" element={<PromotionPage screen="report" />} />
+          <Route path="/admin-dashboard/promotion" element={<PromotionPage screen="promotion" />} />
+          <Route path="/admin-dashboard/promotions/eligible" element={<PromotionPage screen="promotion" />} />
+          <Route path="/admin-dashboard/promotions/single" element={<PromotionPage screen="single" />} />
+          <Route path="/admin-dashboard/promotions/allocation" element={<PromotionPage screen="allocation" />} />
+          <Route path="/admin-dashboard/promotions/transfer" element={<PromotionPage screen="transfer" />} />
+          <Route path="/admin-dashboard/promotions/history" element={<PromotionPage screen="history" />} />
+          <Route path="/admin-dashboard/promotions/report" element={<PromotionPage screen="report" />} />
         </Route>
 
         {/* Transport */}
         <Route element={<ProtectedRoute requiredModule="transport" />}>
-          <Route path="/dashboard/transport" element={<TransportRouteEntry />} />
+          <Route path="/admin-dashboard/transport" element={<TransportRouteEntry />} />
         </Route>
 
         {/* Fee Management */}
         <Route element={<ProtectedRoute requiredModule="fee-management" />}>
-          <Route path="/dashboard/fee-structure" element={<FeeManagementPage />} />
+          <Route path="/admin-dashboard/fee-structure" element={<FeeManagementPage />} />
         </Route>
 
         {/* Certificates */}
         <Route element={<ProtectedRoute requiredModule="certificates" />}>
-          <Route path="/dashboard/certificates" element={<CertificatesPage />} />
+          <Route path="/admin-dashboard/certificates" element={<CertificatesPage />} />
         </Route>
 
         {/* Reports */}
         <Route element={<ProtectedRoute requiredModule="reports-analytics" />}>
-          <Route path="/dashboard/reports" element={<ReportsAnalyticsPage />} />
-          <Route path="/dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
+          <Route path="/admin-dashboard/reports" element={<ReportsAnalyticsPage />} />
+          <Route path="/admin-dashboard/reports-analytics" element={<Navigate to="/dashboard/reports" replace />} />
         </Route>
         {/* Enquiry Management Module */}
         <Route element={<ProtectedRoute requiredModule="enquiry-management" />}>
-          <Route path="/dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
-          <Route path="/dashboard/enquiries" element={<Navigate to="/dashboard/enquiry-management" replace />} />
+          <Route path="/admin-dashboard/enquiry-management" element={<Suspense fallback={<SettingsFallback />}><EnquiryManagementPage /></Suspense>} />
+          <Route path="/admin-dashboard/enquiries" element={<Navigate to="/dashboard/enquiry-management" replace />} />
         </Route>
 
         {/* Settings General & Admin Profile */}
         <Route element={<ProtectedRoute requiredModule="settings" />}>
-          <Route path="/dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
-          <Route path="/dashboard/settings/general" element={<SettingsPage />} />
+          <Route path="/admin-dashboard/settings" element={<Suspense fallback={<SettingsFallback />}><SettingsPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/general" element={<SettingsPage />} />
         </Route>
-        <Route path="/dashboard/settings/my-profile" element={<AdminProfilePage />} />
-        <Route path="/dashboard/settings/profile" element={<AdminProfilePage />} />
-        <Route path="/dashboard/my-profile" element={<AdminProfilePage />} />
+        <Route path="/admin-dashboard/settings/my-profile" element={<AdminProfilePage />} />
+        <Route path="/admin-dashboard/settings/profile" element={<AdminProfilePage />} />
+        <Route path="/admin-dashboard/my-profile" element={<AdminProfilePage />} />
 
         {/* Settings Sub-Modules */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="lop-configuration" />}>
-          <Route path="/dashboard/settings/lop-configuration" element={<Suspense fallback={<SettingsFallback />}><LOPConfigurationPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/lop-configuration" element={<Suspense fallback={<SettingsFallback />}><LOPConfigurationPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-images" />}>
-          <Route path="/dashboard/settings/campus-images" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage /></Suspense>} />
-          <Route path="/dashboard/settings/landing-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="landing" /></Suspense>} />
-          <Route path="/dashboard/settings/login-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="login" /></Suspense>} />
+          <Route path="/admin-dashboard/settings/campus-images" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/landing-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="landing" /></Suspense>} />
+          <Route path="/admin-dashboard/settings/login-page" element={<Suspense fallback={<SettingsFallback />}><CampusImagesConfigurationPage page="login" /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="campus-configuration" />}>
-          <Route path="/dashboard/settings/campus-configuration" element={<Suspense fallback={<SettingsFallback />}><CampusConfigurationPage /></Suspense>} />
-          <Route path="/dashboard/settings/campus" element={<CampusConfigurationPage />} />
+          <Route path="/admin-dashboard/settings/campus-configuration" element={<Suspense fallback={<SettingsFallback />}><CampusConfigurationPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/campus" element={<CampusConfigurationPage />} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="audit-logs" />}>
-          <Route path="/dashboard/settings/audit-logs" element={<Suspense fallback={<SettingsFallback />}><AuditLogsPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/audit-logs" element={<Suspense fallback={<SettingsFallback />}><AuditLogsPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="roles-permissions" requiredScreen="role-management" />}>
-          <Route path="/dashboard/settings/roles-permissions" element={<Suspense fallback={<SettingsFallback />}><RolesPermissionsPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/roles-permissions" element={<Suspense fallback={<SettingsFallback />}><RolesPermissionsPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="leave-types" />}>
-          <Route path="/dashboard/settings/leave-types" element={<Suspense fallback={<SettingsFallback />}><LeaveTypesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/leave-types" element={<Suspense fallback={<SettingsFallback />}><LeaveTypesPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="attendance-timing" />}>
-          <Route path="/dashboard/settings/attendance-timing" element={<Suspense fallback={<SettingsFallback />}><AttendanceTimingConfigPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/attendance-timing" element={<Suspense fallback={<SettingsFallback />}><AttendanceTimingConfigPage /></Suspense>} />
         </Route>
 
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="number-series" />}>
-          <Route path="/dashboard/settings/number-series" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="dashboard" /></Suspense>} />
-          <Route path="/dashboard/settings/number_series" element={<Navigate to="/dashboard/settings/number-series" replace />} />
-          <Route path="/dashboard/settings/number-series/:seriesId/edit" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="edit" /></Suspense>} />
-          <Route path="/dashboard/settings/number_series/:seriesId/edit" element={<Navigate to="/dashboard/settings/number-series/:seriesId/edit" replace />} />
-          <Route path="/dashboard/settings/number-series/:seriesId" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="detail" /></Suspense>} />
-          <Route path="/dashboard/settings/number_series/:seriesId" element={<Navigate to="/dashboard/settings/number-series/:seriesId" replace />} />
+          <Route path="/admin-dashboard/settings/number-series" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="dashboard" /></Suspense>} />
+          <Route path="/admin-dashboard/settings/number_series" element={<Navigate to="/dashboard/settings/number-series" replace />} />
+          <Route path="/admin-dashboard/settings/number-series/:seriesId/edit" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="edit" /></Suspense>} />
+          <Route path="/admin-dashboard/settings/number_series/:seriesId/edit" element={<Navigate to="/dashboard/settings/number-series/:seriesId/edit" replace />} />
+          <Route path="/admin-dashboard/settings/number-series/:seriesId" element={<Suspense fallback={<SettingsFallback />}><NumberSeriesPage mode="detail" /></Suspense>} />
+          <Route path="/admin-dashboard/settings/number_series/:seriesId" element={<Navigate to="/dashboard/settings/number-series/:seriesId" replace />} />
         </Route>
 
         {/* Templates Management Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="templates" />}>
-          <Route path="/dashboard/settings/templates" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
-          <Route path="/dashboard/settings/templates/certificates/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
-          <Route path="/dashboard/settings/templates/reports/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
-          <Route path="/dashboard/settings/templates/letters/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
-          <Route path="/dashboard/settings/templates/upload" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
-          <Route path="/dashboard/settings/templates/add" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
-          <Route path="/dashboard/settings/templates/:id/preview" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates/certificates/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates/reports/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates/letters/:id/edit" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates/upload" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates/add" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/templates/:id/preview" element={<Suspense fallback={<SettingsFallback />}><TemplatesPage /></Suspense>} />
         </Route>
 
         {/* Offer Letter Configuration Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="offer-letter-configuration" />}>
-          <Route path="/dashboard/settings/offer-letter-configuration" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
-          <Route path="/dashboard/settings/offer-letter" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/offer-letter-configuration" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/offer-letter" element={<Suspense fallback={<SettingsFallback />}><OfferLetterConfigurationPage /></Suspense>} />
         </Route>
 
         {/* Credentials Generator Module Routes */}
         <Route element={<ProtectedRoute requiredModule="settings" requiredScreen="credentials" />}>
-          <Route path="/dashboard/settings/credentials" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
-          <Route path="/dashboard/settings/credentials/faculty" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
-          <Route path="/dashboard/settings/credentials/students" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
-          <Route path="/dashboard/settings/credentials/history" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
-          <Route path="/dashboard/settings/credentials/settings" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
-          <Route path="/dashboard/settings/credentials/faculty/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
-          <Route path="/dashboard/settings/credentials/students/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials/faculty" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials/students" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials/history" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials/settings" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials/faculty/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
+          <Route path="/admin-dashboard/settings/credentials/students/generate" element={<Suspense fallback={<SettingsFallback />}><CredentialsGeneratorPage /></Suspense>} />
         </Route>
 
         {/* Payroll (Finance) Canonical Routes */}
         <Route element={<ProtectedRoute requiredModule="payroll" />}>
-          <Route path="/dashboard/payroll" element={<PayrollPage mode="payroll" />} />
-          <Route path="/dashboard/payroll/employees" element={<PayrollPage mode="payroll-employees" />} />
-          <Route path="/dashboard/payroll/structures" element={<PayrollPage mode="structures-list" />} />
-          <Route path="/dashboard/payroll/structures/add" element={<PayrollPage mode="structures-add" />} />
-          <Route path="/dashboard/payroll/structures/:id" element={<PayrollPage mode="structures-view" />} />
-          <Route path="/dashboard/payroll/structures/:id/edit" element={<PayrollPage mode="structures-edit" />} />
-          <Route path="/dashboard/payroll/generate" element={<PayrollPage mode="payroll-generate" />} />
-          <Route path="/dashboard/payroll/history" element={<PayrollPage mode="payroll-history" />} />
-          <Route path="/dashboard/payroll/assignments" element={<PayrollPage mode="assignments-list" />} />
-          <Route path="/dashboard/payroll/assign/teaching" element={<PayrollPage mode="assign-teaching" />} />
-          <Route path="/dashboard/payroll/assign/non-teaching" element={<PayrollPage mode="assign-non-teaching" />} />
-          <Route path="/dashboard/payroll/assignments/:id" element={<PayrollPage mode="assignments-view" />} />
-          <Route path="/dashboard/payroll/assignments/:id/edit" element={<PayrollPage mode="assignments-edit" />} />
-          <Route path="/dashboard/payroll/process" element={<PayrollPage mode="payroll-list" />} />
-          <Route path="/dashboard/payroll/month/:month" element={<PayrollPage mode="payroll-month-view" />} />
-          <Route path="/dashboard/payroll/month/:month/:staffId" element={<PayrollPage mode="payroll-indiv-view" />} />
-          <Route path="/dashboard/payroll/payslips" element={<PayrollPage mode="payslips-list" />} />
-          <Route path="/dashboard/payroll/payslips/:staffId/:month" element={<PayrollPage mode="payslip-preview" />} />
-          <Route path="/dashboard/payroll/revisions" element={<PayrollPage mode="revisions-list" />} />
-          <Route path="/dashboard/payroll/revisions/add" element={<PayrollPage mode="revisions-add" />} />
-          <Route path="/dashboard/payroll/attendance-impact" element={<PayrollPage mode="attendance-impact" />} />
-          <Route path="/dashboard/payroll/bonus" element={<PayrollPage mode="bonus-list" />} />
-          <Route path="/dashboard/payroll/bonus/add" element={<PayrollPage mode="bonus-add" />} />
-          <Route path="/dashboard/payroll/overtime" element={<PayrollPage mode="overtime-list" />} />
-          <Route path="/dashboard/payroll/advances" element={<PayrollPage mode="advances-list" />} />
-          <Route path="/dashboard/payroll/advances/add" element={<PayrollPage mode="advances-add" />} />
-          <Route path="/dashboard/payroll/reimbursements" element={<PayrollPage mode="reimbursements-list" />} />
-          <Route path="/dashboard/payroll/reimbursements/add" element={<PayrollPage mode="reimbursements-add" />} />
-          <Route path="/dashboard/payroll/approvals" element={<PayrollPage mode="approvals-list" />} />
-          <Route path="/dashboard/payroll/reports" element={<PayrollPage mode="reports" />} />
-          <Route path="/dashboard/payroll/settings" element={<PayrollPage mode="settings" />} />
-          <Route path="/dashboard/payroll/import" element={<PayrollPage mode="import" />} />
+          <Route path="/admin-dashboard/payroll" element={<PayrollPage mode="payroll" />} />
+          <Route path="/admin-dashboard/payroll/employees" element={<PayrollPage mode="payroll-employees" />} />
+          <Route path="/admin-dashboard/payroll/structures" element={<PayrollPage mode="structures-list" />} />
+          <Route path="/admin-dashboard/payroll/structures/add" element={<PayrollPage mode="structures-add" />} />
+          <Route path="/admin-dashboard/payroll/structures/:id" element={<PayrollPage mode="structures-view" />} />
+          <Route path="/admin-dashboard/payroll/structures/:id/edit" element={<PayrollPage mode="structures-edit" />} />
+          <Route path="/admin-dashboard/payroll/generate" element={<PayrollPage mode="payroll-generate" />} />
+          <Route path="/admin-dashboard/payroll/history" element={<PayrollPage mode="payroll-history" />} />
+          <Route path="/admin-dashboard/payroll/assignments" element={<PayrollPage mode="assignments-list" />} />
+          <Route path="/admin-dashboard/payroll/assign/teaching" element={<PayrollPage mode="assign-teaching" />} />
+          <Route path="/admin-dashboard/payroll/assign/non-teaching" element={<PayrollPage mode="assign-non-teaching" />} />
+          <Route path="/admin-dashboard/payroll/assignments/:id" element={<PayrollPage mode="assignments-view" />} />
+          <Route path="/admin-dashboard/payroll/assignments/:id/edit" element={<PayrollPage mode="assignments-edit" />} />
+          <Route path="/admin-dashboard/payroll/process" element={<PayrollPage mode="payroll-list" />} />
+          <Route path="/admin-dashboard/payroll/month/:month" element={<PayrollPage mode="payroll-month-view" />} />
+          <Route path="/admin-dashboard/payroll/month/:month/:staffId" element={<PayrollPage mode="payroll-indiv-view" />} />
+          <Route path="/admin-dashboard/payroll/payslips" element={<PayrollPage mode="payslips-list" />} />
+          <Route path="/admin-dashboard/payroll/payslips/:staffId/:month" element={<PayrollPage mode="payslip-preview" />} />
+          <Route path="/admin-dashboard/payroll/revisions" element={<PayrollPage mode="revisions-list" />} />
+          <Route path="/admin-dashboard/payroll/revisions/add" element={<PayrollPage mode="revisions-add" />} />
+          <Route path="/admin-dashboard/payroll/attendance-impact" element={<PayrollPage mode="attendance-impact" />} />
+          <Route path="/admin-dashboard/payroll/bonus" element={<PayrollPage mode="bonus-list" />} />
+          <Route path="/admin-dashboard/payroll/bonus/add" element={<PayrollPage mode="bonus-add" />} />
+          <Route path="/admin-dashboard/payroll/overtime" element={<PayrollPage mode="overtime-list" />} />
+          <Route path="/admin-dashboard/payroll/advances" element={<PayrollPage mode="advances-list" />} />
+          <Route path="/admin-dashboard/payroll/advances/add" element={<PayrollPage mode="advances-add" />} />
+          <Route path="/admin-dashboard/payroll/reimbursements" element={<PayrollPage mode="reimbursements-list" />} />
+          <Route path="/admin-dashboard/payroll/reimbursements/add" element={<PayrollPage mode="reimbursements-add" />} />
+          <Route path="/admin-dashboard/payroll/approvals" element={<PayrollPage mode="approvals-list" />} />
+          <Route path="/admin-dashboard/payroll/reports" element={<PayrollPage mode="reports" />} />
+          <Route path="/admin-dashboard/payroll/settings" element={<PayrollPage mode="settings" />} />
+          <Route path="/admin-dashboard/payroll/import" element={<PayrollPage mode="import" />} />
           {/* Backward-Compatible Staff Salary Aliases */}
-          <Route path="/dashboard/staff-salary" element={<PayrollPage mode="payroll" />} />
-          <Route path="/dashboard/staff-salary/structures" element={<PayrollPage mode="structures-list" />} />
-          <Route path="/dashboard/staff-salary/structures/add" element={<PayrollPage mode="structures-add" />} />
-          <Route path="/dashboard/staff-salary/structures/:id" element={<PayrollPage mode="structures-view" />} />
-          <Route path="/dashboard/staff-salary/structures/:id/edit" element={<PayrollPage mode="structures-edit" />} />
-          <Route path="/dashboard/staff-salary/assignments" element={<PayrollPage mode="assignments-list" />} />
-          <Route path="/dashboard/staff-salary/assign/teaching" element={<PayrollPage mode="assign-teaching" />} />
-          <Route path="/dashboard/staff-salary/assign/non-teaching" element={<PayrollPage mode="assign-non-teaching" />} />
-          <Route path="/dashboard/staff-salary/assignments/:id" element={<PayrollPage mode="assignments-view" />} />
-          <Route path="/dashboard/staff-salary/assignments/:id/edit" element={<PayrollPage mode="assignments-edit" />} />
-          <Route path="/dashboard/staff-salary/payroll" element={<PayrollPage mode="payroll-list" />} />
-          <Route path="/dashboard/staff-salary/payroll/:month" element={<PayrollPage mode="payroll-month-view" />} />
-          <Route path="/dashboard/staff-salary/payroll/:month/:staffId" element={<PayrollPage mode="payroll-indiv-view" />} />
-          <Route path="/dashboard/staff-salary/payslips" element={<PayrollPage mode="payslips-list" />} />
-          <Route path="/dashboard/staff-salary/payslips/:staffId/:month" element={<PayrollPage mode="payslip-preview" />} />
-          <Route path="/dashboard/staff-salary/revisions" element={<PayrollPage mode="revisions-list" />} />
-          <Route path="/dashboard/staff-salary/revisions/add" element={<PayrollPage mode="revisions-add" />} />
-          <Route path="/dashboard/staff-salary/attendance-impact" element={<PayrollPage mode="attendance-impact" />} />
-          <Route path="/dashboard/staff-salary/bonus" element={<PayrollPage mode="bonus-list" />} />
-          <Route path="/dashboard/staff-salary/bonus/add" element={<PayrollPage mode="bonus-add" />} />
-          <Route path="/dashboard/staff-salary/overtime" element={<PayrollPage mode="overtime-list" />} />
-          <Route path="/dashboard/staff-salary/advances" element={<PayrollPage mode="advances-list" />} />
-          <Route path="/dashboard/staff-salary/advances/add" element={<PayrollPage mode="advances-add" />} />
-          <Route path="/dashboard/staff-salary/reimbursements" element={<PayrollPage mode="reimbursements-list" />} />
-          <Route path="/dashboard/staff-salary/reimbursements/add" element={<PayrollPage mode="reimbursements-add" />} />
-          <Route path="/dashboard/staff-salary/approvals" element={<PayrollPage mode="approvals-list" />} />
-          <Route path="/dashboard/staff-salary/reports" element={<PayrollPage mode="reports" />} />
-          <Route path="/dashboard/staff-salary/settings" element={<PayrollPage mode="settings" />} />
-          <Route path="/dashboard/staff-salary/import" element={<PayrollPage mode="import" />} />
+          <Route path="/admin-dashboard/staff-salary" element={<PayrollPage mode="payroll" />} />
+          <Route path="/admin-dashboard/staff-salary/structures" element={<PayrollPage mode="structures-list" />} />
+          <Route path="/admin-dashboard/staff-salary/structures/add" element={<PayrollPage mode="structures-add" />} />
+          <Route path="/admin-dashboard/staff-salary/structures/:id" element={<PayrollPage mode="structures-view" />} />
+          <Route path="/admin-dashboard/staff-salary/structures/:id/edit" element={<PayrollPage mode="structures-edit" />} />
+          <Route path="/admin-dashboard/staff-salary/assignments" element={<PayrollPage mode="assignments-list" />} />
+          <Route path="/admin-dashboard/staff-salary/assign/teaching" element={<PayrollPage mode="assign-teaching" />} />
+          <Route path="/admin-dashboard/staff-salary/assign/non-teaching" element={<PayrollPage mode="assign-non-teaching" />} />
+          <Route path="/admin-dashboard/staff-salary/assignments/:id" element={<PayrollPage mode="assignments-view" />} />
+          <Route path="/admin-dashboard/staff-salary/assignments/:id/edit" element={<PayrollPage mode="assignments-edit" />} />
+          <Route path="/admin-dashboard/staff-salary/payroll" element={<PayrollPage mode="payroll-list" />} />
+          <Route path="/admin-dashboard/staff-salary/payroll/:month" element={<PayrollPage mode="payroll-month-view" />} />
+          <Route path="/admin-dashboard/staff-salary/payroll/:month/:staffId" element={<PayrollPage mode="payroll-indiv-view" />} />
+          <Route path="/admin-dashboard/staff-salary/payslips" element={<PayrollPage mode="payslips-list" />} />
+          <Route path="/admin-dashboard/staff-salary/payslips/:staffId/:month" element={<PayrollPage mode="payslip-preview" />} />
+          <Route path="/admin-dashboard/staff-salary/revisions" element={<PayrollPage mode="revisions-list" />} />
+          <Route path="/admin-dashboard/staff-salary/revisions/add" element={<PayrollPage mode="revisions-add" />} />
+          <Route path="/admin-dashboard/staff-salary/attendance-impact" element={<PayrollPage mode="attendance-impact" />} />
+          <Route path="/admin-dashboard/staff-salary/bonus" element={<PayrollPage mode="bonus-list" />} />
+          <Route path="/admin-dashboard/staff-salary/bonus/add" element={<PayrollPage mode="bonus-add" />} />
+          <Route path="/admin-dashboard/staff-salary/overtime" element={<PayrollPage mode="overtime-list" />} />
+          <Route path="/admin-dashboard/staff-salary/advances" element={<PayrollPage mode="advances-list" />} />
+          <Route path="/admin-dashboard/staff-salary/advances/add" element={<PayrollPage mode="advances-add" />} />
+          <Route path="/admin-dashboard/staff-salary/reimbursements" element={<PayrollPage mode="reimbursements-list" />} />
+          <Route path="/admin-dashboard/staff-salary/reimbursements/add" element={<PayrollPage mode="reimbursements-add" />} />
+          <Route path="/admin-dashboard/staff-salary/approvals" element={<PayrollPage mode="approvals-list" />} />
+          <Route path="/admin-dashboard/staff-salary/reports" element={<PayrollPage mode="reports" />} />
+          <Route path="/admin-dashboard/staff-salary/settings" element={<PayrollPage mode="settings" />} />
+          <Route path="/admin-dashboard/staff-salary/import" element={<PayrollPage mode="import" />} />
         </Route>
 
         {/* Finance Reimbursement Routes */}
         <Route element={<ProtectedRoute requiredModule="reimbursement" />}>
-          <Route path="/dashboard/reimbursement" element={<ReimbursementPage />} />
-          <Route path="/dashboard/finance/reimbursement" element={<ReimbursementPage />} />
-          <Route path="/dashboard/finance/reimbursements" element={<ReimbursementPage />} />
+          <Route path="/admin-dashboard/reimbursement" element={<ReimbursementPage />} />
+          <Route path="/admin-dashboard/finance/reimbursement" element={<ReimbursementPage />} />
+          <Route path="/admin-dashboard/finance/reimbursements" element={<ReimbursementPage />} />
         </Route>
 
         {/* Hostel Management Module Routes */}
@@ -565,19 +575,19 @@ export default function AppRoutes() {
           <Route path="/hostel/attendance" element={<HostelAttendanceRegister />} />
           <Route path="/hostel/reports" element={<HostelReports />} />
 
-          <Route path="/dashboard/hostel" element={<HostelDashboard />} />
-          <Route path="/dashboard/hostel/master" element={<HostelMasterSetup />} />
-          <Route path="/dashboard/hostel/master-setup" element={<HostelMasterSetup />} />
-          <Route path="/dashboard/hostel/students" element={<HostelStudentManagement />} />
-          <Route path="/dashboard/hostel/student-allocation" element={<HostelStudentManagement />} />
-          <Route path="/dashboard/hostel/attendance" element={<HostelAttendanceRegister />} />
-          <Route path="/dashboard/hostel/reports" element={<HostelReports />} />
+          <Route path="/admin-dashboard/hostel" element={<HostelDashboard />} />
+          <Route path="/admin-dashboard/hostel/master" element={<HostelMasterSetup />} />
+          <Route path="/admin-dashboard/hostel/master-setup" element={<HostelMasterSetup />} />
+          <Route path="/admin-dashboard/hostel/students" element={<HostelStudentManagement />} />
+          <Route path="/admin-dashboard/hostel/student-allocation" element={<HostelStudentManagement />} />
+          <Route path="/admin-dashboard/hostel/attendance" element={<HostelAttendanceRegister />} />
+          <Route path="/admin-dashboard/hostel/reports" element={<HostelReports />} />
         </Route>
 
-        {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
-        {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
+        {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-add`} path={`/admin-dashboard/${slug}/add`} element={<ModuleFormRoute slug={slug} />} />)}
+        {listSlugs.filter((slug) => !["faculty", "courses", "subjects"].includes(slug)).map((slug) => <Route key={`${slug}-edit`} path={`/admin-dashboard/${slug}/:id/edit`} element={<ModuleFormRoute slug={slug} />} />)}
         <Route element={<ProtectedRoute requiredModule="student-management" />}>
-          <Route path="/dashboard/students/:id" element={<StudentProfileRoute />} />
+          <Route path="/admin-dashboard/students/:id" element={<StudentProfileRoute />} />
         </Route>
       </Route>
 

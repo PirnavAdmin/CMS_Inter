@@ -1,3 +1,4 @@
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { Skeleton } from "@/shared/components/Skeleton.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -1393,7 +1394,7 @@ function Structures({ notify, initial }) {
   <div className="ttm-period-structure-toolbar">
     <Link
       className="ttm-back-link"
-      to={timetableContextUrl("/dashboard/timetable", initial, searchParams)}
+      to={timetableContextUrl("/admin-dashboard/timetable", initial, searchParams)}
       state={{ timetableContext: initial }}
     >
       <ArrowLeft size={15} />
@@ -1513,7 +1514,7 @@ function Structures({ notify, initial }) {
           initial={initial}
           assigned={(context) => {
             notify("Period structure assigned.");
-            navigate(timetableContextUrl("/dashboard/timetable/generate", context, searchParams), {
+            navigate(timetableContextUrl("/admin-dashboard/timetable/generate", context, searchParams), {
               state: { timetableContext: { ...context, periodStructureId: structureId(item) } },
             });
           }}
@@ -1840,7 +1841,7 @@ function Generate({ notify, initial }) {
     <Page
       title="Generate Timetable"
       subtitle="Generate a conflict-free theory timetable in DRAFT state."
-      action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Create Period Structure</Link></div>}
+      action={<div className="ttm-page-actions"><Link className="cms-btn cms-btn-ghost" to={timetableContextUrl("/admin-dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Create Period Structure</Link></div>}
     >
       <section className="ttm-card ttm-generate-card">
         <Context state={state} section={false} hideGlobalContext disabled={busy} />
@@ -1917,7 +1918,7 @@ function Generate({ notify, initial }) {
                         </div>
                         {canView ? (
                           <Link
-                            to={timetableContextUrl("/dashboard/timetable/draft", context, location.search)}
+                            to={timetableContextUrl("/admin-dashboard/timetable/draft", context, location.search)}
                             state={{ timetableContext: context }}
                           >
                             View timetable
@@ -2688,7 +2689,7 @@ function Draft({ initial, notify }) {
       subtitle="Review, validate, approve and publish the section timetable."
       pageClassName="ttm-draft-page"
     >
-        <Link className="cms-back-link" to={timetableContextUrl("/dashboard/timetable", value, searchParams)} state={{ timetableContext: value }}>
+        <Link className="cms-back-link" to={timetableContextUrl("/admin-dashboard/timetable", value, searchParams)} state={{ timetableContext: value }}>
         <ArrowLeft size={15} /> Back to Timetable
       </Link>
       <section className="ttm-card">
@@ -2759,7 +2760,7 @@ function Draft({ initial, notify }) {
                     if (ok) {
                       setWorkflowStatus("published");
                       setPublishedFilter("true");
-                      navigate("/dashboard/timetable", {
+                      navigate("/admin-dashboard/timetable", {
                         replace: true,
                         state: { timetableContext: { ...value, isPublished: true } },
                       });
@@ -3058,7 +3059,7 @@ function MainTimetable({ notify }) {
         notify("No generated timetable was found for the selected context.");
         return;
       }
-      navigate(timetableContextUrl("/dashboard/timetable/draft", value, location.search), { state: { timetableContext: { ...value, isPublished: pick(latest, "isPublished", "IsPublished"), workingDays: latest.workingDays ?? latest.WorkingDays } } });
+      navigate(timetableContextUrl("/admin-dashboard/timetable/draft", value, location.search), { state: { timetableContext: { ...value, isPublished: pick(latest, "isPublished", "IsPublished"), workingDays: latest.workingDays ?? latest.WorkingDays } } });
     } catch (error) {
       notify(getApiErrorMessage(error));
     } finally {
@@ -3081,7 +3082,7 @@ function MainTimetable({ notify }) {
           <dl>{[["Academic level", "academicLevelId", state.data.levels], ["Group", "groupId", state.data.groups], ["Programme", "programId", state.data.programs], ["Section", "sectionId", state.data.sections]].map(([label, key, rows]) => <div key={key}><dt>{label}</dt><dd>{rows.find((row) => String(row.id) === String(value[key]))?.name || "Not selected"}</dd></div>)}</dl>
           {setupDisabled
             ? <button type="button" disabled>Configure timetable →</button>
-            : <Link to={timetableContextUrl("/dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Configure timetable →</Link>}
+            : <Link to={timetableContextUrl("/admin-dashboard/timetable/setup", value, location.search)} state={{ timetableContext: value }}>Configure timetable →</Link>}
           {currentAvailability.status === "error" ? <small className="ttm-card-availability-error" role="alert">Availability check failed: {currentAvailability.error}</small> : null}
           {currentAvailability.status === "unavailable" ? <small className="ttm-card-availability" role="status">No timetable exists for this context.</small> : null}
         </article>
@@ -3154,7 +3155,7 @@ function LatestDraft({ notify }) {
     return () => { active = false; };
   }, [notify, selectedCampusId]);
   if (state.loading) return <Page title="Generated Timetable" subtitle="Review generated timetables."><section className="ttm-card"><SkeletonTable columns={9} rows={6} /></section></Page>;
-  if (!state.context?.sectionId) return <Page title="Generated Timetable" subtitle="Review generated timetables."><section className="ttm-card"><p className="ttm-empty">No generated timetable available.</p><div className="ttm-screen-actions"><Link className="cms-btn cms-btn-primary" to="/dashboard/timetable/generate">Generate Timetable</Link></div></section></Page>;
+  if (!state.context?.sectionId) return <Page title="Generated Timetable" subtitle="Review generated timetables."><section className="ttm-card"><p className="ttm-empty">No generated timetable available.</p><div className="ttm-screen-actions"><Link className="cms-btn cms-btn-primary" to="/admin-dashboard/timetable/generate">Generate Timetable</Link></div></section></Page>;
   return <Draft initial={state.context} notify={notify} />;
 }
 export default function TimetablePage({ screen = "latest" }) {
@@ -3171,12 +3172,20 @@ export default function TimetablePage({ screen = "latest" }) {
     return context;
   }, [location.state, searchParams]);
   const { selectedCampusId } = useCampusContext();
+  const [syncKey, setSyncKey] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Timetable",
+    campusId: selectedCampusId,
+    onRefresh: () => setSyncKey((k) => k + 1),
+  });
+
   const [toast, setToast] = useState({ message: "", type: "success" });
   const notify = useCallback((message, type = "success") => setToast({ message, type }), []);
   // A timetable view keeps several dependent lookups (rooms, periods,
   // sections and subjects). Remount it when the global campus changes so no
   // lookup or generated timetable state is retained from the previous campus.
-  const campusViewKey = `campus-${selectedCampusId || "none"}`;
+  const campusViewKey = `campus-${selectedCampusId || "none"}-sync-${syncKey}`;
   const view =
     screen === "latest" ? (
       <MainTimetable key={campusViewKey} notify={notify} />

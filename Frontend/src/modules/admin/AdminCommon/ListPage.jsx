@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
 import DataTable from "@/shared/components/DataTable.jsx";
@@ -75,6 +76,11 @@ function Section({ slug, config, secondary, onToast, heading, onView }) {
   const [filterFields, setFilterFields] = useState(sectionConfig.filters || []);
   const [statusFilter, setStatusFilter] = useState(null);
   const navigate = useNavigate();
+
+  const liveModuleName = sectionConfig?.module || (slug === "academic-years" ? "AcademicYears" : slug === "boards" ? "Boards" : null);
+  useLiveModuleSync(liveModuleName, () => {
+    loadRows(search, filters);
+  }, { enabled: Boolean(liveModuleName && usesApi) });
 
   const loadRows = useCallback(async (nextSearch = "", nextFilters = {}) => {
     if (!usesApi) return;
@@ -200,8 +206,8 @@ function Section({ slug, config, secondary, onToast, heading, onView }) {
         loading={loading}
         addLabel={sectionConfig.addLabel}
         onSearchChange={usesApi ? handleSearch : null}
-        onAdd={sectionConfig.allowAdd === false ? null : () => navigate(`/dashboard/${slug}/add${sectionQuery}`)}
-        onEdit={(row) => navigate(`/dashboard/${slug}/${row.id}/edit${sectionQuery}`)}
+        onAdd={sectionConfig.allowAdd === false ? null : () => navigate(`/admin-dashboard/${slug}/add${sectionQuery}`)}
+        onEdit={(row) => navigate(`/admin-dashboard/${slug}/${row.id}/edit${sectionQuery}`)}
         onDelete={(row) => setDeleting(row)}
         onView={onView ? (row) => onView(row) : (row) => setViewing(row)}
         paginationCurrentOnly={sectionConfig.pagination?.currentOnly}
@@ -237,7 +243,7 @@ export default function ListPage({ slug, config }) {
 
   return (
     <DashboardLayout title={config.title} subtitle={config.subtitle} breadcrumb={config.breadcrumb}>
-      <Section slug={slug} config={config} secondary={false} onToast={setToast} onView={slug === "students" ? (row) => navigate(`/dashboard/students/${row.id}`) : null} />
+      <Section slug={slug} config={config} secondary={false} onToast={setToast} onView={slug === "students" ? (row) => navigate(`/admin-dashboard/students/${row.id}`) : null} />
       {config.secondary ? <Section slug={slug} config={config} secondary onToast={setToast} heading={config.secondary.title} /> : null}
       <Toast message={toast} onClose={() => setToast("")} />
     </DashboardLayout>

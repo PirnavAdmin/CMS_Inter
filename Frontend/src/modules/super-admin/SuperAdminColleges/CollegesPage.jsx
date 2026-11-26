@@ -5,6 +5,7 @@ import SuperAdminPagination from "../components/SuperAdminPagination.jsx";
 import { useSuperAdmin } from "../SuperAdminProvider.jsx";
 import superAdminApi from "@/api/superAdminApi.js";
 import { activeAccountCount } from "../superAdminPreview.js";
+import { formatProperCollegeName, validateCollegeNameCapitalization } from "../superAdminValidation.js";
 import CollegeDetailDrawer from "./CollegeDetailDrawer.jsx";
 import ThreeDIcon from "@/components/common/ThreeDIcon.jsx";
 import {
@@ -216,9 +217,14 @@ export default function CollegesPage() {
   const saveEdit = async (e) => {
     e.preventDefault();
     setEditError("");
+    const capErr = validateCollegeNameCapitalization(editCollege.name);
+    if (capErr) {
+      setEditError(capErr);
+      return;
+    }
     const cid = editCollege.collegeId || editCollege.id;
     const payload = {
-      name: editCollege.name,
+      name: formatProperCollegeName((editCollege.name || "").trim()),
       phone: editCollege.phone || editCollege.contact || "",
       address: editCollege.address || "",
       logo: editCollege.logo || editCollege.logoUrl || "",
@@ -893,6 +899,7 @@ export default function CollegesPage() {
                   required
                   value={editCollege.name || ""}
                   onChange={(e) => setEditCollege({ ...editCollege, name: e.target.value })}
+                  onBlur={() => setEditCollege((prev) => ({ ...prev, name: formatProperCollegeName(prev.name || "") }))}
                 />
               </label>
 

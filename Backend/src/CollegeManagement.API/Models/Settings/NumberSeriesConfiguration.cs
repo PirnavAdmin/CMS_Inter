@@ -11,6 +11,8 @@ namespace CollegeManagement.API.Models.Settings
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
         public int Id { get; set; }
 
+        public int CollegeId { get; set; } = 1;
+
         [Required]
         [MaxLength(50)]
         public string SeriesCode { get; set; } = string.Empty;
@@ -45,5 +47,3 @@ namespace CollegeManagement.API.Models.Settings
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }
 }
-
-

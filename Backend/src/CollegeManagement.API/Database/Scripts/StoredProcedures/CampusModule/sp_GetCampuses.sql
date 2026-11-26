@@ -10,6 +10,7 @@ CREATE PROCEDURE `sp_GetCampuses`(
 BEGIN
     SELECT 
         c.`CampusId`,
+        c.`CollegeId`,
         c.`CampusName`,
         c.`CampusCode`,
         c.`Address`,

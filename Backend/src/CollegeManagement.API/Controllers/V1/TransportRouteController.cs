@@ -15,11 +15,14 @@ namespace CollegeManagement.API.Controllers
     public class TransportRoutesController : ControllerBase
     {
         private readonly ITransportRouteService _service;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public TransportRoutesController(
-            ITransportRouteService service)
+            ITransportRouteService service,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
+            _realtimeEventService = realtimeEventService;
         }
 
         [HttpGet]
@@ -141,6 +144,7 @@ namespace CollegeManagement.API.Controllers
                 }
 
                 long routeId = await _service.CreateAsync(dto, userId: null);
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "create", dto.CampusId, routeId.ToString());
                 TransportRouteDto? result = await _service.GetByIdAsync(routeId);
 
                 return Ok(new
@@ -179,6 +183,7 @@ namespace CollegeManagement.API.Controllers
                     bool updated = await _service.UpdateAsync(existing.RouteId, dto, userId: null);
                     if (updated)
                     {
+                        _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "update", dto.CampusId, existing.RouteId.ToString());
                         var updatedDto = await _service.GetByIdAsync(existing.RouteId);
                         return Ok(new
                         {
@@ -230,6 +235,7 @@ namespace CollegeManagement.API.Controllers
                 if (existing != null)
                 {
                     await _service.DeleteAsync(existing.RouteId, userId: null);
+                    _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "delete", null, existing.RouteId.ToString());
                 }
                 else if (long.TryParse(routeIdOrCode, out long parsedId))
                 {

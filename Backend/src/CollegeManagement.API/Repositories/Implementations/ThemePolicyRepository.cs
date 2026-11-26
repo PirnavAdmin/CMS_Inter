@@ -6,6 +6,7 @@ using CollegeManagement.API.Data;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -14,12 +15,22 @@ namespace CollegeManagement.API.Repositories.Implementations
     {
         private readonly AppDbContext _context;
         private readonly ILogger<ThemePolicyRepository> _logger;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
         private static bool _tableEnsured = false;
 
-        public ThemePolicyRepository(AppDbContext context, ILogger<ThemePolicyRepository> logger)
+        public ThemePolicyRepository(AppDbContext context, ILogger<ThemePolicyRepository> logger, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
             _logger = logger;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync()
@@ -112,6 +123,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 parameters.Add("p_AdminCustomColor", adminCustomColor);
                 parameters.Add("p_AdminDarkMode", adminDarkMode);
                 parameters.Add("p_UpdatedBy", updatedBy);
+                parameters.Add("p_CollegeId", ResolveCollegeId() ?? 1);
 
                 try
                 {

@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -28,17 +29,34 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly IJwtTokenHelper _jwtTokenHelper;
         private readonly IStaffAttendanceService? _staffAttendanceService;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public ReimbursementController(
             IReimbursementService service,
             IJwtTokenHelper jwtTokenHelper,
             IStaffAttendanceService? staffAttendanceService = null,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _service = service;
             _jwtTokenHelper = jwtTokenHelper;
             _staffAttendanceService = staffAttendanceService;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
+        }
+
+        private void PublishReimbursementChange(string action, int? campusId = null, string? entityId = null)
+        {
+            if (_realtimeEventService != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Reimbursements",
+                    Action = action,
+                    CampusId = ResolveCampusId(campusId),
+                    EntityId = entityId
+                });
+            }
         }
 
         private (int UserId, int? StaffId, bool IsPrivileged) GetCallerIdentity()
@@ -46,6 +64,7 @@ namespace CollegeManagement.API.Controllers.V1
             var userId = _jwtTokenHelper.GetUserId(User) ?? 0;
             var staffId = ResolveStaffId();
             bool isPrivileged = User.IsInRole("Admin") ||
+                               User.IsInRole("College Admin") ||
                                User.IsInRole("Super Admin") ||
                                User.IsInRole("Accountant") ||
                                User.IsInRole("Principal") ||
@@ -191,6 +210,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
                 catch { }
             }
+            PublishReimbursementChange("Created", request.CampusId, result?.Id.ToString());
             return Ok(new { Status = true, Message = "Reimbursement claim submitted successfully.", Data = result });
         }
 
@@ -233,6 +253,16 @@ namespace CollegeManagement.API.Controllers.V1
             var staffId = await ResolveStaffIdAsync();
             if (!staffId.HasValue || staffId.Value <= 0)
             {
+                if (IsAdminOrFinance())
+                {
+                    return Ok(new
+                    {
+                        Status = true,
+                        Message = "No personal reimbursement claims found for this account.",
+                        Data = Array.Empty<ReimbursementClaimDto>()
+                    });
+                }
+
                 return BadRequest(new { Status = false, Message = "Unable to determine staff identity." });
             }
 
@@ -336,6 +366,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("Approved", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Claim approved successfully.", AccountRef = accountRef });
         }
 
@@ -376,6 +407,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("ClarificationRequested", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Clarification requested. Status updated to Under Review." });
         }
 
@@ -416,6 +448,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("Rejected", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Claim rejected successfully." });
         }
 
@@ -456,6 +489,7 @@ namespace CollegeManagement.API.Controllers.V1
                 catch { }
             }
 
+            PublishReimbursementChange("MarkedPaid", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Claim marked as paid successfully." });
         }
 
@@ -488,9 +522,10 @@ namespace CollegeManagement.API.Controllers.V1
             }
 
             var filePath = await _service.UploadProofAsync(id, file);
+            PublishReimbursementChange("ProofUploaded", entityId: id.ToString());
             return Ok(new { Status = true, Message = "Proof document uploaded successfully.", Data = filePath });
         }
 
-        private bool IsAdminOrFinance() => User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Transport Manager");
+        private bool IsAdminOrFinance() => User.IsInRole("Admin") || User.IsInRole("College Admin") || User.IsInRole("Super Admin") || User.IsInRole("Principal") || User.IsInRole("Accountant") || User.IsInRole("Transport Manager");
     }
 }

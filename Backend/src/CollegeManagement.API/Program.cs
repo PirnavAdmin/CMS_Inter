@@ -330,6 +330,7 @@ builder.Services.AddScoped<IAttendanceTimingConfigService, AttendanceTimingConfi
 // Academic Calendar & Notifications Services
 builder.Services.AddScoped<IAcademicCalendarService, AcademicCalendarService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IRealtimeEventService, RealtimeEventService>();
 builder.Services.AddScoped<ISectionRollAllocationService, SectionRollAllocationService>();
 builder.Services.AddScoped<IAcademicYearService, AcademicYearService>();
 builder.Services.AddScoped<IBoardService, BoardService>();
@@ -958,17 +959,84 @@ try
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+    // 1. Ensure CollegeId column and multi-tenant schema on NumberSeriesConfigurations
+    try
+    {
+        var colCollegeExists = await dbContext.Database.SqlQueryRaw<int>(@"
+            SELECT COUNT(*) AS `Value` FROM information_schema.columns 
+            WHERE table_schema = DATABASE() AND table_name = 'NumberSeriesConfigurations' AND column_name = 'CollegeId'").FirstOrDefaultAsync();
+        if (colCollegeExists == 0)
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` ADD COLUMN `CollegeId` INT NOT NULL DEFAULT 1;");
+            await dbContext.Database.ExecuteSqlRawAsync("UPDATE `NumberSeriesConfigurations` SET `CollegeId` = 1 WHERE `CollegeId` IS NULL OR `CollegeId` = 0;");
+        }
+
+        // Drop legacy single-column or non-college unique index if exists, and ensure composite index exists
+        var numSeriesIndexes = await dbContext.Database.SqlQueryRaw<string>(@"
+            SELECT DISTINCT INDEX_NAME AS `Value` FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'NumberSeriesConfigurations'").ToListAsync();
+
+        if (numSeriesIndexes.Any(i => string.Equals(i, "IX_NumberSeriesConfigurations_SeriesCode", StringComparison.OrdinalIgnoreCase)))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` DROP INDEX `IX_NumberSeriesConfigurations_SeriesCode`;");
+        }
+        if (numSeriesIndexes.Any(i => string.Equals(i, "IX_NumberSeriesConfigurations_SeriesCode_CampusId", StringComparison.OrdinalIgnoreCase)))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` DROP INDEX `IX_NumberSeriesConfigurations_SeriesCode_CampusId`;");
+        }
+        if (!numSeriesIndexes.Any(i => string.Equals(i, "IX_NumberSeries_College_Series_Campus", StringComparison.OrdinalIgnoreCase)))
+        {
+            await dbContext.Database.ExecuteSqlRawAsync("ALTER TABLE `NumberSeriesConfigurations` ADD KEY `IX_NumberSeries_College_Series_Campus` (`CollegeId`, `SeriesCode`, `CampusId`);");
+        }
+
+        // Upgrade legacy hardcoded format patterns to use {PREFIX} placeholder (via Dapper to avoid EF Core string.Format on '{...}')
+        var numSeriesConn = dbContext.Database.GetDbConnection();
+        if (numSeriesConn.State != System.Data.ConnectionState.Open)
+        {
+            await numSeriesConn.OpenAsync();
+        }
+
+        await Dapper.SqlMapper.ExecuteAsync(numSeriesConn, @"
+            UPDATE `NumberSeriesConfigurations` 
+            SET `FormatPattern` = '{CAMPUS}-{PREFIX}-{YY}-{SEQ}' 
+            WHERE `SeriesCode` = 'ADMISSION_NO' AND `FormatPattern` LIKE '%-ADM-%';");
+
+        await Dapper.SqlMapper.ExecuteAsync(numSeriesConn, @"
+            UPDATE `NumberSeriesConfigurations` 
+            SET `FormatPattern` = '{CAMPUS}-{PREFIX}-{YYYYMMDD}-{SEQ}' 
+            WHERE `SeriesCode` = 'RECEIPT_NO' AND `FormatPattern` LIKE '%-FEE-%';");
+
+        await Dapper.SqlMapper.ExecuteAsync(numSeriesConn, @"
+            UPDATE `NumberSeriesConfigurations` 
+            SET `FormatPattern` = '{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}' 
+            WHERE `SeriesCode` = 'OFFER_LETTER_NO' AND `FormatPattern` LIKE '%-OL/%';");
+
+        await Dapper.SqlMapper.ExecuteAsync(numSeriesConn, @"
+            UPDATE `NumberSeriesConfigurations` 
+            SET `FormatPattern` = '{CAMPUS}-{PREFIX}/{YEAR}/{SEQ}' 
+            WHERE `SeriesCode` = 'TRANSFER_ORDER_NO' AND `FormatPattern` LIKE '%-TRF/%';");
+
+        await Dapper.SqlMapper.ExecuteAsync(numSeriesConn, @"
+            UPDATE `NumberSeriesConfigurations` 
+            SET `FormatPattern` = '{PREFIX}{SEQ}' 
+            WHERE `SeriesCode` IN ('TEACHING_STAFF_ID', 'NON_TEACHING_STAFF_ID') AND `FormatPattern` NOT LIKE '%{PREFIX}%';");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Failed aligning NumberSeriesConfigurations schema on startup.");
+    }
+
     var allRollNoConfigs = dbContext.NumberSeriesConfigurations
         .Where(n => n.SeriesCode.StartsWith("ROLL_NO"))
         .ToList();
 
     bool dbModified = false;
-    foreach(var config in allRollNoConfigs)
+    foreach (var config in allRollNoConfigs)
     {
-        if (config.FormatPattern != "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}")
+        if (string.IsNullOrWhiteSpace(config.FormatPattern))
         {
             config.FormatPattern = "{YY}{CAMPUS:2}{BOARD:1}{PROGRAM:1}{GROUP:1}{SEQ}";
-            config.Prefix = "";
             dbModified = true;
         }
     }

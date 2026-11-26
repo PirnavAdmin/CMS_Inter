@@ -48,14 +48,14 @@ namespace CollegeManagement.API.Repositories.Implementations
             return conn;
         }
 
-        public async Task<IEnumerable<Department>> GetActiveDepartmentsAsync(int? campusId = null)
+        public async Task<IEnumerable<Department>> GetActiveDepartmentsAsync(int? campusId = null, int? collegeId = null)
         {
-            return await GetDepartmentsAsync(null, includeInactive: false, campusId: campusId);
+            return await GetDepartmentsAsync(null, includeInactive: false, campusId: campusId, collegeId: collegeId);
         }
 
-        public async Task<IEnumerable<Department>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
+        public async Task<IEnumerable<Department>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true, int? campusId = null, int? collegeId = null)
         {
-            var dtos = await GetDepartmentDtosAsync(staffType, includeInactive, campusId);
+            var dtos = await GetDepartmentDtosAsync(staffType, includeInactive, campusId, collegeId);
             return dtos.Select(d => new Department
             {
                 DepartmentId = d.DepartmentId,
@@ -66,11 +66,12 @@ namespace CollegeManagement.API.Repositories.Implementations
                 IsActive = d.IsActive,
                 CreatedAt = d.CreatedAt,
                 UpdatedAt = d.UpdatedAt,
-                CampusId = campusId
+                CampusId = campusId,
+                CollegeId = d.CollegeId ?? collegeId
             }).ToList();
         }
 
-        public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentDtosAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
+        public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentDtosAsync(string? staffType = null, bool includeInactive = true, int? campusId = null, int? collegeId = null)
         {
             if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
             {
@@ -78,7 +79,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
-            var collegeId = ResolveCollegeId();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var depts = await conn.QueryAsync<DepartmentResponseDto>(
                 "sp_GetDepartments",
                 new
@@ -86,7 +87,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StaffType = staffType ?? "",
                     p_IncludeInactive = includeInactive ? 1 : 0,
                     p_CampusId = campusId,
-                    p_CollegeId = collegeId
+                    p_CollegeId = resolvedCollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -166,7 +167,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_StaffType = department.StaffType ?? "Both",
                     p_Description = department.Description,
                     p_IsActive = department.IsActive ? 1 : 0,
-                    p_CampusId = department.CampusId
+                    p_CampusId = department.CampusId,
+                    p_CollegeId = department.CollegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -185,7 +187,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return rows > 0;
         }
 
-        public async Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null)
+        public async Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null)
         {
             if (campusId == Filters.TenantIsolationActionFilter.NoCampusSentinel)
             {
@@ -193,9 +195,10 @@ namespace CollegeManagement.API.Repositories.Implementations
             }
 
             var conn = await GetOpenConnectionAsync();
+            var resolvedCollegeId = collegeId ?? ResolveCollegeId();
             var summary = await conn.QueryFirstOrDefaultAsync<DepartmentSummaryDto>(
                 "sp_GetDepartmentSummary",
-                new { p_CampusId = campusId },
+                new { p_CampusId = campusId, p_CollegeId = resolvedCollegeId },
                 commandType: CommandType.StoredProcedure);
 
             return summary ?? new DepartmentSummaryDto();

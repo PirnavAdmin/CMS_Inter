@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLiveModuleSync } from "@/hooks/useLiveModuleSync.js";
 import { useSearchParams } from "react-router-dom";
 import { FaArrowsRotate, FaAward, FaBan, FaCheck, FaChevronDown, FaClipboardCheck, FaDownload, FaEraser, FaEye, FaFileCirclePlus, FaFileLines, FaFilter, FaPaperPlane, FaPlus, FaPrint, FaRotateLeft, FaTrash, FaUsers, FaXmark } from "react-icons/fa6";
 import DashboardLayout from "@/shared/layouts/DashboardLayout/DashboardLayout.jsx";
@@ -22,7 +23,7 @@ const mockStudents = [];
 
 export const pageConfig = {
   title: "Certificates",
-  route: "/dashboard/certificates",
+  route: "/admin-dashboard/certificates",
 };
 
 // Default PAGE_SIZE parameterized
@@ -1979,6 +1980,10 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
       }
     }
   };
+
+  useLiveModuleSync("Certificates", () => {
+    refreshCertificateData({ showLoader: false });
+  });
 
   const refreshCertificateData = async ({ showLoader = false } = {}) => {
     await Promise.allSettled([loadCertificates({ showLoader }), loadWorkflowStats()]);

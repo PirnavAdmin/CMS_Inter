@@ -92,8 +92,8 @@ multi-user synchronization.
 From the frontend directory:
 
 ```text
-node --test src/components/pages/InventoryManagement/inventoryModel.test.js src/components/pages/InventoryManagement/inventoryRender.test.js
-node node_modules/eslint/bin/eslint.js src/components/pages/InventoryManagement src/routes/AppRoutes.jsx src/components/layout/DashboardLayout.jsx
+node --test src/modules/admin/AdminInventory/inventoryModel.test.js src/modules/admin/AdminInventory/inventoryRender.test.js
+node node_modules/eslint/bin/eslint.js src/modules/admin/AdminInventory src/routes/AppRoutes.jsx src/components/layout/DashboardLayout.jsx
 npm.cmd run build
 ```
 

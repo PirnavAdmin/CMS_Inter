@@ -499,10 +499,10 @@ export default function CredentialsGeneratorPage() {
     setSearchQuery("");
     setFilterDeptLevel("all");
     setFilterStatus("all");
-    if (tab === "faculty") navigate("/dashboard/settings/credentials/faculty");
-    else if (tab === "students") navigate("/dashboard/settings/credentials/students");
-    else if (tab === "history") navigate("/dashboard/settings/credentials/history");
-    else if (tab === "settings") navigate("/dashboard/settings/credentials/settings");
+    if (tab === "faculty") navigate("/admin-dashboard/settings/credentials/faculty");
+    else if (tab === "students") navigate("/admin-dashboard/settings/credentials/students");
+    else if (tab === "history") navigate("/admin-dashboard/settings/credentials/history");
+    else if (tab === "settings") navigate("/admin-dashboard/settings/credentials/settings");
   };
 
   useEffect(() => {

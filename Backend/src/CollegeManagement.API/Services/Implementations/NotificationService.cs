@@ -684,27 +684,20 @@ namespace CollegeManagement.API.Services.Implementations
 
                     if (!roleMatched) return false;
 
-                    if (targetCollegeId.HasValue && targetCollegeId.Value > 0)
-                    {
-                        bool sameCollege = targetCollegeId.Value == 1
-                            ? (u.CollegeId == 1 || (!u.CollegeId.HasValue && !u.HasAdminId && (u.RoleName != "Super Admin")))
-                            : (u.CollegeId == targetCollegeId.Value);
+                    int effectiveCollegeId = targetCollegeId.HasValue && targetCollegeId.Value > 0 ? targetCollegeId.Value : 1;
+                    bool sameCollege = effectiveCollegeId == 1
+                        ? (u.CollegeId == 1 || (!u.CollegeId.HasValue && !u.HasAdminId && (u.RoleName != "Super Admin")))
+                        : (u.CollegeId == effectiveCollegeId);
 
-                        if (!sameCollege) return false;
+                    if (!sameCollege && !isSuperAdminCaller) return false;
 
-                        if (campusId.HasValue && campusId.Value > 0 && campusId.Value != 999999999)
-                        {
-                            bool campusMatched =
-                                u.StaffCampusId == campusId.Value ||
-                                u.StudentCampusId == campusId.Value ||
-                                (u.HasAdminId || rLower.Contains("admin") || dLower.Contains("admin") || rLower == "principal" || dLower == "principal" || rLower == "receptionist" || dLower == "receptionist");
-                            if (!campusMatched) return false;
-                        }
-                    }
-                    else
+                    if (campusId.HasValue && campusId.Value > 0 && campusId.Value != 999999999)
                     {
-                        // Without a resolved collegeId: only allow if caller is Super Admin (platform-wide announcement)
-                        if (!isSuperAdminCaller) return false;
+                        bool campusMatched =
+                            u.StaffCampusId == campusId.Value ||
+                            u.StudentCampusId == campusId.Value ||
+                            (u.HasAdminId || rLower.Contains("admin") || dLower.Contains("admin") || rLower == "principal" || dLower == "principal" || rLower == "receptionist" || dLower == "receptionist");
+                        if (!campusMatched) return false;
                     }
                     return true;
                 })

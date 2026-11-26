@@ -30,15 +30,15 @@ namespace CollegeManagement.API.Services.Implementations
             _cache = cache;
         }
 
-        public async Task<IEnumerable<DepartmentResponseDto>> GetActiveDepartmentsAsync(int? campusId = null)
+        public async Task<IEnumerable<DepartmentResponseDto>> GetActiveDepartmentsAsync(int? campusId = null, int? collegeId = null)
         {
-            return await GetDepartmentsAsync(null, includeInactive: false, campusId: campusId);
+            return await GetDepartmentsAsync(null, includeInactive: false, campusId: campusId, collegeId: collegeId);
         }
 
-        public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true, int? campusId = null)
+        public async Task<IEnumerable<DepartmentResponseDto>> GetDepartmentsAsync(string? staffType = null, bool includeInactive = true, int? campusId = null, int? collegeId = null)
         {
-            string cacheKey = $"lookup:departments:{staffType}:{includeInactive}:{campusId}";
-            return await _cache.GetOrCreateAsync(cacheKey, () => _departmentRepository.GetDepartmentDtosAsync(staffType, includeInactive, campusId));
+            string cacheKey = $"lookup:departments:{collegeId}:{staffType}:{includeInactive}:{campusId}";
+            return await _cache.GetOrCreateAsync(cacheKey, () => _departmentRepository.GetDepartmentDtosAsync(staffType, includeInactive, campusId, collegeId));
         }
 
         public async Task<DepartmentResponseDto?> GetByIdAsync(int id)
@@ -46,7 +46,7 @@ namespace CollegeManagement.API.Services.Implementations
             return await _departmentRepository.GetDtoByIdAsync(id);
         }
 
-        public async Task<DepartmentResponseDto> CreateDepartmentAsync(CreateDepartmentDto dto, int? campusId = null)
+        public async Task<DepartmentResponseDto> CreateDepartmentAsync(CreateDepartmentDto dto, int? campusId = null, int? collegeId = null)
         {
             var dept = new Department
             {
@@ -55,7 +55,8 @@ namespace CollegeManagement.API.Services.Implementations
                 StaffType = dto.StaffType ?? "Both",
                 Description = dto.Description,
                 IsActive = dto.IsActive,
-                CampusId = campusId
+                CampusId = campusId ?? dto.CampusId,
+                CollegeId = collegeId ?? dto.CollegeId
             };
 
             var created = await _departmentRepository.AddDepartmentAsync(dept);
@@ -76,7 +77,7 @@ namespace CollegeManagement.API.Services.Implementations
             };
         }
 
-        public async Task<DepartmentResponseDto?> UpdateDepartmentAsync(int id, UpdateDepartmentDto dto, int? campusId = null)
+        public async Task<DepartmentResponseDto?> UpdateDepartmentAsync(int id, UpdateDepartmentDto dto, int? campusId = null, int? collegeId = null)
         {
             var existing = await _departmentRepository.GetByIdAsync(id);
             if (existing == null) return null;
@@ -93,6 +94,10 @@ namespace CollegeManagement.API.Services.Implementations
             if (campusId.HasValue && campusId.Value > 0)
             {
                 existing.CampusId = campusId.Value;
+            }
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                existing.CollegeId = collegeId.Value;
             }
 
             var updated = await _departmentRepository.UpdateDepartmentAsync(existing);
@@ -141,9 +146,9 @@ namespace CollegeManagement.API.Services.Implementations
             return (true, "Department deleted successfully.");
         }
 
-        public async Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null)
+        public async Task<DepartmentSummaryDto> GetSummaryAsync(int? campusId = null, int? collegeId = null)
         {
-            return await _departmentRepository.GetSummaryAsync(campusId);
+            return await _departmentRepository.GetSummaryAsync(campusId, collegeId);
         }
 
         public async Task<bool> ValidateCodeAsync(string code, int? excludeId = null, int? campusId = null)
@@ -156,12 +161,12 @@ namespace CollegeManagement.API.Services.Implementations
             return await _departmentRepository.ValidateNameAsync(name, excludeId, campusId);
         }
 
-        public async Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null)
+        public async Task<MasterImportResultDto> ImportDepartmentsFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null, int? collegeId = null)
         {
-            return await ImportDepartmentsAndDesignationsFromExcelAsync(file, defaultStaffType, campusId);
+            return await ImportDepartmentsAndDesignationsFromExcelAsync(file, defaultStaffType, campusId, collegeId);
         }
 
-        public async Task<MasterImportResultDto> ImportDepartmentsAndDesignationsFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null)
+        public async Task<MasterImportResultDto> ImportDepartmentsAndDesignationsFromExcelAsync(IFormFile file, string? defaultStaffType = null, int? campusId = null, int? collegeId = null)
         {
             if (file == null || file.Length == 0)
                 throw new ValidationException("Please upload a valid Excel file (.xlsx or .xls).");
@@ -177,8 +182,8 @@ namespace CollegeManagement.API.Services.Implementations
             if (!workbook.Worksheets.Any())
                 throw new ValidationException("Excel file contains no worksheets.");
 
-            var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId)).ToList();
-            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId)).ToList();
+            var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
+            var existingDesigs = (await _designationRepository.GetAllAsync(includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
 
             // In-memory lookup maps for resolving department references during designation import
             var resolvedDeptsByName = new Dictionary<string, Department>(StringComparer.OrdinalIgnoreCase);
@@ -397,6 +402,8 @@ namespace CollegeManagement.API.Services.Implementations
                                     StaffType = staffType,
                                     Description = desc,
                                     IsActive = isActive,
+                                    CampusId = campusId,
+                                    CollegeId = collegeId,
                                     CreatedAt = DateTime.UtcNow
                                 };
 
@@ -604,6 +611,8 @@ namespace CollegeManagement.API.Services.Implementations
                                     DepartmentId = deptId,
                                     StaffType = staffType,
                                     IsActive = isActive,
+                                    CampusId = campusId,
+                                    CollegeId = collegeId,
                                     CreatedAt = DateTime.UtcNow
                                 };
 
@@ -635,13 +644,13 @@ namespace CollegeManagement.API.Services.Implementations
             return result;
         }
 
-        public async Task<MasterImportResultDto> BulkImportDepartmentsAsync(IEnumerable<CreateDepartmentDto> dtos, string? defaultStaffType = null, int? campusId = null)
+        public async Task<MasterImportResultDto> BulkImportDepartmentsAsync(IEnumerable<CreateDepartmentDto> dtos, string? defaultStaffType = null, int? campusId = null, int? collegeId = null)
         {
             var result = new MasterImportResultDto();
             var list = dtos?.ToList() ?? new List<CreateDepartmentDto>();
             result.TotalRowsRead = list.Count;
 
-            var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId)).ToList();
+            var existingDepts = (await _departmentRepository.GetDepartmentsAsync(includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
             int idx = 0;
 
             foreach (var dto in list)
@@ -695,7 +704,8 @@ namespace CollegeManagement.API.Services.Implementations
                             Description = dto.Description,
                             IsActive = dto.IsActive,
                             CreatedAt = DateTime.UtcNow,
-                            CampusId = campusId
+                            CampusId = campusId ?? dto.CampusId,
+                CollegeId = collegeId ?? dto.CollegeId
                         });
                         existingDepts.Add(created);
                         result.SuccessCount++;
@@ -717,7 +727,7 @@ namespace CollegeManagement.API.Services.Implementations
             return result;
         }
 
-        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentTemplateExcelAsync(string? staffType = null, int? campusId = null)
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentTemplateExcelAsync(string? staffType = null, int? campusId = null, int? collegeId = null)
         {
             using var workbook = new XLWorkbook();
             var ws = workbook.Worksheets.Add("Departments");
@@ -748,7 +758,7 @@ namespace CollegeManagement.API.Services.Implementations
             return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
-        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentDesignationTemplateExcelAsync(string? staffType = null, int? campusId = null)
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> GenerateDepartmentDesignationTemplateExcelAsync(string? staffType = null, int? campusId = null, int? collegeId = null)
         {
             using var workbook = new XLWorkbook();
 
@@ -795,9 +805,9 @@ namespace CollegeManagement.API.Services.Implementations
             return (ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
         }
 
-        public async Task<(byte[] Bytes, string ContentType, string FileName)> ExportDepartmentsExcelAsync(string? staffType = null, int? campusId = null)
+        public async Task<(byte[] Bytes, string ContentType, string FileName)> ExportDepartmentsExcelAsync(string? staffType = null, int? campusId = null, int? collegeId = null)
         {
-            var depts = (await _departmentRepository.GetDepartmentsAsync(staffType, includeInactive: true, campusId: campusId)).ToList();
+            var depts = (await _departmentRepository.GetDepartmentsAsync(staffType, includeInactive: true, campusId: campusId, collegeId: collegeId)).ToList();
             using var workbook = new XLWorkbook();
             var worksheet = workbook.Worksheets.Add("Departments");
 

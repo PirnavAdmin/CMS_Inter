@@ -9,6 +9,7 @@ import { apiEndpoints } from "@/api/apiEndpoints.js";
 import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
 import "./StudentManagementPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 export const pageConfig = { title: "Student Management", rows: [], fields: [] };
 const STUDENT_PAGE_SIZE = 5;
@@ -133,6 +134,12 @@ export default function StudentManagementPage() {
   const [exporting, setExporting] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+
+  useLiveModuleSync({
+    moduleName: "Students",
+    campusId: selectedCampusId,
+    onRefresh: () => setReloadKey((current) => current + 1)
+  });
   const importOpen = studentModal === "import";
   const setImportOpen = (open) => navigateStudentModal(open ? "import" : null);
   const [importFile, setImportFile] = useState(null);
@@ -607,7 +614,7 @@ export default function StudentManagementPage() {
                         >
                           <FileText size={16} />
                         </button>
-                        <Link to={`/dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
+                        <Link to={`/admin-dashboard/students/${s.id}`} state={{ studentManagement: { query, filters, page: currentPage } }} aria-label="View student" title="View student">
                           <Eye size={16} />
                         </Link>
                         <button

@@ -250,7 +250,7 @@ public static class DeployFeeSPs
         {
             var ledger = conn.Query("sp_StudentFee_GetLedger", new { 
                 p_CampusId = 0, p_AcademicYearId = 0, p_GroupId = 0, p_SectionId = 0, 
-                p_PaymentPlan = "", p_Status = "", p_Search = "", p_BoardId = 0 
+                p_PaymentPlan = "", p_Status = "", p_Search = "", p_BoardId = 0, p_CollegeId = 0 
             }, commandType: CommandType.StoredProcedure);
             Console.WriteLine($"  [PASS] sp_StudentFee_GetLedger executed successfully! Accounts: {ledger.Count()}");
             passed++;

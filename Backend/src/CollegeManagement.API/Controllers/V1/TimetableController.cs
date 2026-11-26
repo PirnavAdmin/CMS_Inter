@@ -1,3 +1,4 @@
+using CollegeManagement.API.DTOs.Realtime;
 using CollegeManagement.API.DTOs.Timetable;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -7,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 
@@ -24,18 +26,34 @@ namespace CollegeManagement.API.Controllers.V1
         private readonly ITimetableService _timetableService;
         private readonly ITimetableExportService _exportService;
         private readonly INotificationService? _notificationService;
+        private readonly IRealtimeEventService? _realtimeEventService;
 
         public TimetableController(
             ITimetableService timetableService,
             ITimetableExportService exportService,
-            INotificationService? notificationService = null)
+            INotificationService? notificationService = null,
+            IRealtimeEventService? realtimeEventService = null)
         {
             _timetableService = timetableService;
             _exportService = exportService;
             _notificationService = notificationService;
+            _realtimeEventService = realtimeEventService;
         }
 
         /// <summary>
+        private int? GetCurrentCampusId()
+        {
+            if (Request.Headers.TryGetValue("X-Campus-Id", out var hVal) && int.TryParse(hVal.FirstOrDefault(), out var cId) && cId > 0)
+                return cId;
+
+            var campusClaim = User.FindFirst("campus_id")?.Value
+                ?? User.FindFirst("CampusId")?.Value
+                ?? User.FindFirst(ClaimTypes.PrimaryGroupSid)?.Value
+                ?? User.FindFirst(ClaimTypes.GroupSid)?.Value;
+
+            return int.TryParse(campusClaim, out int cid) && cid > 0 ? cid : null;
+        }
+
         /// Creates a new timetable slot with anti-clash validation.
         /// </summary>
         [HttpPost]
@@ -62,6 +80,17 @@ namespace CollegeManagement.API.Controllers.V1
                             "/student/timetable");
                     }
                     catch { }
+                }
+
+                if (_realtimeEventService != null && result != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = "Created",
+                        CampusId = result.CampusId ?? (dto.CampusId > 0 ? dto.CampusId : GetCurrentCampusId()),
+                        EntityId = result.Id.ToString()
+                    });
                 }
 
                 return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
@@ -128,6 +157,17 @@ namespace CollegeManagement.API.Controllers.V1
                     catch { }
                 }
 
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = "Updated",
+                        CampusId = result.CampusId ?? (dto.CampusId > 0 ? dto.CampusId : GetCurrentCampusId()),
+                        EntityId = id.ToString()
+                    });
+                }
+
                 return Ok(result);
             }
             catch (InvalidOperationException ex)
@@ -149,6 +189,17 @@ namespace CollegeManagement.API.Controllers.V1
                 var slot = await _timetableService.GetByIdAsync(id);
                 var success = await _timetableService.DeleteAsync(id);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = "Deleted",
+                        CampusId = slot?.CampusId ?? GetCurrentCampusId(),
+                        EntityId = id.ToString()
+                    });
+                }
 
                 if (_notificationService != null && slot != null)
                 {
@@ -268,6 +319,18 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _timetableService.CopyTimetableAsync(dto);
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = "Copied",
+                        CampusId = GetCurrentCampusId(),
+                        EntityId = dto.TargetSectionId.ToString()
+                    });
+                }
+
                 return Ok(new { message = "Timetable successfully copied to target section." });
             }
             catch (InvalidOperationException ex)
@@ -289,6 +352,17 @@ namespace CollegeManagement.API.Controllers.V1
             {
                 var success = await _timetableService.TogglePublishSlotAsync(id, dto.IsPublished);
                 if (!success) return NotFound(new { message = $"Timetable slot with ID {id} not found." });
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = dto.IsPublished ? "Published" : "Unpublished",
+                        CampusId = GetCurrentCampusId(),
+                        EntityId = id.ToString()
+                    });
+                }
 
                 if (_notificationService != null && dto.IsPublished)
                 {
@@ -327,6 +401,17 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 await _timetableService.PublishSectionTimetableAsync(sectionId, academicYearId ?? 0, dto.IsPublished);
+
+                if (_realtimeEventService != null)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = dto.IsPublished ? "SectionPublished" : "SectionUnpublished",
+                        CampusId = GetCurrentCampusId(),
+                        EntityId = sectionId.ToString()
+                    });
+                }
 
                 if (_notificationService != null && dto.IsPublished)
                 {
@@ -422,6 +507,17 @@ namespace CollegeManagement.API.Controllers.V1
                     catch { }
                 }
 
+                if (_realtimeEventService != null && result != null && result.IsSuccess)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = "Approved",
+                        CampusId = GetCurrentCampusId(),
+                        EntityId = sectionId.ToString()
+                    });
+                }
+
                 return Ok(result);
             }
             catch (KeyNotFoundException ex)
@@ -446,6 +542,16 @@ namespace CollegeManagement.API.Controllers.V1
             try
             {
                 var result = await _timetableService.GenerateTheoryTimetableAsync(dto);
+
+                if (_realtimeEventService != null && result != null && result.IsSuccess)
+                {
+                    _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                    {
+                        Module = "Timetable",
+                        Action = "Generated",
+                        CampusId = dto.CampusId > 0 ? dto.CampusId : GetCurrentCampusId()
+                    });
+                }
 
                 if (_notificationService != null && result != null && result.IsSuccess)
                 {

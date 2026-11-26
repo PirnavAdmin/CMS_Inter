@@ -27,6 +27,7 @@ import {
 import { EMPTY_FEE_CONFIG, FeePreviewStatus, PromotionFeePanel, ProgramFeeComparison, TransferFeePanel, useFeePreview } from "@/modules/admin/AdminPromotion/FeeTransitionPanels.jsx";
 import { normalizeFeePreview, programAllocationBatches, promotionFeePayload, selectFeeStructure } from "@/modules/admin/AdminPromotion/feeTransition.js";
 import "./PromotionPage.css";
+import useLiveModuleSync from "@/hooks/useLiveModuleSync.js";
 
 const EMPTY_SETUP = {
   fromYear: "", board: "", fromLevel: "", group: "", program: "", fromSection: "",
@@ -49,14 +50,17 @@ const EMPTY_HISTORY_FILTERS = {
 
 const PROMOTION_STUDENT_PAGE_SIZE = 5;
 const PROMOTION_PAGE_SIZE_OPTIONS = [5, 10, 15, 25];
-function PromotionPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, disabled = false, label = "Promotion pagination" }) {
+function PromotionPagination({ page, totalRows, pageSize, onPageChange, onPageSizeChange, disabled = false, label = "Promotion pagination", unit = "students" }) {
   const [customMode, setCustomMode] = useState(!PROMOTION_PAGE_SIZE_OPTIONS.includes(pageSize));
   const [customSize, setCustomSize] = useState(String(pageSize));
   const pages = Math.max(1, Math.ceil(totalRows / pageSize));
   const current = Math.min(page, pages);
-  const navStyle = { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
+  const navStyle = { display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end", gap: 8, minHeight: 60, padding: "8px 16px", borderTop: "1px solid var(--cms-border, #d5dfb7)", background: "var(--cms-primary-soft, #e9efd9)", color: "var(--cms-muted, #71815e)", fontSize: 14, fontWeight: 600 };
   const controlStyle = { height: 42, border: "1px solid var(--cms-border, #d5dfb7)", borderRadius: 10, background: "var(--cms-surface, #fff)", color: "var(--cms-text, #26311f)", font: "inherit" };
   return <nav aria-label={label} style={navStyle}>
+    <span className="cms-page-info" aria-live="polite" style={{ marginRight: "auto" }}>
+      Showing {totalRows === 0 ? 0 : (current - 1) * pageSize + 1}-{Math.min(current * pageSize, totalRows)} of {totalRows} {unit}
+    </span>
     <label style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>Per page:
       <select aria-label="Rows per page" value={customMode || !PROMOTION_PAGE_SIZE_OPTIONS.includes(pageSize) ? "custom" : pageSize} disabled={disabled} style={{ ...controlStyle, minWidth: 102, padding: "0 10px" }} onChange={(event) => {
         if (event.target.value === "custom") { setCustomMode(true); setCustomSize(String(pageSize)); return; }
@@ -784,6 +788,12 @@ export default function PromotionPage({ screen = "promotion" }) {
     await Promise.all([fetchEligibleStudents(), fetchHistory()]);
   };
 
+  useLiveModuleSync({
+    moduleName: "Promotions",
+    campusId: activeCampusId,
+    onRefresh: () => refreshAfterMutation()
+  });
+
   const confirmPromotion = async () => {
     if (submitting || !validatePromotion()) return;
     setSubmitting(true);
@@ -1018,11 +1028,11 @@ export default function PromotionPage({ screen = "promotion" }) {
       <div className="promotion-page">
         <nav className="promotion-tabs" aria-label="Promotion sections">
           {[
-            ["promotion", "Student Promotion", "/dashboard/promotions/eligible"],
-            ["single", "Single Student", "/dashboard/promotions/single"],
-            ["allocation", "Program & Section Allocation", "/dashboard/promotions/allocation"],
-            ["transfer", "Campus Transfer", "/dashboard/promotions/transfer"],
-            ["history", "Promotion History", "/dashboard/promotions/history"],
+            ["promotion", "Student Promotion", "/admin-dashboard/promotions/eligible"],
+            ["single", "Single Student", "/admin-dashboard/promotions/single"],
+            ["allocation", "Program & Section Allocation", "/admin-dashboard/promotions/allocation"],
+            ["transfer", "Campus Transfer", "/admin-dashboard/promotions/transfer"],
+            ["history", "Promotion History", "/admin-dashboard/promotions/history"],
           ].map(([value, label, path]) => (
             <button
               key={value}

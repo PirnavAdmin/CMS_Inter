@@ -547,13 +547,16 @@ namespace CollegeManagement.API.Tests
 
                 CREATE TABLE IF NOT EXISTS room_type_configs (
                     RoomTypeId INT AUTO_INCREMENT PRIMARY KEY,
-                    RoomTypeSpecification VARCHAR(150) NOT NULL UNIQUE,
+                    CollegeId INT NOT NULL DEFAULT 1,
+                    CampusId INT NULL,
+                    RoomTypeSpecification VARCHAR(150) NOT NULL,
                     BedCapacity INT NOT NULL DEFAULT 1,
                     AcType VARCHAR(20) NOT NULL DEFAULT 'Non-AC',
                     Status VARCHAR(20) NOT NULL DEFAULT 'Active',
                     Description VARCHAR(500) NULL,
                     CreatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    UpdatedAt DATETIME NULL ON UPDATE CURRENT_TIMESTAMP
+                    UpdatedAt DATETIME NULL ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY UQ_room_type_configs_Tenant_Spec (CollegeId, RoomTypeSpecification)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
                 CREATE TABLE IF NOT EXISTS room_masters (

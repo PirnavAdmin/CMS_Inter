@@ -46,10 +46,41 @@ namespace CollegeManagement.API.Services.Implementations
             return campus;
         }
 
+        private static string FormatProperName(string? input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+            var tokens = System.Text.RegularExpressions.Regex.Split(input.Trim(), @"(\s+|-)");
+            var result = new System.Text.StringBuilder();
+            foreach (var token in tokens)
+            {
+                if (string.IsNullOrEmpty(token) || string.IsNullOrWhiteSpace(token) || token == "-")
+                {
+                    result.Append(token);
+                    continue;
+                }
+                if (System.Text.RegularExpressions.Regex.IsMatch(token, @"^(X|IX|IV|V?I{1,3})$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    result.Append(token.ToUpperInvariant());
+                }
+                else if (System.Text.RegularExpressions.Regex.IsMatch(token, @"^[A-Z]{2,4}$") &&
+                         !System.Text.RegularExpressions.Regex.IsMatch(token, @"^(AND|FOR|THE|OF|IN|AT|TO|BY)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    result.Append(token);
+                }
+                else
+                {
+                    result.Append(char.ToUpperInvariant(token[0]) + (token.Length > 1 ? token.Substring(1).ToLowerInvariant() : string.Empty));
+                }
+            }
+            return result.ToString();
+        }
+
         public async Task<CampusDto> CreateCampusAsync(CreateCampusDto dto, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(dto.CampusName))
                 throw new ValidationException("Campus Name is required.");
+
+            dto.CampusName = FormatProperName(dto.CampusName);
 
             if (string.IsNullOrWhiteSpace(dto.CampusCode))
                 throw new ValidationException("Campus Code is required.");
@@ -74,6 +105,8 @@ namespace CollegeManagement.API.Services.Implementations
 
             if (string.IsNullOrWhiteSpace(dto.CampusName))
                 throw new ValidationException("Campus Name is required.");
+
+            dto.CampusName = FormatProperName(dto.CampusName);
 
             if (string.IsNullOrWhiteSpace(dto.CampusCode))
                 throw new ValidationException("Campus Code is required.");

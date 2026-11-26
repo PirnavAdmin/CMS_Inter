@@ -11,6 +11,7 @@ using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -19,11 +20,21 @@ namespace CollegeManagement.API.Repositories.Implementations
     {
         private readonly AppDbContext _context;
         private readonly ILogger<AttendanceTimingConfigRepository> _logger;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public AttendanceTimingConfigRepository(AppDbContext context, ILogger<AttendanceTimingConfigRepository> logger)
+        public AttendanceTimingConfigRepository(AppDbContext context, ILogger<AttendanceTimingConfigRepository> logger, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
             _logger = logger;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
+                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
+            return null;
         }
 
         private async Task<DbConnection> GetOpenConnectionAsync(CancellationToken ct = default)

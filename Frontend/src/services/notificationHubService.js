@@ -221,6 +221,9 @@ class NotificationHubService {
               this.notifyDomainSubscribers(payload);
             }
           });
+          this.connection.on("DomainDataChanged", (payload) => {
+            if (payload) this.notifyDomainSubscribers(payload);
+          });
           this.connection.on("NotificationRead", (payload) => {
             this.readSubscribers.forEach((cb) => {
               try {
