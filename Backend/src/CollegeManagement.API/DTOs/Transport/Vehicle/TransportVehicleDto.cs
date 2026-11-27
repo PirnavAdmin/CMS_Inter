@@ -19,6 +19,9 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
         [JsonPropertyName("registrationNumber")]
         public string RegistrationNumber { get; set; } = string.Empty;
 
+        [JsonPropertyName("regNumber")]
+        public string RegNumber => RegistrationNumber;
+
         [JsonPropertyName("vehicleName")]
         public string VehicleName { get; set; } = string.Empty;
 
@@ -27,6 +30,9 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
 
         [JsonPropertyName("capacity")]
         public int Capacity { get; set; }
+
+        [JsonPropertyName("seatingCapacity")]
+        public int SeatingCapacity => Capacity;
 
         [JsonPropertyName("isAC")]
         public bool IsAC { get; set; } = true;

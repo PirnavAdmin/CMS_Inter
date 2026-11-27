@@ -55,7 +55,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelStudentAllocation>(
                 "sp_GetHostelStudentAllocationById",
-                new { p_AllocationId = allocationId },
+                new
+                {
+                    p_AllocationId = allocationId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -63,7 +67,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelStudentAllocation>(
                 "sp_GetActiveHostelStudentAllocationByStudent",
-                new { p_StudentId = studentId },
+                new
+                {
+                    p_StudentId = studentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -71,7 +79,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelStudentAllocation>(
                 "sp_GetActiveHostelStudentAllocationByBed",
-                new { p_BedId = bedId },
+                new
+                {
+                    p_BedId = bedId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -107,7 +119,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_WardenAssignmentId = allocation.WardenAssignmentId,
                 p_JoiningDate = allocation.JoiningDate.Date,
                 p_Status = allocation.Status,
-                p_Remarks = allocation.Remarks
+                p_Remarks = allocation.Remarks,
+                p_CollegeId = ResolveCollegeId()
             };
 
             var result = await _dbConnection.ExecuteScalarAsync<int>(
@@ -125,7 +138,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 new
                 {
                     p_AllocationId = allocationId,
-                    p_Reason = reason
+                    p_Reason = reason,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -136,7 +150,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var result = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_DeleteHostelStudentAllocation",
-                new { p_AllocationId = allocationId },
+                new
+                {
+                    p_AllocationId = allocationId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result == 1;
@@ -146,7 +164,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelStudentAllocationExists",
-                new { p_AllocationId = allocationId },
+                new
+                {
+                    p_AllocationId = allocationId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -155,8 +177,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         public async Task<bool> StudentExistsAsync(int studentId)
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
-                "sp_CheckStudentExists",
-                new { p_StudentId = studentId },
+                "sp_CheckHostelStudentExists",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -166,7 +192,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBlockExists",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -176,7 +206,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckRoomMasterExists",
-                new { p_RoomId = roomId },
+                new
+                {
+                    p_RoomId = roomId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -186,7 +220,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBedExists",
-                new { p_BedId = bedId },
+                new
+                {
+                    p_BedId = bedId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -196,7 +234,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckActiveHostelWardenAssignmentExists",
-                new { p_WardenAssignmentId = wardenAssignmentId },
+                new
+                {
+                    p_WardenAssignmentId = wardenAssignmentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;

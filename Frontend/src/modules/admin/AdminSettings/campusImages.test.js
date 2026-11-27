@@ -6,7 +6,7 @@ import { test } from "node:test";
 const source = await readFile(new URL("./campusImages.js", import.meta.url), "utf8");
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-function fixture({ response = { dashboardLogo: "/uploads/landing/saved.png" }, failure, cacheFailure = false } = {}) {
+function fixture({ response = { collegeId: 2, dashboardTitle: "College", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: "/uploads/landing/saved.png" }, failure, cacheFailure = false } = {}) {
   const events = new EventTarget();
   const writes = [];
   const calls = [];
@@ -20,11 +20,11 @@ function fixture({ response = { dashboardLogo: "/uploads/landing/saved.png" }, f
     useCampusContext: () => ({ selectedCampusId: 7 }),
     useState(initial) {
       const index = cursor++;
-      if (!(index in state)) state[index] = initial;
+      if (!(index in state)) state[index] = typeof initial === "function" ? initial() : initial;
       return [state[index], (value) => { state[index] = typeof value === "function" ? value(state[index]) : value; }];
     },
     useEffect: (effect) => effects.push(effect),
-    getAuthUser: () => ({}), getAuthToken: () => "test-token",
+    getAuthUser: () => ({ collegeId: 2, userId: 5 }), getAuthToken: () => "test-token",
     landingPageApi: {
       async saveConfig(payload) { calls.push(payload); if (failure) throw new Error(failure); return response; },
       async getConfig() { return response; },
@@ -37,7 +37,7 @@ function fixture({ response = { dashboardLogo: "/uploads/landing/saved.png" }, f
           request.result = {
             close() {},
             transaction() {
-              const transaction = { objectStore: () => ({ put(value, key) { writes.push({ value, key }); queueMicrotask(() => transaction.oncomplete()); } }) };
+              const transaction = { objectStore: () => ({ put(value, key) { writes.push({ value, key }); queueMicrotask(() => transaction.oncomplete()); }, get(key) { const result = {}; queueMicrotask(() => { result.result = writes.findLast((entry) => entry.key === key)?.value; result.onsuccess(); }); return result; } }) };
               return transaction;
             },
           };
@@ -55,7 +55,7 @@ test("save caches, returns and broadcasts the persisted logo, preserving browser
   const f = fixture();
   let event;
   f.events.addEventListener("campus-images-changed", (value) => { event = value; });
-  const saved = await f.context.saveCampusImages(7, { dashboardLogo: "/uploads/landing/saved.png", loginThemePalette: "olive" }, { requirePersisted: true });
+  const saved = await f.context.saveCampusImages(7, { dashboardTitle: "College", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: "/uploads/landing/saved.png", loginThemePalette: "olive" }, { requirePersisted: true });
   assert.equal(saved.dashboardLogo, "/uploads/landing/saved.png");
   assert.equal(saved.loginThemePalette, "olive");
   assert.equal(f.writes[0].value, saved);
@@ -80,6 +80,71 @@ test("a backend response retaining a different logo is not reported as a success
   const f = fixture();
   await assert.rejects(f.context.saveCampusImages(7, { dashboardLogo: "/new.png" }, { requirePersisted: true }), /did not confirm/);
   assert.equal(f.writes.length, 0);
+});
+
+test("header save verifies every returned branding field before notifying", async () => {
+  for (const field of ["dashboardTitle", "dashboardSubtitle", "dashboardTagline", "dashboardLogo"]) {
+    const draft = { collegeId: 2, dashboardTitle: "College", dashboardSubtitle: "Subtitle", dashboardTagline: "Tagline", dashboardLogo: "/logo.png" };
+    const f = fixture({ response: { ...draft, [field]: "different" } });
+    let notifications = 0;
+    f.events.addEventListener("campus-images-changed", () => notifications++);
+    await assert.rejects(f.context.saveCampusImages(7, draft, { requirePersisted: true }), /did not confirm/);
+    assert.equal(f.writes.length, 0);
+    assert.equal(notifications, 0);
+  }
+});
+
+test("mismatched college and error responses are never cached as branding", async () => {
+  for (const response of [{ collegeId: 3, dashboardTitle: "Other", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: null }, { success: false, message: "Forbidden" }]) {
+    const f = fixture({ response });
+    await assert.rejects(f.context.readCampusImages(7), /invalid or mismatched/);
+    assert.equal(f.writes.length, 0);
+  }
+  for (const status of [401, 403, 404]) {
+    const f = fixture();
+    f.context.landingPageApi.getConfig = async () => { throw { response: { status } }; };
+    await assert.rejects(f.context.readCampusImages(7));
+    assert.equal(f.writes.length, 0);
+  }
+});
+
+test("a response for a previous authenticated account cannot populate the cache", async () => {
+  const f = fixture();
+  let resolveRequest;
+  f.context.landingPageApi.getConfig = () => new Promise((resolve) => { resolveRequest = resolve; });
+  const request = f.context.readCampusImages(7);
+  f.context.getAuthUser = () => ({ collegeId: 3, userId: 6 });
+  resolveRequest({ collegeId: 2, dashboardTitle: "Old", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: null });
+  await assert.rejects(request, /account changed/);
+  assert.equal(f.writes.length, 0);
+});
+
+test("offline fallback uses only the authenticated college and user cache", async () => {
+  const f = fixture();
+  const original = await f.context.readCampusImages(7);
+  assert.equal(f.writes[0].key, "college:2:user:5");
+  f.context.landingPageApi.getConfig = async () => { throw { request: {} }; };
+  assert.equal((await f.context.readCampusImages(7)).dashboardTitle, original.dashboardTitle);
+  f.context.getAuthUser = () => ({ collegeId: 3, userId: 6 });
+  assert.equal(Object.keys(await f.context.readCampusImages(7)).length, 0);
+});
+
+test("focus refresh is deduplicated while a request is in flight", async () => {
+  const f = fixture();
+  let calls = 0;
+  let finish;
+  f.context.landingPageApi.getConfig = () => { calls++; return new Promise((resolve) => { finish = resolve; }); };
+  f.render();
+  const cleanup = f.effects[1]();
+  f.events.dispatchEvent(new Event("focus"));
+  f.events.dispatchEvent(new Event("focus"));
+  assert.equal(calls, 1);
+  finish({ collegeId: 2, dashboardTitle: "Updated", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: null });
+  await flush();
+  assert.equal(f.render().dashboardTitle, "Updated");
+  f.events.dispatchEvent(new Event("focus"));
+  assert.equal(calls, 2);
+  cleanup();
 });
 
 test("header saves block unsupported reset and local previews, and retain failed drafts", async () => {
@@ -120,7 +185,7 @@ test("a confirmed database save still synchronizes when IndexedDB is unavailable
   const f = fixture({ cacheFailure: true });
   let event;
   f.events.addEventListener("campus-images-changed", (value) => { event = value; });
-  const saved = await f.context.saveCampusImages(7, {}, { requirePersisted: true });
+  const saved = await f.context.saveCampusImages(7, { dashboardTitle: "College", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: "/uploads/landing/saved.png" }, { requirePersisted: true });
   assert.equal(event.detail.images, saved);
 });
 
@@ -129,8 +194,8 @@ test("confirmed save updates the hook immediately and invalidates an older GET",
   let resolveOld;
   f.context.landingPageApi.getConfig = () => new Promise((resolve) => { resolveOld = resolve; });
   f.render();
-  const cleanup = f.effects[0]();
-  await f.context.saveCampusImages(7, {}, { requirePersisted: true });
+  const cleanup = f.effects[1]();
+  await f.context.saveCampusImages(7, { dashboardTitle: "College", dashboardSubtitle: "", dashboardTagline: "", dashboardLogo: "/uploads/landing/saved.png" }, { requirePersisted: true });
   assert.equal(f.render().dashboardLogo, "/uploads/landing/saved.png");
   resolveOld({ dashboardLogo: "/old.png" });
   await flush();
@@ -143,11 +208,21 @@ test("confirmed save updates the hook immediately and invalidates an older GET",
 
 test("save API unwraps the configuration and rejects an explicit failure response", async () => {
   const apiSource = await readFile(new URL("../../../api/landingPageApi.js", import.meta.url), "utf8");
-  const context = vm.createContext({ apiClient: { put: async () => ({ data: { success: true, data: { dashboardLogo: null } } }) }, apiEndpoints: { landingPage: { saveConfig: "/config" } }, console: { error() {} } });
+  const context = vm.createContext({ apiClient: { put: async () => ({ data: { success: true, data: { dashboardLogo: null } } }) }, apiEndpoints: { landingPage: { saveConfig: "/config" } }, getAuthToken: () => "test-token", console: { error() {} } });
   vm.runInContext(apiSource.replace(/^import .*;\r?\n/gm, "").replace("export const landingPageApi =", "globalThis.landingPageApi =").replace("export default landingPageApi;", ""), context);
   assert.equal((await context.landingPageApi.saveConfig({})).dashboardLogo, null);
   context.apiClient.put = async () => ({ data: { success: false, message: "Rejected" } });
   await assert.rejects(context.landingPageApi.saveConfig({}), /Rejected/);
+});
+
+test("authenticated GET propagates authorization, missing and server failures", async () => {
+  const apiSource = await readFile(new URL("../../../api/landingPageApi.js", import.meta.url), "utf8");
+  const context = vm.createContext({ apiClient: { get: async () => { throw { response: { status: 401 } }; } }, apiEndpoints: { landingPage: { getConfig: "/config" } }, getAuthToken: () => "test-token", console: { error() {} } });
+  vm.runInContext(apiSource.replace(/^import .*;\r?\n/gm, "").replace("export const landingPageApi =", "globalThis.landingPageApi =").replace("export default landingPageApi;", ""), context);
+  for (const status of [401, 403, 404, 500]) {
+    context.apiClient.get = async () => { throw { response: { status } }; };
+    await assert.rejects(context.landingPageApi.getConfig(), (error) => error.response.status === status);
+  }
 });
 
 test("failed branding uploads return uncached errors while profile fallback stays unchanged", async () => {

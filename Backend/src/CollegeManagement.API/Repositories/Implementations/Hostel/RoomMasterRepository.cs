@@ -51,7 +51,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<RoomMaster>(
                 "sp_GetRoomMasterById",
-                new { p_RoomId = roomId },
+                new
+                {
+                    p_RoomId = roomId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -64,7 +68,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 new
                 {
                     p_HostelId = hostelId,
-                    p_RoomNumber = roomNumber
+                    p_RoomNumber = roomNumber,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -95,7 +100,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_RoomTypeId = room.RoomTypeId,
                     p_FloorLevel = room.FloorLevel,
                     p_RoomNumber = room.RoomNumber,
-                    p_Status = room.Status
+                    p_Status = room.Status,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -106,7 +112,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_DeleteRoomMaster",
-                new { p_RoomId = roomId },
+                new
+                {
+                    p_RoomId = roomId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
@@ -116,7 +126,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckRoomMasterExists",
-                new { p_RoomId = roomId },
+                new
+                {
+                    p_RoomId = roomId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -126,7 +140,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBlockExists",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -136,7 +154,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckRoomTypeConfigExists",
-                new { p_RoomTypeId = roomTypeId },
+                new
+                {
+                    p_RoomTypeId = roomTypeId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;

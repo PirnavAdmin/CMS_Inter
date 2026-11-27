@@ -64,7 +64,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             }
         }
 
-        public async Task<LopPolicyDto> GetPolicyAsync(int? campusId = null, string? staffType = null, CancellationToken ct = default)
+        public async Task<LopPolicyDto?> GetPolicyAsync(int? campusId = null, string? staffType = null, CancellationToken ct = default, int? collegeId = null)
         {
             try
             {
@@ -76,7 +76,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                     result = await conn.QueryFirstOrDefaultAsync<LopPolicyDto>(
                         new CommandDefinition(
                             "sp_LopPolicy_GetByScope",
-                            new { p_CampusId = campusId ?? 0, p_StaffType = string.IsNullOrWhiteSpace(staffType) ? "All" : staffType.Trim() },
+                            new { p_CampusId = campusId ?? 0, p_StaffType = string.IsNullOrWhiteSpace(staffType) ? "All" : staffType.Trim(), p_CollegeId = collegeId },
                             commandType: CommandType.StoredProcedure,
                             cancellationToken: ct));
                 }
@@ -85,6 +85,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                     result = await conn.QueryFirstOrDefaultAsync<LopPolicyDto>(
                         new CommandDefinition(
                             "sp_LopPolicy_Get",
+                            new { p_CollegeId = collegeId },
                             commandType: CommandType.StoredProcedure,
                             cancellationToken: ct));
                 }
@@ -117,7 +118,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                     }
                 }
 
-                return result ?? throw new InvalidOperationException("LOP policy configuration is missing in database.");
+                return result;
             }
             catch (Exception ex)
             {
@@ -126,7 +127,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             }
         }
 
-        public async Task<IEnumerable<LopPolicyDto>> GetAllPoliciesAsync(CancellationToken ct = default)
+        public async Task<IEnumerable<LopPolicyDto>> GetAllPoliciesAsync(CancellationToken ct = default, int? collegeId = null)
         {
             try
             {
@@ -134,6 +135,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                 var rows = await conn.QueryAsync<LopPolicyDto>(
                     new CommandDefinition(
                         "sp_LopPolicy_GetAll",
+                        new { p_CollegeId = collegeId },
                         commandType: CommandType.StoredProcedure,
                         cancellationToken: ct));
                 return rows ?? Enumerable.Empty<LopPolicyDto>();
@@ -145,7 +147,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             }
         }
 
-        public async Task<LopPolicyDto> SavePolicyAsync(SaveLopPolicyRequest request, int? updatedByUserId = null, CancellationToken ct = default)
+        public async Task<LopPolicyDto> SavePolicyAsync(SaveLopPolicyRequest request, int? updatedByUserId = null, CancellationToken ct = default, int? collegeId = null)
         {
             try
             {
@@ -176,6 +178,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                 parameters.Add("p_RoundingMode", string.IsNullOrWhiteSpace(request.RoundingMode) ? "Exact" : request.RoundingMode.Trim());
                 parameters.Add("p_MaxLopDaysPerMonth", request.MaxLopDaysPerMonth);
                 parameters.Add("p_AutoApplyToPayroll", request.AutoApplyToPayroll ? 1 : 0);
+                parameters.Add("p_CollegeId", collegeId);
 
                 var saved = await conn.QueryFirstOrDefaultAsync<LopPolicyDto>(
                     new CommandDefinition(
@@ -231,7 +234,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             return affected > 0;
         }
 
-        public async Task<IEnumerable<LopStaffRecordDto>> GetStaffRecordsAsync(string? month = null, string? searchTerm = null, int? campusId = null, string? source = null, CancellationToken ct = default)
+        public async Task<IEnumerable<LopStaffRecordDto>> GetStaffRecordsAsync(string? month = null, string? searchTerm = null, int? campusId = null, string? source = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
             try
             {
@@ -241,6 +244,9 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                 parameters.Add("p_SearchTerm", string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm.Trim());
                 parameters.Add("p_CampusId", campusId ?? 0);
                 parameters.Add("p_Source", string.IsNullOrWhiteSpace(source) ? null : source.Trim());
+                parameters.Add("p_CollegeId", collegeId);
+                parameters.Add("p_BoardId", boardId);
+                parameters.Add("p_AcademicYearId", academicYearId);
 
                 var rows = await conn.QueryAsync<LopStaffRecordDto>(
                     new CommandDefinition(
@@ -277,7 +283,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             }
         }
 
-        public async Task<LopKpisDto> GetKpisAsync(string? month = null, int? campusId = null, CancellationToken ct = default)
+        public async Task<LopKpisDto> GetKpisAsync(string? month = null, int? campusId = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
             try
             {
@@ -285,6 +291,9 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                 var parameters = new DynamicParameters();
                 parameters.Add("p_Month", string.IsNullOrWhiteSpace(month) ? null : month.Trim());
                 parameters.Add("p_CampusId", campusId ?? 0);
+                parameters.Add("p_CollegeId", collegeId);
+                parameters.Add("p_BoardId", boardId);
+                parameters.Add("p_AcademicYearId", academicYearId);
 
                 var kpi = await conn.QueryFirstOrDefaultAsync<LopKpisDto>(
                     new CommandDefinition(
@@ -409,7 +418,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
             return rowsAffected > 0;
         }
 
-        public async Task<IEnumerable<LopStaffDropdownDto>> GetStaffListForLopAsync(int? campusId = null, CancellationToken ct = default)
+        public async Task<IEnumerable<LopStaffDropdownDto>> GetStaffListForLopAsync(int? campusId = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
             try
             {
@@ -417,7 +426,7 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
                 var list = await conn.QueryAsync<LopStaffDropdownDto>(
                     new CommandDefinition(
                         "sp_LopStaffList_Get",
-                        new { p_CampusId = campusId ?? 0 },
+                        new { p_CampusId = campusId ?? 0, p_CollegeId = collegeId, p_BoardId = boardId, p_AcademicYearId = academicYearId },
                         commandType: CommandType.StoredProcedure,
                         cancellationToken: ct));
 
@@ -432,9 +441,10 @@ namespace CollegeManagement.API.Repositories.Implementations.LopConfiguration
 
         public async Task<Dictionary<int, StaffMonthlyAttendanceMetric>> GetMonthlyAttendanceMetricsAsync(
             string targetMonth,
-            LopPolicyDto policy,
+            LopPolicyDto? policy,
             IReadOnlyList<LopStaffDropdownDto> staffList,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            int? collegeId = null)
         {
             var result = new Dictionary<int, StaffMonthlyAttendanceMetric>();
             if (!DateTime.TryParseExact($"{targetMonth}-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var monthStart))
@@ -471,6 +481,7 @@ SELECT
     GracePeriodMinutes
 FROM `AttendanceTimingConfigs`
 WHERE IsActive = 1
+  AND (@CollegeId IS NULL OR CollegeId = @CollegeId)
 ORDER BY (DepartmentId IS NOT NULL) DESC, (StaffType IS NOT NULL) DESC, Id DESC;
 
 SELECT
@@ -507,7 +518,7 @@ WHERE IsDeleted = 0
             using var multi = await conn.QueryMultipleAsync(
                 new CommandDefinition(
                     sql,
-                    new { MonthStart = monthStart.Date, MonthEnd = monthEnd.Date },
+                    new { MonthStart = monthStart.Date, MonthEnd = monthEnd.Date, CollegeId = collegeId },
                     cancellationToken: ct));
 
             var attRows = (await multi.ReadAsync<dynamic>()).ToList();
@@ -570,8 +581,14 @@ WHERE IsDeleted = 0
                 holidayDatesByCampus.Add((Convert.ToDateTime(h.StartDate).Date, Convert.ToDateTime(h.EndDate).Date, cId));
             }
 
-            var customStart = TimeSpan.TryParse(policy.ShiftStart, out var parsedCustomStart) ? parsedCustomStart : new TimeSpan(9, 0, 0);
-            var customLateCutoff = customStart.Add(TimeSpan.FromMinutes(Math.Clamp(policy.GraceMinutes, 0, 120)));
+            var customStart = policy != null && TimeSpan.TryParse(policy.ShiftStart, out var parsedCustomStart) ? parsedCustomStart : new TimeSpan(9, 0, 0);
+            var graceMins = policy?.GraceMinutes ?? 10;
+            var useShiftTiming = policy?.UseShiftTimingConfig ?? true;
+            var weeklyRuleEnabled = policy?.WeeklyMissedCheckoutRuleEnabled ?? false;
+            var weeklyThreshold = policy?.WeeklyMissedCheckoutThreshold ?? 2;
+            var weeklyPenaltyDays = policy != null && policy.WeeklyMissedCheckoutPenaltyDays > 0 ? policy.WeeklyMissedCheckoutPenaltyDays : 1.0m;
+            var countUnmarkedAsAbsent = policy?.CountUnmarkedWorkingDaysAsAbsent ?? false;
+            var customLateCutoff = customStart.Add(TimeSpan.FromMinutes(Math.Clamp(graceMins, 0, 120)));
 
             foreach (var staff in staffList)
             {
@@ -593,12 +610,12 @@ WHERE IsDeleted = 0
                     : workStart.Add(TimeSpan.FromMinutes(15));
                 int checkoutGrace = timing != null ? Convert.ToInt32(timing.GracePeriodMinutes ?? 15) : 15;
 
-                TimeSpan effectiveLateCutoff = policy.UseShiftTimingConfig ? shiftLateThreshold : customLateCutoff;
+                TimeSpan effectiveLateCutoff = useShiftTiming ? shiftLateThreshold : customLateCutoff;
                 TimeSpan checkoutCutoff = workEnd.Add(TimeSpan.FromMinutes(checkoutGrace));
 
-                string shiftInfo = policy.UseShiftTimingConfig
+                string shiftInfo = useShiftTiming
                     ? $"Shift {FormatTs(workStart)} · Late > {FormatTs(effectiveLateCutoff)}"
-                    : $"Custom {FormatTs(customStart)} (+{policy.GraceMinutes}m)";
+                    : $"Custom {FormatTs(customStart)} (+{graceMins}m)";
 
                 var metric = new StaffMonthlyAttendanceMetric
                 {
@@ -641,7 +658,7 @@ WHERE IsDeleted = 0
                             pendingNextWorkingDayPenalty = false;
                             metric.AbsentCount++;
                             metric.WeeklyMissedCheckoutTriggerCount++;
-                            metric.WeeklyMissedCheckoutPenaltyDays += (policy.WeeklyMissedCheckoutPenaltyDays > 0 ? policy.WeeklyMissedCheckoutPenaltyDays : 1.0m);
+                            metric.WeeklyMissedCheckoutPenaltyDays += weeklyPenaltyDays;
 
                             // Even if staff checked in / checked out today, do NOT mark Present (penalized as Absent)
                             if (attByStaffDate.TryGetValue((staffNumericId, d), out var attPen))
@@ -686,7 +703,7 @@ WHERE IsDeleted = 0
 
                             // Present (1) or Late (3)
                             metric.PresentCount++;
-                            bool isLate = ((policy.UseShiftTimingConfig && att.Status == 3) ||
+                            bool isLate = ((useShiftTiming && att.Status == 3) ||
                                            (att.InTime.HasValue && att.InTime.Value > effectiveLateCutoff))
                                           && !approvedLateSet.Contains((staffNumericId, d));
                             if (isLate) metric.LateCount++;
@@ -697,7 +714,7 @@ WHERE IsDeleted = 0
                             {
                                 metric.MissedCheckoutCount++;
                                 weeklyUnresolvedMissedCount++;
-                                if (policy.WeeklyMissedCheckoutRuleEnabled && weeklyUnresolvedMissedCount >= Math.Max(1, policy.WeeklyMissedCheckoutThreshold))
+                                if (weeklyRuleEnabled && weeklyUnresolvedMissedCount >= Math.Max(1, weeklyThreshold))
                                 {
                                     pendingNextWorkingDayPenalty = true;
                                     weeklyUnresolvedMissedCount = 0;
@@ -708,7 +725,7 @@ WHERE IsDeleted = 0
                         {
                             metric.LeaveCount++;
                         }
-                        else if (policy.CountUnmarkedWorkingDaysAsAbsent && (d < today || (d == today && nowTime > workEnd)))
+                        else if (countUnmarkedAsAbsent && (d < today || (d == today && nowTime > workEnd)))
                         {
                             if (approvedAbsentSet.Contains((staffNumericId, d)))
                                 metric.PresentCount++;

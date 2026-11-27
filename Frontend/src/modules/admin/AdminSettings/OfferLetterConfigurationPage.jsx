@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
+﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import {
   FileText,
@@ -59,7 +59,7 @@ const PRESET_TEMPLATES = [
     version: "1.0",
     numberSeriesCode: "OFFER_LETTER_NO",
     subject: "Letter of Appointment & Service Terms – Junior Lecturer",
-    institutionName: "PIRNAV EDUCATIONAL SOCIETY",
+    institutionName: "EDUCATIONAL SOCIETY",
     departmentOffice: "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
     documentHeading: "OFFICIAL APPOINTMENT ORDER – JUNIOR COLLEGE FACULTY",
     probationPeriodMonths: 6,
@@ -68,7 +68,7 @@ const PRESET_TEMPLATES = [
       "We have pleasure in offering you an official appointment as {{Designation}} at our {{PrimaryCampus}} campus under the Board of Intermediate Education curriculum.",
     termsAndConditions:
       "1. Teaching Obligations: The Lecturer shall conduct regular theory periods, laboratory practicals, and special study hours in accordance with the Board of Intermediate Education (BIEAP/TGBIE) curriculum.\n2. Student Academic Progress: Responsible for student syllabus completion, weekly unit test valuations, and intensive coaching for Intermediate Public Examinations (IPE) and integrated competitive entrance examinations (EAMCET / JEE / NEET).\n3. Examination Duties: Mandatory participation in BIEAP/TGBIE practical examination supervision and spot valuation.\n4. Service Notice Period: Service notice period is strictly three (3) calendar months or equivalent gross salary in lieu thereof.\n5. Campus Assignments: The management reserves the right to assign teaching duties across affiliated junior college campuses based on institutional requirements.",
-    authorizedSignatoryName: "Dr. K. V. Ramanamurthy",
+    authorizedSignatoryName: "Authorized Signatory",
     authorizedSignatoryRole: "Director of Human Resources",
     includeSalaryTable: true,
     includeSpecsBox: true,
@@ -84,7 +84,7 @@ const PRESET_TEMPLATES = [
     version: "1.1",
     numberSeriesCode: "OFFER_LETTER_NO",
     subject: "Executive Commission & Letter of Appointment – Campus Principal",
-    institutionName: "PIRNAV EDUCATIONAL SOCIETY",
+    institutionName: "EDUCATIONAL SOCIETY",
     departmentOffice: "OFFICE OF THE SECRETARY & GOVERNING BODY",
     documentHeading: "EXECUTIVE APPOINTMENT & PRINCIPAL COMMISSION – INTERMEDIATE COLLEGE",
     probationPeriodMonths: 12,
@@ -93,7 +93,7 @@ const PRESET_TEMPLATES = [
       "The Board of Governors is pleased to appoint you as Campus Principal & Executive Head of Institution for {{PrimaryCampus}}, with dual institutional purview over Intermediate academic instruction (BIEAP / TGBIE curriculum) and campus administrative operations.",
     termsAndConditions:
       "1. Institutional Governance: The Principal exercises dual oversight over Teaching Faculty (syllabus pacing, lesson plans, lab practicals) and Non-Teaching Staff (campus accounting, fee collections, student registers, timings, discipline).\n2. Board Compliance & Academic Results: Directly responsible for statutory Board of Intermediate Education affiliations, IPE board examination center management, student pass percentages, and integrated EAMCET / JEE / NEET competitive ranks.\n3. Administration & Fee Governance: Accountable for campus fee structures, student admissions, fee reconciliation, campus infrastructure security, and Loss of Pay (LOP) policy enforcement.\n4. Notice Period: Service notice period for Principal leadership is six (6) calendar months or equivalent salary in lieu thereof to maintain institutional leadership continuity.\n5. Multi-Campus Oversight: The Governing Body may depute cross-campus administrative or academic inspection duties across affiliated junior colleges based on operational exigencies.",
-    authorizedSignatoryName: "N. Venkateswara Rao",
+    authorizedSignatoryName: "Managing Secretary",
     authorizedSignatoryRole: "Secretary & Managing Trustee",
     includeSalaryTable: true,
     includeSpecsBox: true,
@@ -109,7 +109,7 @@ const PRESET_TEMPLATES = [
     version: "1.0",
     numberSeriesCode: "OFFER_LETTER_NO",
     subject: "Letter of Appointment – Head of Department (HOD)",
-    institutionName: "PIRNAV EDUCATIONAL SOCIETY",
+    institutionName: "EDUCATIONAL SOCIETY",
     departmentOffice: "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
     documentHeading: "APPOINTMENT ORDER – HEAD OF DEPARTMENT & SENIOR LECTURER",
     probationPeriodMonths: 6,
@@ -118,7 +118,7 @@ const PRESET_TEMPLATES = [
       "We are pleased to appoint you as Head of Department (HOD) & Senior Lecturer at our {{PrimaryCampus}} campus under the Board of Intermediate Education curriculum.",
     termsAndConditions:
       "1. Departmental Leadership: Lead teaching faculty in the department, supervise theory lecture coverage, laboratory practical logbooks, and enforce BIEAP/TGBIE curriculum benchmarks.\n2. Academic Quality & Practical Examinations: Oversee science laboratories, ensure safety protocols, coordinate internal college examinations, and liaise with the Principal for IPE board examinations.\n3. Mentorship & Valuation: Mentor Junior Lecturers, review student progress in weekly tests, and coordinate IPE external spot valuation assignments.\n4. Service Notice Period: Service notice period is strictly three (3) calendar months or equivalent salary in lieu thereof.",
-    authorizedSignatoryName: "Dr. K. V. Ramanamurthy",
+    authorizedSignatoryName: "Authorized Signatory",
     authorizedSignatoryRole: "Director of Human Resources",
     includeSalaryTable: true,
     includeSpecsBox: true,
@@ -134,7 +134,7 @@ const PRESET_TEMPLATES = [
     version: "1.0",
     numberSeriesCode: "OFFER_LETTER_NO",
     subject: "Letter of Appointment & Service Terms – Administrative Staff",
-    institutionName: "PIRNAV EDUCATIONAL SOCIETY",
+    institutionName: "EDUCATIONAL SOCIETY",
     departmentOffice: "OFFICE OF HUMAN RESOURCES & CAMPUS ADMINISTRATION",
     documentHeading: "OFFICIAL APPOINTMENT ORDER – CAMPUS ADMINISTRATIVE & SUPPORT STAFF",
     probationPeriodMonths: 6,
@@ -143,7 +143,7 @@ const PRESET_TEMPLATES = [
       "We are pleased to offer you appointment as {{Designation}} at our {{PrimaryCampus}} campus.",
     termsAndConditions:
       "1. Campus Duties: Carry out designated administrative, accounting, student registry, laboratory assistance, or campus maintenance tasks under the direction of the Principal and Administrative Officer.\n2. Diligence & Timings: Strictly adhere to campus biometric timings, fee counter protocols, admission record safety, and institutional asset care. Unexcused absence will incur Loss of Pay (LOP) deductions.\n3. Service Notice Period: Service notice period is strictly one (1) calendar month or equivalent gross salary in lieu thereof.\n4. Code of Conduct: Abide by institutional service bylaws and maintain absolute confidentiality of student records and accounts.",
-    authorizedSignatoryName: "P. R. Mohan",
+    authorizedSignatoryName: "Administrative Officer",
     authorizedSignatoryRole: "Registrar / Administrative Officer",
     includeSalaryTable: true,
     includeSpecsBox: true,
@@ -182,18 +182,18 @@ const BLANK_TEMPLATE = {
   isDefault: false,
   version: "1.0",
   numberSeriesCode: "OFFER_LETTER_NO",
-  subject: "Letter of Appointment & Service Terms – Junior College Faculty",
-  institutionName: "PIRNAV EDUCATIONAL SOCIETY",
-  departmentOffice: "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
-  documentHeading: "OFFICIAL APPOINTMENT ORDER – JUNIOR COLLEGE FACULTY",
+  subject: "Letter of Appointment & Service Terms",
+  institutionName: "",
+  departmentOffice: "OFFICE OF HUMAN RESOURCES & ADMINISTRATION",
+  documentHeading: "OFFICIAL APPOINTMENT ORDER",
   probationPeriodMonths: 6,
   noticePeriodMonths: 3,
   openingStatement:
-    "We have pleasure in offering you an official appointment as {{Designation}} at our {{PrimaryCampus}} campus under the Board of Intermediate Education curriculum.",
+    "We have pleasure in offering you an official appointment as {{Designation}} at our {{PrimaryCampus}} campus.",
   termsAndConditions:
-    "1. Teaching Obligations: The Lecturer shall conduct regular theory periods, laboratory practicals, and special study hours in accordance with the Board of Intermediate Education (BIEAP/TGBIE) curriculum.\n2. Student Academic Progress: Responsible for student syllabus completion, weekly unit test valuations, and intensive coaching for Intermediate Public Examinations (IPE) and integrated competitive entrance examinations (EAMCET / JEE / NEET).\n3. Examination Duties: Mandatory participation in BIEAP/TGBIE practical examination supervision and spot valuation.\n4. Service Notice Period: Service notice period is strictly three (3) calendar months or equivalent gross salary in lieu thereof.\n5. Campus Assignments: The management reserves the right to assign teaching duties across affiliated junior college campuses based on institutional requirements.",
-  authorizedSignatoryName: "Dr. K. V. Ramanamurthy",
-  authorizedSignatoryRole: "Director of Human Resources",
+    "1. Duties & Responsibilities: The appointee shall fulfill designated academic/administrative duties faithfully.\n2. Service Notice Period: Standard institutional notice period terms apply.",
+  authorizedSignatoryName: "Principal / Director",
+  authorizedSignatoryRole: "Human Resources",
   includeSalaryTable: true,
   includeSpecsBox: true,
   includeAcceptanceSlip: true,
@@ -207,19 +207,9 @@ export default function OfferLetterConfigurationPage() {
   // 3 Tabs: catalog, editor, automation
   const [activeTab, setActiveTab] = useState("catalog");
 
-  // State
-  const [templates, setTemplates] = useState(() => {
-    try {
-      const stored = localStorage.getItem("cms_offer_letter_templates");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return PRESET_TEMPLATES;
-  });
-
-  const [selectedTemplateId, setSelectedTemplateId] = useState(PRESET_TEMPLATES[0].id);
+  // State - strictly tenant-isolated from backend database (starts empty for new colleges)
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(null);
   const [dbRoles, setDbRoles] = useState([]);
   const [toastMessage, setToastMessage] = useState("");
   const [toastType, setToastType] = useState("success");
@@ -266,22 +256,16 @@ export default function OfferLetterConfigurationPage() {
   const [previewModalTemplate, setPreviewModalTemplate] = useState(null);
   const [modalPreviewMode, setModalPreviewMode] = useState("document");
 
-  // Automation triggers state
-  const [automationSettings, setAutomationSettings] = useState(() => {
-    try {
-      const stored = localStorage.getItem("cms_offer_letter_automation");
-      if (stored) return JSON.parse(stored);
-    } catch {}
-    return {
-      autoSendOnSubmission: true,
-      autoSendOnApproval: true,
-      emailSubject: "Official Letter of Appointment & Offer Letter - {{EmployeeId}}",
-      emailBody:
-        "Dear {{StaffName}},\n\nCongratulations! Your staff onboarding profile has been processed.\nAttached is your official Letter of Appointment and Offer Letter.\n\nWelcome to Pirnav Educational Society.",
-      ccHrEmail: "hr@pirnav.edu.in",
-      attachPdfFilenamePattern: "Offer_Letter_{{EmployeeId}}.pdf",
-      workflowPreference: "Automatic",
-    };
+  // Automation triggers state (loaded cleanly per college from API)
+  const [automationSettings, setAutomationSettings] = useState({
+    autoSendOnSubmission: true,
+    autoSendOnApproval: true,
+    emailSubject: "Official Letter of Appointment & Offer Letter - {{EmployeeId}}",
+    emailBody:
+      "Dear {{StaffName}},\n\nCongratulations! Your staff onboarding profile has been processed.\nAttached is your official Letter of Appointment and Offer Letter.",
+    ccHrEmail: "",
+    attachPdfFilenamePattern: "Offer_Letter_{{EmployeeId}}.pdf",
+    workflowPreference: "Automatic",
   });
 
   const [searchParams] = useSearchParams();
@@ -318,19 +302,25 @@ export default function OfferLetterConfigurationPage() {
         }));
       }
     } catch (e) {
-      console.warn("Using cached offer letter workflow config:", e);
+      console.warn("Failed to load offer letter workflow config:", e);
     }
   };
 
   const loadRequests = async () => {
     setLoadingRequests(true);
     try {
-      const res = await apiClient.get(apiEndpoints.staff.offerLetterWorkflowRequests);
+      const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
+      const res = await apiClient.get(apiEndpoints.staff.offerLetterWorkflowRequests, {
+        params: campusId ? { campusId } : undefined,
+      });
       if (Array.isArray(res?.data)) {
         setRequests(res.data);
+      } else {
+        setRequests([]);
       }
     } catch (e) {
       console.warn("Could not load onboarding requests:", e);
+      setRequests([]);
     } finally {
       setLoadingRequests(false);
     }
@@ -339,7 +329,7 @@ export default function OfferLetterConfigurationPage() {
   useEffect(() => {
     loadWorkflowConfig();
     loadRequests();
-  }, []);
+  }, [selectedCampus]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -361,7 +351,7 @@ export default function OfferLetterConfigurationPage() {
 
   // Current active template or new draft being edited
   const activeTemplate = useMemo(() => {
-    return templates.find((t) => t.id === selectedTemplateId) || templates[0] || PRESET_TEMPLATES[0];
+    return templates.find((t) => String(t.id) === String(selectedTemplateId)) || templates[0] || null;
   }, [templates, selectedTemplateId]);
 
   const currentDraft = isCreatingNew ? newTemplateDraft : activeTemplate;
@@ -439,9 +429,9 @@ export default function OfferLetterConfigurationPage() {
     if (realStaff) {
       const sFullName = realStaff.fullName || [realStaff.firstName, realStaff.lastName].filter(Boolean).join(" ") || "Faculty Member";
       const empId = realStaff.employeeId || `STF${realStaff.id}`;
-      const desig = realStaff.designation || currentDraft.roleCategory || "Junior Lecturer";
-      const dept = realStaff.department || "Intermediate Academics";
-      const roleCat = realStaff.staffType || currentDraft.roleCategory || "Teaching Staff";
+      const desig = realStaff.designation || currentDraft?.roleCategory || "Junior Lecturer";
+      const dept = realStaff.department || "Academics";
+      const roleCat = realStaff.staffType || currentDraft?.roleCategory || "Teaching Staff";
       const sCampus = realStaff.campusName || campusName;
       const sBoard = realStaff.boardName || realStaff.board || boardName;
 
@@ -487,9 +477,9 @@ export default function OfferLetterConfigurationPage() {
           RoleCategory: roleCat,
           DateOfJoining: realStaff.joiningDate ? new Date(realStaff.joiningDate).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : dateStr,
           OfferDate: dateStr,
-          DepartmentOffice: currentDraft.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
-          ReportingManager: currentDraft.reportingAuthority || "Campus Principal",
-          ProbationPeriod: `${currentDraft.probationPeriodMonths || 6} Months`,
+          DepartmentOffice: currentDraft?.departmentOffice || "OFFICE OF HUMAN RESOURCES & ADMINISTRATION",
+          ReportingManager: currentDraft?.reportingAuthority || "Campus Principal",
+          ProbationPeriod: `${currentDraft?.probationPeriodMonths || 6} Months`,
           BasicSalary: basicStr,
           GrossSalary: grossStr,
           MonthlyGross: grossStr,
@@ -499,20 +489,20 @@ export default function OfferLetterConfigurationPage() {
           AnnualCtc: ctcStr,
           Hra: "As per institutional bylaws",
           SpecialAllowance: "Included in Gross Salary",
-          InstitutionName: currentDraft.institutionName || "PIRNAV EDUCATIONAL SOCIETY",
+          InstitutionName: currentDraft?.institutionName || selectedCampus?.collegeName || campusName || "Institution",
         },
       };
     }
 
-    const isPrincipal = (currentDraft.roleCategory || "").toLowerCase().includes("principal");
-    const isNonTeaching = (currentDraft.roleCategory || "").toLowerCase().includes("non-teaching");
+    const isPrincipal = (currentDraft?.roleCategory || "").toLowerCase().includes("principal");
+    const isNonTeaching = (currentDraft?.roleCategory || "").toLowerCase().includes("non-teaching");
     const desig = isPrincipal
       ? "Campus Principal & Professor"
       : isNonTeaching
       ? "Campus Administrative Officer"
-      : "Junior Lecturer (IPE & Competitive Coaching)";
-    const roleCat = currentDraft.roleCategory || "Teaching Staff";
-    const empId = `${campusCode}TCH0042`;
+      : "Lecturer / Faculty";
+    const roleCat = currentDraft?.roleCategory || "Teaching Staff";
+    const empId = `${campusCode}TCH0001`;
 
     return {
       id: "proofing-candidate",
@@ -522,15 +512,15 @@ export default function OfferLetterConfigurationPage() {
         StaffName: "Candidate / Appointee Name",
         EmployeeId: empId,
         Designation: desig,
-        Department: "Intermediate Academics",
+        Department: "Academics",
         PrimaryCampus: campusName,
         BoardName: boardName,
         RoleCategory: roleCat,
         DateOfJoining: dateStr,
         OfferDate: dateStr,
-        DepartmentOffice: currentDraft.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
-        ReportingManager: currentDraft.reportingAuthority || (isPrincipal ? "Board of Governors" : "Campus Principal"),
-        ProbationPeriod: `${currentDraft.probationPeriodMonths || 6} Months`,
+        DepartmentOffice: currentDraft?.departmentOffice || "OFFICE OF HUMAN RESOURCES & ADMINISTRATION",
+        ReportingManager: currentDraft?.reportingAuthority || (isPrincipal ? "Board of Governors" : "Campus Principal"),
+        ProbationPeriod: `${currentDraft?.probationPeriodMonths || 6} Months`,
         BasicSalary: isPrincipal ? "₹85,000" : isNonTeaching ? "₹32,000" : "₹45,000",
         GrossSalary: isPrincipal ? "₹1,35,000" : isNonTeaching ? "₹48,000" : "₹68,500",
         MonthlyGross: isPrincipal ? "₹1,35,000" : isNonTeaching ? "₹48,000" : "₹68,500",
@@ -540,7 +530,7 @@ export default function OfferLetterConfigurationPage() {
         AnnualCtc: isPrincipal ? "₹16,20,000" : isNonTeaching ? "₹5,76,000" : "₹8,22,000",
         Hra: "As per institutional bylaws",
         SpecialAllowance: "Included in Gross Salary",
-        InstitutionName: currentDraft.institutionName || "PIRNAV EDUCATIONAL SOCIETY",
+        InstitutionName: currentDraft?.institutionName || selectedCampus?.collegeName || campusName || "Institution",
       },
     };
   }, [selectedCampus, selectedBoard, currentDraft, selectedProofingStaffId, proofingStaffList, proofingStaffPayroll]);
@@ -646,57 +636,65 @@ export default function OfferLetterConfigurationPage() {
     loadRoles();
   }, []);
 
-  // Load from Backend API if available
+  // Load Offer Letter templates strictly for the current college/campus from Backend API
   useEffect(() => {
+    let active = true;
     async function loadBackendTemplates() {
       try {
-        const res = await templateApi.getTemplates({ category: "Offer Letter" });
-        if (res?.items && Array.isArray(res.items) && res.items.length > 0) {
-          const loaded = res.items.map((item) => {
+        const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
+        const res = await templateApi.getTemplates({
+          category: "Offer Letter",
+          ...(campusId ? { campusId } : {}),
+        });
+        const rawItems = res?.items || res?.data?.items || (Array.isArray(res) ? res : []);
+        if (!active) return;
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          const loaded = rawItems.map((item) => {
             let parsedMeta = {};
             try {
               parsedMeta = JSON.parse(item.contentBody || "{}");
             } catch {}
             return {
-              id: item.templateCode || `TMPL_${item.id}`,
+              id: item.id || item.templateCode || `TMPL_${Date.now()}`,
+              dbId: item.id,
               templateCode: item.templateCode,
               title: item.title,
               category: "Offer Letter",
               roleCategory: parsedMeta.roleCategory || "Teaching Staff",
-              isDefault: item.isActive,
+              isDefault: Boolean(item.isDefault ?? item.isActive),
               version: String(item.version || "1.0"),
               numberSeriesCode: parsedMeta.numberSeriesCode || "OFFER_LETTER_NO",
               subject: parsedMeta.subject || "Letter of Appointment & Service Terms",
-              institutionName: parsedMeta.institutionName || "PIRNAV EDUCATIONAL SOCIETY",
-              departmentOffice: parsedMeta.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES",
-              documentHeading: parsedMeta.documentHeading || "OFFICIAL APPOINTMENT ORDER – JUNIOR COLLEGE FACULTY",
+              institutionName: parsedMeta.institutionName || selectedCampus?.collegeName || selectedCampus?.campusName || "",
+              departmentOffice: parsedMeta.departmentOffice || "OFFICE OF HUMAN RESOURCES & ADMINISTRATION",
+              documentHeading: parsedMeta.documentHeading || "OFFICIAL APPOINTMENT ORDER",
               probationPeriodMonths: parsedMeta.probationPeriodMonths || 6,
               noticePeriodMonths: parsedMeta.noticePeriodMonths || 3,
-              openingStatement: parsedMeta.openingStatement || PRESET_TEMPLATES[0].openingStatement,
-              termsAndConditions: parsedMeta.termsAndConditions || PRESET_TEMPLATES[0].termsAndConditions,
-              authorizedSignatoryName: parsedMeta.authorizedSignatoryName || PRESET_TEMPLATES[0].authorizedSignatoryName,
-              authorizedSignatoryRole: parsedMeta.authorizedSignatoryRole || PRESET_TEMPLATES[0].authorizedSignatoryRole,
+              openingStatement: parsedMeta.openingStatement || BLANK_TEMPLATE.openingStatement,
+              termsAndConditions: parsedMeta.termsAndConditions || BLANK_TEMPLATE.termsAndConditions,
+              authorizedSignatoryName: parsedMeta.authorizedSignatoryName || BLANK_TEMPLATE.authorizedSignatoryName,
+              authorizedSignatoryRole: parsedMeta.authorizedSignatoryRole || BLANK_TEMPLATE.authorizedSignatoryRole,
               includeSalaryTable: parsedMeta.includeSalaryTable !== false,
               includeSpecsBox: parsedMeta.includeSpecsBox !== false,
               includeAcceptanceSlip: parsedMeta.includeAcceptanceSlip !== false,
             };
           });
-          setTemplates((prev) => {
-            const combined = [...loaded];
-            PRESET_TEMPLATES.forEach((p) => {
-              if (!combined.some((c) => c.templateCode === p.templateCode)) {
-                combined.push(p);
-              }
-            });
-            return combined;
-          });
+          setTemplates(loaded);
+          setSelectedTemplateId((curr) => (loaded.some((t) => String(t.id) === String(curr)) ? curr : loaded[0].id));
+        } else {
+          setTemplates([]);
+          setSelectedTemplateId(null);
         }
       } catch (err) {
-        // Fallback to local storage presets
+        if (active) {
+          setTemplates([]);
+          setSelectedTemplateId(null);
+        }
       }
     }
     loadBackendTemplates();
-  }, []);
+    return () => { active = false; };
+  }, [selectedCampus]);
 
   const notify = (msg, type = "success") => {
     setToastMessage(msg);
@@ -733,6 +731,7 @@ export default function OfferLetterConfigurationPage() {
     const newId = `OFFER_LETTER_CUSTOM_${Date.now()}`;
     setNewTemplateDraft({
       ...BLANK_TEMPLATE,
+      institutionName: selectedCampus?.collegeName || selectedCampus?.campusName || "",
       id: newId,
       templateCode: newId,
       title: "",
@@ -771,22 +770,31 @@ export default function OfferLetterConfigurationPage() {
         setIsCreatingNew(false);
       }
 
-      localStorage.setItem("cms_offer_letter_templates", JSON.stringify(updatedTemplates));
-      localStorage.setItem("cms_offer_letter_automation", JSON.stringify(automationSettings));
+      // Persisting directly to backend database per college
 
-      // Attempt to save to backend template repository
+      // Save to backend template repository (update existing DB row or create new)
       try {
+        const campusId = selectedCampus?.campusId ?? selectedCampus?.id;
         const payload = {
           templateCode: target.templateCode || `OFFER_LETTER_${Date.now()}`,
           title: target.title,
           category: "Offer Letter",
           contentBody: JSON.stringify(target),
           placeholders: availableTokens.map((p) => p.token),
-          isActive: target.isDefault !== false,
+          isDefault: Boolean(target.isDefault),
+          isActive: true,
         };
-        await templateApi.createTemplate(payload);
-      } catch {
-        // Backend fallback handled
+        if (target.dbId) {
+          await templateApi.updateTemplate(target.dbId, payload, campusId);
+        } else {
+          const created = await templateApi.createTemplate(payload, campusId);
+          if (created?.id) {
+            setTemplates((prev) => prev.map((t) => (String(t.id) === String(target.id) || t.templateCode === payload.templateCode ? { ...t, id: created.id, dbId: created.id } : t)));
+            setSelectedTemplateId(created.id);
+          }
+        }
+      } catch (apiErr) {
+        console.warn("Offer letter template DB save error:", apiErr);
       }
 
       notify(
@@ -801,16 +809,19 @@ export default function OfferLetterConfigurationPage() {
     }
   };
 
-  const handleDeleteTemplate = (id) => {
-    if (templates.length <= 1) {
-      notify("At least one template must remain in the catalog.", "error");
-      return;
+  const handleDeleteTemplate = async (id) => {
+    const target = templates.find((t) => String(t.id) === String(id));
+    if (target?.dbId || typeof id === "number") {
+      try {
+        await templateApi.deleteTemplate(target?.dbId || id);
+      } catch (err) {
+        console.warn("Delete offer letter template error:", err);
+      }
     }
-    const filtered = templates.filter((t) => t.id !== id);
+    const filtered = templates.filter((t) => String(t.id) !== String(id));
     setTemplates(filtered);
-    localStorage.setItem("cms_offer_letter_templates", JSON.stringify(filtered));
-    if (selectedTemplateId === id) {
-      setSelectedTemplateId(filtered[0]?.id || PRESET_TEMPLATES[0].id);
+    if (String(selectedTemplateId) === String(id)) {
+      setSelectedTemplateId(filtered[0]?.id || null);
     }
     notify("Template deleted successfully.");
   };
@@ -828,12 +839,12 @@ export default function OfferLetterConfigurationPage() {
         attachPdfFilenamePattern: automationSettings.attachPdfFilenamePattern || "Offer_Letter_{{EmployeeId}}.pdf",
       };
       await apiClient.post(apiEndpoints.staff.offerLetterWorkflowConfig, payload);
-      localStorage.setItem("cms_offer_letter_automation", JSON.stringify(payload));
+      // Persisted directly per college via API
       setAutomationSettings((prev) => ({ ...prev, ...payload }));
       notify("Offer letter workflow and automation preferences saved successfully!");
     } catch (err) {
       console.error("Save automation failed:", err);
-      localStorage.setItem("cms_offer_letter_automation", JSON.stringify(automationSettings));
+      // Persisted directly per college via API
       notify("Saved locally. Could not synchronize to server.", "error");
     }
   };
@@ -932,7 +943,7 @@ export default function OfferLetterConfigurationPage() {
       isDefault: t.id === id,
     }));
     setTemplates(updated);
-    localStorage.setItem("cms_offer_letter_templates", JSON.stringify(updated));
+    // Persisted directly per college via API
     const target = templates.find((t) => t.id === id);
     notify(`Template "${target?.title || id}" marked as active default.`);
   };
@@ -941,7 +952,7 @@ export default function OfferLetterConfigurationPage() {
   const handleRemoveDefault = (id) => {
     const updated = templates.map((t) => (t.id === id ? { ...t, isDefault: false } : t));
     setTemplates(updated);
-    localStorage.setItem("cms_offer_letter_templates", JSON.stringify(updated));
+    // Persisted directly per college via API
     const target = templates.find((t) => t.id === id);
     notify(`Default status removed from "${target?.title || id}".`);
   };
@@ -957,7 +968,7 @@ export default function OfferLetterConfigurationPage() {
     };
     const updated = [...templates, newTmpl];
     setTemplates(updated);
-    localStorage.setItem("cms_offer_letter_templates", JSON.stringify(updated));
+    // Persisted directly per college via API
     setSelectedTemplateId(newId);
     setActiveTab("editor");
     notify("Template duplicated successfully.");
@@ -979,8 +990,8 @@ export default function OfferLetterConfigurationPage() {
       }
     });
     // Replace institutional tokens
-    resolved = resolved.replace(/{{InstitutionName}}/g, tmpl.institutionName || "PIRNAV EDUCATIONAL SOCIETY");
-    resolved = resolved.replace(/{{DepartmentOffice}}/g, tmpl.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES");
+    resolved = resolved.replace(/{{InstitutionName}}/g, tmpl?.institutionName || selectedCampus?.collegeName || selectedCampus?.campusName || "Institution");
+    resolved = resolved.replace(/{{DepartmentOffice}}/g, tmpl?.departmentOffice || "OFFICE OF HUMAN RESOURCES & ADMINISTRATION");
     resolved = resolved.replace(/{{AuthorizedSignatoryName}}/g, tmpl.authorizedSignatoryName || "Director of HR");
     resolved = resolved.replace(/{{AuthorizedSignatoryRole}}/g, tmpl.authorizedSignatoryRole || "Human Resources");
     return resolved;
@@ -1055,7 +1066,7 @@ export default function OfferLetterConfigurationPage() {
       const tmpl = currentDraft;
 
       const specRows = [
-        ["PIRNAV EDUCATIONAL SOCIETY - OFFICIAL APPOINTMENT ORDER SPECIFICATIONS", ""],
+        [`${tmpl?.institutionName || selectedCampus?.collegeName || "INSTITUTION"} - OFFICIAL APPOINTMENT ORDER SPECIFICATIONS`, ""],
         ["Document Ref:", `PC-OL/${new Date().getFullYear()}/${empId}`],
         ["Date of Issue:", activeCandidate.data.OfferDate || new Date().toLocaleDateString()],
         ["Candidate / Staff Name:", activeCandidate.data.StaffName || ""],
@@ -1135,7 +1146,7 @@ export default function OfferLetterConfigurationPage() {
         </head>
         <body>
           <div class='header'>
-            <div class='inst-name'>${tmpl.institutionName || "PIRNAV EDUCATIONAL SOCIETY"}</div>
+            <div class='inst-name'>${tmpl.institutionName || selectedCampus?.collegeName || selectedCampus?.campusName || "Institution"}</div>
             <div class='inst-sub'>${tmpl.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES"}</div>
             <div class='doc-heading'>${tmpl.documentHeading || "OFFICIAL APPOINTMENT ORDER"}</div>
           </div>
@@ -1179,7 +1190,7 @@ export default function OfferLetterConfigurationPage() {
                 <div style='margin-bottom: 40px;'>_____________________________</div>
                 <strong>${tmpl.authorizedSignatoryName || "Director of HR"}</strong><br/>
                 <span>${tmpl.authorizedSignatoryRole || "Human Resources"}</span><br/>
-                <span>Pirnav Educational Society</span>
+                <span>${tmpl.institutionName || selectedCampus?.collegeName || selectedCampus?.campusName || "Institution"}</span>
               </td>
               <td style='text-align: right;'>
                 <div style='margin-bottom: 40px;'>_____________________________</div>
@@ -1232,12 +1243,12 @@ export default function OfferLetterConfigurationPage() {
             <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
               <img
                 src={pirnavCollegeCrest}
-                alt="Pirnav College"
+                alt="College Crest"
                 style={{ width: compact ? "44px" : "54px", height: compact ? "44px" : "54px", objectFit: "contain" }}
               />
               <div>
                 <h1 className="olc-sheet-inst-name" style={{ fontSize: compact ? "15px" : "18px", margin: 0, color: "#0f172a", fontWeight: 800 }}>
-                  {tmpl.institutionName || "PIRNAV EDUCATIONAL SOCIETY"}
+                  {tmpl?.institutionName || selectedCampus?.collegeName || selectedCampus?.campusName || "Institution"}
                 </h1>
                 <div className="olc-sheet-inst-dept" style={{ fontSize: compact ? "9.5px" : "11px", color: "#475569", fontWeight: 700, marginTop: "2px" }}>
                   {tmpl.departmentOffice || "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES"}
@@ -1467,6 +1478,23 @@ export default function OfferLetterConfigurationPage() {
               </button>
             </div>
 
+            {templates.length === 0 ? (
+              <div style={{ padding: "48px 24px", textAlign: "center", background: "#f8fafc", borderRadius: "14px", border: "2px dashed #cbd5e1" }}>
+                <FileSignature size={44} style={{ color: "#94a3b8", margin: "0 auto 12px" }} />
+                <h4 style={{ margin: "0 0 6px", fontSize: "17px", fontWeight: 700, color: "#1e293b" }}>No Offer Letter Templates Configured</h4>
+                <p style={{ margin: "0 auto 18px", maxWidth: "460px", color: "#64748b", fontSize: "13.5px" }}>
+                  This college currently has zero inherited offer letter templates. Create a custom appointment &amp; offer letter template for your campus.
+                </p>
+                <button
+                  type="button"
+                  className="cms-btn cms-btn-primary"
+                  onClick={handleStartCreateTemplate}
+                  style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Plus size={15} /> Create First Offer Letter Template
+                </button>
+              </div>
+            ) : (
             <div className="olc-template-cards-grid">
               {templates.map((tmpl) => (
                 <div key={tmpl.id} className={`olc-template-card ${tmpl.isDefault ? "is-default" : ""}`}>
@@ -1582,7 +1610,7 @@ export default function OfferLetterConfigurationPage() {
                       >
                         <Copy size={13} />
                       </button>
-                      {!tmpl.isDefault && templates.length > 1 && (
+                      {!tmpl.isDefault && (
                         <button
                           type="button"
                           className="cms-btn cms-btn-ghost"
@@ -1598,6 +1626,7 @@ export default function OfferLetterConfigurationPage() {
                 </div>
               ))}
             </div>
+            )}
 
             {/* Mini Preview Popup Modal (Opens right over catalog when user clicks Preview) */}
             {previewModalTemplate && (
@@ -1713,7 +1742,24 @@ export default function OfferLetterConfigurationPage() {
         {/* ------------------------------------------------------------------------- */}
         {/* TAB 2: TEMPLATE DESIGNER & CONTENT (INTEGRATED LIVE EDITOR PROOFING) */}
         {/* ------------------------------------------------------------------------- */}
-        {activeTab === "editor" && (
+        {activeTab === "editor" && !currentDraft && (
+          <div style={{ padding: "48px 24px", textAlign: "center", background: "#f8fafc", borderRadius: "14px", border: "2px dashed #cbd5e1" }}>
+            <FileSignature size={44} style={{ color: "#94a3b8", margin: "0 auto 12px" }} />
+            <h4 style={{ margin: "0 0 6px", fontSize: "17px", fontWeight: 700, color: "#1e293b" }}>No Offer Letter Template Selected</h4>
+            <p style={{ margin: "0 auto 18px", maxWidth: "460px", color: "#64748b", fontSize: "13.5px" }}>
+              Create a new offer letter template for your college to start customizing content and previewing live PDF output.
+            </p>
+            <button
+              type="button"
+              className="cms-btn cms-btn-primary"
+              onClick={handleStartCreateTemplate}
+              style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+            >
+              <Plus size={15} /> Create Offer Letter Template
+            </button>
+          </div>
+        )}
+        {activeTab === "editor" && currentDraft && (
           <div className="olc-editor-layout">
             {/* Left Column: Form Fields */}
             <div className="olc-editor-form-col">
@@ -2245,7 +2291,7 @@ export default function OfferLetterConfigurationPage() {
                         className="olc-input"
                         value={automationSettings.ccHrEmail || ""}
                         onChange={(e) => setAutomationSettings({ ...automationSettings, ccHrEmail: e.target.value })}
-                        placeholder="hr@pirnav.edu.in"
+                        placeholder="hr@yourcollege.edu.in"
                       />
                       <small style={{ color: "#64748b", fontSize: "11px" }}>
                         An institutional audit copy of released offer letters will be carbon-copied here.

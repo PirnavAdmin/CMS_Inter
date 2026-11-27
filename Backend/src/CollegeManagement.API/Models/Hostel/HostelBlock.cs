@@ -6,7 +6,9 @@ namespace CollegeManagement.API.Models.Hostel
     {
         public int HostelId { get; set; }
 
-        public int? CampusId { get; set; } = 1;
+        public int CollegeId { get; set; }
+
+        public int? CampusId { get; set; }
 
         public string HostelName { get; set; } = string.Empty;
 

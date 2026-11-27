@@ -2678,6 +2678,11 @@ const structureDropdownRows = (payload) => {
 };
 
 function StructureFormModal({ initial, structures = [], onClose, onSaved, onPersistenceError, feeTypes, masters, masterErrors = {}, masterLoading = false, authorize, yearFeeMode = "same", yearIncrementType = "percentage", yearIncrementValue = "", onDraftTotalChange }) {
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const campusId = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "";
+  const [bothYearMode, setBothYearMode] = useState(String(initial?.yearFeeMode || "").toLowerCase());
+  const [bothIncrementType, setBothIncrementType] = useState(String(initial?.incrementType || "percentage").toLowerCase());
+  const [bothIncrementValue, setBothIncrementValue] = useState(initial?.incrementValue ?? "");
   const initialProgram = initial?.programId || "";
   const initialValues = initial || {
     boardId: masters.selectedBoardId ? String(masters.selectedBoardId) : "",
@@ -2824,7 +2829,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
       ...current,
       groupId,
       group: group?.label || "",
-      academicLevelId: group?.academicLevelId || current.academicLevelId || "",
+      academicLevelId: group?.academicLevelId || "",
       programId: "",
       program: "",
       feeItems: feeItemsForContext(current.feeItems),
@@ -2888,8 +2893,10 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
       };
     }
     return {
+      campusId: Number(campusId),
       boardId: Number(values.boardId || values.board || 0),
       academicYearId: Number(values.academicYearId || values.academicYear || 0),
+      academicLevelId: Number(values.academicLevelId),
       groupId: Number(values.groupId || values.group || 0),
       ...(programId ? { programId } : {}),
       yearFeeMode: yearFeeMode || "same",
@@ -2906,9 +2913,16 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
     if (savingRef.current || persistenceUnverified) return null;
     const configuredItems = dedupeConfiguredFeeItems(values.feeItems).filter((item) => item.structureItemId || item.required || Number(item.originalAmount || 0) > 0);
     const activeItems = configuredItems.filter((item) => item.selected !== false);
+    if (initial?.editBoth && (String(campusId) !== String(initial.campusId) || String(masters.selectedBoardId) !== String(initial.boardId) || String(masters.selectedAcademicYearId) !== String(initial.academicYearId))) return setError("The selected campus, board or academic year changed. Close this form and reopen the paired structure.");
+    if (initial?.editBoth && (!['same', 'different'].includes(bothYearMode) || (bothYearMode === 'different' && (!['percentage', 'fixed'].includes(bothIncrementType) || bothIncrementValue === '' || !Number.isFinite(Number(bothIncrementValue)) || Number(bothIncrementValue) < 0)))) return setError("Select a valid year fee mode and non-negative increment.");
     if (!initial && !values.academicYearId) return setError("Select an academic year in the top navbar before adding a fee structure.");
     if (!initial && (!values.boardId || groupLoading || groupError || !groupOptions.some((item) => String(item.value) === String(values.groupId))))
       return setError(groupError || "Select an available group for the current board.");
+    if (!initial && ![campusId, values.boardId, values.academicYearId, values.groupId, values.programId, values.academicLevelId].every((id) => Number.isInteger(Number(id)) && Number(id) > 0))
+      return setError("Select a campus, board, academic year, group and program with a valid academic level before saving.");
+    if (!initial && (String(values.boardId) !== String(masters.selectedBoardId) || String(values.academicYearId) !== String(masters.selectedAcademicYearId)
+      || String(groupOptions.find((item) => String(item.value) === String(values.groupId))?.academicLevelId || "") !== String(values.academicLevelId)))
+      return setError("The selected academic context changed. Select the group and program again before saving.");
     if (programLoading || programError) return setError(programError || "Wait for programs to finish loading.");
     if (!values.academicYear && !values.academicYearId) return setError("Academic Year is required");
     if (!values.group && !values.groupId) return setError("Group is required");
@@ -2919,7 +2933,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
     const canUseFeeStructureApi = hasBackendFeeTypeIds(feeTypes);
     if (!canUseFeeStructureApi) return setError("Fee structures require saved backend fee types. Please save fee types successfully before creating a structure.");
     if (configuredItems.some((item) => !Number(item.feeTypeId || item.id))) return setError("Only saved backend fee types can be used for API fee structures.");
-    const duplicate = structures.some((row) => (
+    const duplicate = !initial?.editBoth && structures.some((row) => (
       row.id !== initial?.id
       && row.status === "Active"
       && String(row.academicYearId || row.academicYear) === String(values.academicYearId || values.academicYear)
@@ -2932,10 +2946,21 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
     setSaving(true);
     let created = false;
     try {
+      if (initial?.editBoth) {
+        await apiClient.put(apiEndpoints.fee.updateStructureBothYears(initial.id), {
+          campusId: Number(initial.campusId),
+          yearFeeMode: bothYearMode,
+          ...(bothYearMode === 'different' ? { incrementType: bothIncrementType, incrementValue: Number(bothIncrementValue) } : {}),
+          isActive: values.status !== 'Inactive',
+          items: activeItems.map((item) => ({ feeTypeId: Number(item.feeTypeId || item.id), rule: item.required ? 'Mandatory' : 'Optional', amount: Number(item.originalAmount) })),
+        }, { skipNetworkRetry: true });
+        await onSaved("Both fee structures updated", null, { ids: [initial.id, initial.pairedStructureId], scope: [Number(initial.campusId), Number(initial.boardId), Number(initial.academicYearId)] });
+        return null;
+      }
       const structurePayload = buildStructurePayload(initial?.id ? configuredItems : activeItems);
       const structureResponse = initial?.id
         ? await apiClient.put(apiEndpoints.fee.updateStructure(initial.id), structurePayload)
-        : await apiClient.post(apiEndpoints.fee.createStructure, structurePayload);
+        : await apiClient.post(apiEndpoints.fee.createStructure, structurePayload, { skipNetworkRetry: true });
       created = !initial?.id;
       const feeStructureId = initial?.id || read(getObject(structureResponse.data), "feeStructureId", "FeeStructureId", "id", "Id");
       if (!feeStructureId) throw new Error("Fee structure saved, but the structure ID was not returned.");
@@ -2954,10 +2979,15 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
           && normalizeKey(read(saved, "rule", "Rule")) === (item.required ? "mandatory" : "optional")
         )))) throw new Error("The structure was created, but the API did not return the entered fee items and amounts. Close and review the saved records; do not create it again. Backend persistence needs investigation.");
       }
-      onSaved(initial?.id ? "Fee structure updated" : "Fee structure added", true);
+      await onSaved(initial?.id ? "Fee structure updated" : "Fee structure added", initial?.id ? null : { id: feeStructureId, scope: [structurePayload.campusId, structurePayload.boardId, structurePayload.academicYearId] });
     } catch (err) {
-      setError(getApiErrorMessage(err));
+      setError(!initial?.id && !created && !err.response
+        ? "The save response could not be confirmed. Refresh the list or contact support before creating this structure again."
+        : getApiErrorMessage(err));
       if (created) {
+        setPersistenceUnverified(true);
+        onPersistenceError?.();
+      } else if (!initial?.id && !err.response) {
         setPersistenceUnverified(true);
         onPersistenceError?.();
       }
@@ -2970,6 +3000,8 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
 
   const displayFeeItems = dedupeConfiguredFeeItems(values.feeItems);
   const draftTotal = displayFeeItems.filter((item) => item.selected).reduce((sum, item) => sum + Number(item.originalAmount || 0), 0);
+  const draftIncrement = bothYearMode === 'different' ? (bothIncrementType === 'percentage' ? draftTotal * Number(bothIncrementValue || 0) / 100 : Number(bothIncrementValue || 0)) : 0;
+  const draftSecondTotal = Math.round((draftTotal + Math.round((draftIncrement + Number.EPSILON) * 100) / 100 + Number.EPSILON) * 100) / 100;
   useEffect(() => {
     onDraftTotalChange?.(draftTotal);
   }, [draftTotal, onDraftTotalChange]);
@@ -3024,7 +3056,7 @@ function StructureFormModal({ initial, structures = [], onClose, onSaved, onPers
           {programError ? <span className="cms-error" role="alert">{programError}</span> : null}
         </div>
       </div>
-      {initial?.id ? <p className="cms-fee-note">Board, academic year, group and program are fixed for saved structures. Edit the fee amounts and rules below.</p> : <p className="cms-fee-note">{yearFeeMode === "different" ? "Different Fees: the second-year total is calculated when saved, including admission-fee exclusions and the requested increment." : "Same Fees: both years use the configured active fees."}</p>}
+      {initial?.editBoth ? <div className="cms-fee-year-config"><p>Saving updates both linked academic-year records.</p><fieldset className="cms-fee-year-options"><legend>Year fee configuration</legend>{[["same", "Same Fees"], ["different", "Different Fees"]].map(([mode, label]) => <label key={mode}><input type="radio" name="fs-edit-both-mode" checked={bothYearMode === mode} onChange={() => setBothYearMode(mode)} />{label}</label>)}</fieldset>{bothYearMode === "different" ? <div className="cms-field"><label htmlFor="fs-both-increment-type">Increment type</label><select id="fs-both-increment-type" value={bothIncrementType} onChange={event => setBothIncrementType(event.target.value)}><option value="percentage">Percentage (%)</option><option value="fixed">Fixed Amount (₹)</option></select><label htmlFor="fs-both-increment">Increment value</label><input id="fs-both-increment" type="number" min="0" step="0.01" value={bothIncrementValue} onChange={event => setBothIncrementValue(event.target.value)} /></div> : null}<p>1st-Year Total Fee: {formatCurrency(draftTotal)} · 2nd-Year Total Fee: {Number.isFinite(draftSecondTotal) ? formatCurrency(draftSecondTotal) : "Unavailable"}</p></div> : initial?.id ? <p className="cms-fee-note">Board, academic year, group and program are fixed for saved structures. Edit the fee amounts and rules below.</p> : <p className="cms-fee-note">{yearFeeMode === "different" ? "Different Fees: the second-year total is calculated when saved, including admission-fee exclusions and the requested increment." : "Same Fees: both years use the configured active fees."}</p>}
       <div className="cms-fee-structure-items">
         <div className="cms-fee-structure-items-head">
           <h4>Configured Fee Types</h4>
@@ -3694,7 +3726,7 @@ function StructureTab({ authorize = () => true, structures, onToast, onRefresh, 
     });
   };
 
-  const editStructure = async (row) => {
+  const editStructure = async (row, editBoth = false) => {
     if (!authorize("edit")) return onToast("Fee setup edit permission is required.");
     setIsAdding(false);
     setFirstYearTotal(0);
@@ -3712,7 +3744,7 @@ function StructureTab({ authorize = () => true, structures, onToast, onRefresh, 
       const savedItems = normalized?.feeItems;
       if (!savedItems?.length || savedItems.some((item) => item.originalAmount === undefined))
         throw new Error("Saved fee details are unavailable. Amounts cannot be safely edited until they load.");
-      setEditing({ ...row, ...normalized, feeItems: dedupeConfiguredFeeItems(savedItems) });
+      setEditing({ ...row, ...normalized, feeItems: dedupeConfiguredFeeItems(savedItems), ...(editBoth ? { editBoth: true } : {}) });
     } catch (err) {
       onToast(getApiErrorMessage(err));
     } finally {
@@ -3737,7 +3769,9 @@ function StructureTab({ authorize = () => true, structures, onToast, onRefresh, 
 
   const requestStructureAction = (action, row) => {
     if (!authorize(action === "copy" ? "create" : action)) return onToast("Fee setup permission is required.");
-    if (row.members || action === "delete") setActionTarget({ action, row });
+    const pair = action === "edit" && !row.members ? structures.find((item) => String(item.id) === String(row.pairedStructureId) && String(item.pairedStructureId) === String(row.id) && ["campusId", "boardId", "academicYearId", "groupId", "programId", "status"].every((key) => String(item[key] ?? "") === String(row[key] ?? "")) && [Number(item.academicLevelId), Number(row.academicLevelId)].sort().join(",") === "1,2") : null;
+    if (pair) setActionTarget({ action, row: { ...row, members: [row, pair].sort((a, b) => Number(a.academicLevelId) - Number(b.academicLevelId)) } });
+    else if (row.members || action === "delete") setActionTarget({ action, row });
     else if (action === "edit") editStructure(row);
     else copyStructure(row);
   };
@@ -3921,7 +3955,22 @@ function StructureTab({ authorize = () => true, structures, onToast, onRefresh, 
           authorize={authorize}
           initial={Object.keys(editing).length ? editing : null}
           onClose={() => { setEditing(null); setIsAdding(false); setFirstYearTotal(0); }}
-          onSaved={(message) => { setEditing(null); setIsAdding(false); setFirstYearTotal(0); onToast(message); onRefresh(); }}
+          onSaved={async (message, created, updatedPair) => {
+            const result = await onRefresh(created?.scope || updatedPair?.scope);
+            setEditing(null); setIsAdding(false); setFirstYearTotal(0);
+            if (updatedPair && (result?.scopeChanged || !updatedPair.ids.every((id) => result?.structures?.some((row) => String(row.id) === String(id))))) return onToast("Both-year update was accepted, but the refreshed records could not be verified. Refresh the list or contact support.");
+            if (!created) return onToast(message);
+            const rows = result?.structures || [];
+            const displayIndex = feeStructureDisplayRows(rows).findIndex((row) => String(row.id) === String(created.id) || row.members?.some((member) => String(member.id) === String(created.id)));
+            if (displayIndex < 0 || !rows.some((row) => String(row.id) === String(created.id) && String(row.campusId) === String(created.scope[0]))) {
+              return onToast(result?.scopeChanged
+                ? "Fee structure saved, but the selected scope changed. Return to the original campus, board and academic year to review it."
+                : "Fee structure saved, but it could not be retrieved for the selected campus. Please refresh the list or contact support.");
+            }
+            setPage(Math.floor(displayIndex / PAGE_SIZE) + 1);
+            setSummarySelection({ id: String(created.id), scopeKey: summaryScopeKey });
+            return onToast(message);
+          }}
           onPersistenceError={onRefresh}
           feeTypes={feeTypes}
           masters={masters}
@@ -3936,14 +3985,14 @@ function StructureTab({ authorize = () => true, structures, onToast, onRefresh, 
       ) : null}
       {actionTarget ? <Modal title={`${actionTarget.action === "delete" ? "Delete" : actionTarget.action === "edit" ? "Edit" : "Copy"} fee structure`}
         onClose={() => setActionTarget(null)} footer={<button className="cms-btn cms-btn-ghost" onClick={() => setActionTarget(null)}>Cancel</button>}>
-        <p>{actionTarget.row.members ? "Choose the academic-level record. Only that record will be changed; its paired record will remain saved." : "Confirm deletion of this fee structure only."}</p>
+        <p>{actionTarget.row.members ? actionTarget.action === "edit" ? "Choose whether to edit an individual academic year or update both academic years together." : "Choose the academic-level record. Only that record will be changed; its paired record will remain saved." : "Confirm deletion of this fee structure only."}</p>
         <div className="cms-form-actions">{(actionTarget.row.members || [actionTarget.row]).map((member) => <button key={member.id} type="button" className="cms-btn cms-btn-primary" onClick={() => {
           const action = actionTarget.action;
           setActionTarget(null);
           if (action === "delete") deleteStructure(member);
           else if (action === "edit") editStructure(member);
           else copyStructure(member);
-        }}>{actionTarget.action === "delete" ? "Delete" : actionTarget.action === "edit" ? "Edit" : "Copy"} {member.academicLevelName || "structure"}</button>)}</div>
+        }}>{actionTarget.action === "delete" ? "Delete" : actionTarget.action === "edit" ? "Edit" : "Copy"} {member.academicLevelName || "structure"}</button>)}{actionTarget.action === "edit" && actionTarget.row.members ? <button type="button" className="cms-btn cms-btn-primary" onClick={() => { const first = actionTarget.row.members.find((member) => Number(member.academicLevelId) === 1); setActionTarget(null); if (first) editStructure(first, true); }}>Edit Both Years</button> : null}</div>
       </Modal> : null}
     </div>
     </>
@@ -4585,6 +4634,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   } = useAcademicContext();
   const { selectedCampus, selectedCampusId } = useCampusContext();
   const selectedCampusValue = selectedCampusId ?? selectedCampus?.campusId ?? selectedCampus?.id ?? "";
+  const structureScopeKey = JSON.stringify([String(selectedCampusValue || ""), String(selectedBoardId || ""), String(selectedAcademicYearId || "")]);
+  const currentStructureScopeRef = useRef(structureScopeKey);
+  currentStructureScopeRef.current = structureScopeKey;
   const [searchParams, setSearchParams] = useSearchParams();
   const { tab, setupTab, ledgerTab, overviewTab } = resolveFeeView(searchParams, initialTab, initialSetupTab, initialLedgerTab);
   const permissionScreen = tab === "Fee Setup" ? setupTab : tab === "Overview" ? "overview"
@@ -4644,6 +4696,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   const [fineRules, setFineRules] = useState([]);
   const [fineRuleState, setFineRuleState] = useState({ loading: false, error: "" });
   const [apiStructures, setApiStructures] = useState([]);
+  const [apiStructuresScope, setApiStructuresScope] = useState("");
   const [structureLoading, setStructureLoading] = useState(false);
   const [structureError, setStructureError] = useState("");
   const [masters, setMasters] = useState({ boards: [], years: [], levels: [], groups: [], sections: [], programs: [] });
@@ -4697,10 +4750,11 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
   ), [contextAcademicYears]);
   const selectedBoardLabel = optionLabel(contextBoardOptions, selectedBoardId);
   const selectedAcademicYearLabel = optionLabel(contextYearOptions, selectedAcademicYearId);
-  const structures = useMemo(() => apiStructures.filter((item) => (
-    matchesContext(selectedBoardId, selectedBoardLabel, item.boardId, item.board)
+  const structures = useMemo(() => (apiStructuresScope === structureScopeKey ? apiStructures : []).filter((item) => (
+    (!selectedCampusValue || item.campusId == null || String(item.campusId) === String(selectedCampusValue))
+    && matchesContext(selectedBoardId, selectedBoardLabel, item.boardId, item.board)
     && matchesContext(selectedAcademicYearId, selectedAcademicYearLabel, item.academicYearId, item.academicYear)
-  )), [apiStructures, selectedAcademicYearId, selectedAcademicYearLabel, selectedBoardId, selectedBoardLabel]);
+  )), [apiStructures, apiStructuresScope, structureScopeKey, selectedCampusValue, selectedAcademicYearId, selectedAcademicYearLabel, selectedBoardId, selectedBoardLabel]);
   const syncedMasters = useMemo(() => ({
     ...masters,
     selectedBoardId,
@@ -4886,7 +4940,9 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
     setPaymentHistoryExtras(results.flatMap((result) => (result.status === "fulfilled" ? result.value : [])));
   }, []);
 
-  const loadFeeApiData = useCallback(async () => {
+  const loadFeeApiData = useCallback(async (expectedScope) => {
+    const scopeKey = JSON.stringify([String(selectedCampusValue || ""), String(selectedBoardId || ""), String(selectedAcademicYearId || "")]);
+    if (currentStructureScopeRef.current !== scopeKey || (Array.isArray(expectedScope) && JSON.stringify(expectedScope.map(String)) !== scopeKey)) return { scopeChanged: true };
     const requestId = structureRequestRef.current + 1;
     structureRequestRef.current = requestId;
     setStructureLoading(true);
@@ -4909,14 +4965,14 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       apiClient.get(apiEndpoints.hostel.roomTypes),
       apiClient.get(apiEndpoints.fee.fineRules, { requireRealBackend: true, params: cleanParams({ campusId: selectedCampusValue, boardId: selectedBoardId, academicYearId: selectedAcademicYearId }) }),
     ]);
-    if (structureRequestRef.current !== requestId) return;
+    if (structureRequestRef.current !== requestId || currentStructureScopeRef.current !== scopeKey) return { scopeChanged: currentStructureScopeRef.current !== scopeKey };
     const routeRows = transportRoutesResult.status === "fulfilled" ? normalizeTransportRouteRows(getCollection(transportRoutesResult.value.data)) : [];
     const pickupResults = routeRows.length
       ? await Promise.allSettled(routeRows.map((route) => (
         apiClient.get(apiEndpoints.transport.pickupPoints, { params: cleanParams({ PageNumber: 1, PageSize: 1000, routeId: route.id }) })
       )))
       : [];
-    if (structureRequestRef.current !== requestId) return;
+    if (structureRequestRef.current !== requestId || currentStructureScopeRef.current !== scopeKey) return { scopeChanged: currentStructureScopeRef.current !== scopeKey };
     const transportError = [transportRoutesResult, ...pickupResults]
       .filter((result) => result.status === "rejected")
       .map((result) => getApiErrorMessage(result.reason))
@@ -4978,6 +5034,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       const apiTypes = getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id && !isDedicatedFacilityFeeType(item));
       setFeeTypes(apiTypes);
     }
+    let refreshedStructures = [];
     if (structuresResult.status === "fulfilled") {
       const normalizedFeeTypes = typesResult.status === "fulfilled"
         ? getCollection(typesResult.value.data).map(feeTypeOption).filter((item) => item.id && !isDedicatedFacilityFeeType(item))
@@ -4989,7 +5046,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
           ? apiClient.get(apiEndpoints.fee.getStructureItems(structure.id))
           : Promise.resolve(null)
       )));
-      if (structureRequestRef.current !== requestId) return;
+      if (structureRequestRef.current !== requestId || currentStructureScopeRef.current !== scopeKey) return { scopeChanged: currentStructureScopeRef.current !== scopeKey };
       const structuresWithItems = listedStructures.map((structure, index) => {
         const result = itemResults[index];
         if (result?.status !== "fulfilled" || !result.value) return {
@@ -5027,6 +5084,12 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
         } : { ...structure, feeDetailsError: "Unable to read saved fee details." };
       });
       setApiStructures(structuresWithItems);
+      setApiStructuresScope(scopeKey);
+      refreshedStructures = structuresWithItems.filter((item) => (
+        (!selectedCampusValue || item.campusId == null || String(item.campusId) === String(selectedCampusValue))
+        && matchesContext(selectedBoardId, selectedBoardLabel, item.boardId, item.board)
+        && matchesContext(selectedAcademicYearId, selectedAcademicYearLabel, item.academicYearId, item.academicYear)
+      ));
     } else {
       setStructureError(getApiErrorMessage(structuresResult.reason));
     }
@@ -5060,7 +5123,8 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       scholarships: scholarshipsResult.status === "rejected" ? getApiErrorMessage(scholarshipsResult.reason) : "",
     });
     if (structureRequestRef.current === requestId) setStructureLoading(false);
-  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue, selectedBoardId, selectedAcademicYearId]);
+    return { structures: refreshedStructures };
+  }, [contextAcademicYearsError, contextBoardOptions, contextBoardsError, contextYearOptions, selectedCampusValue, selectedBoardId, selectedAcademicYearId, selectedBoardLabel, selectedAcademicYearLabel]);
 
   const openCollectPayment = (id) => {
     navigateFeeAccount(id, "collection");
@@ -5153,7 +5217,7 @@ export default function FeeManagementPage({ initialTab = TABS[0], initialSetupTa
       : tab === "Student Fee Ledger"
         ? `${tab}:${ledgerTab}:${campusKey}:${ledgerTab === "Fee Collection" ? "" : selectedAcademicYearId || ""}`
         : `${tab}:${campusKey}:${boardYearKey}`;
-    if (tab !== "Student Fee Ledger" && loadedTabsRef.current.has(loadKey)) return;
+    if (tab !== "Student Fee Ledger" && tab !== "Fee Setup" && loadedTabsRef.current.has(loadKey)) return;
     loadedTabsRef.current.add(loadKey);
     if (tab === "Overview") loadOverviewData();
     if (tab === "Fee Setup") loadFeeApiData();

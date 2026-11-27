@@ -577,6 +577,10 @@ namespace CollegeManagement.API.Data
 
 
             modelBuilder.Entity<Group>()
+                .Property(g => g.CollegeId)
+                .HasDefaultValue(1);
+
+            modelBuilder.Entity<Group>()
                 .Property(g => g.GroupName)
                 .HasMaxLength(100)
                 .IsRequired();
@@ -806,6 +810,7 @@ namespace CollegeManagement.API.Data
             modelBuilder.Entity<FeeStructure>(entity =>
             {
                 entity.HasKey(x => x.FeeStructureId);
+                entity.Property(x => x.CollegeId).HasDefaultValue(1);
                 entity.Property(x => x.StructureName).IsRequired().HasMaxLength(150);
                 entity.Property(x => x.Description).HasMaxLength(500);
                 entity.Property(x => x.IsActive).HasDefaultValue(true);
@@ -1848,6 +1853,8 @@ private static void ConfigureTransportVehicle(ModelBuilder modelBuilder)
                 entity.Ignore(x => x.UpdatedBy);
                 entity.Ignore(x => x.Routes);
                 entity.Ignore(x => x.Drivers);
+                entity.Property(x => x.CollegeId).HasDefaultValue(1);
+                entity.Property(x => x.CampusId);
                 entity.Property(x => x.RegistrationNumber).HasColumnName("VehicleRegistrationNo");
                 entity.Property(x => x.Manufacturer).HasColumnName("Make");
 
@@ -1948,6 +1955,12 @@ private static void ConfigureTransportVehicleAssignment(ModelBuilder modelBuilde
                     entity.HasOne(x => x.Driver)
                         .WithMany()
                         .HasForeignKey(x => x.DriverId)
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    entity.HasOne(x => x.Attendant)
+                        .WithMany()
+                        .HasForeignKey(x => x.AttendantId)
+                        .IsRequired(false)
                         .OnDelete(DeleteBehavior.Restrict);
 
                     entity.HasIndex(x => new

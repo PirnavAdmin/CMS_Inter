@@ -81,6 +81,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                 IsActive = Convert.ToBoolean(dict["IsActive"]),
                 Version = ver,
                 CampusId = dict.ContainsKey("CampusId") && dict["CampusId"] != null && dict["CampusId"] != DBNull.Value ? Convert.ToInt32(dict["CampusId"]) : null,
+                CollegeId = dict.ContainsKey("CollegeId") && dict["CollegeId"] != null && dict["CollegeId"] != DBNull.Value ? Convert.ToInt32(dict["CollegeId"]) : null,
                 CreatedAt = Convert.ToDateTime(dict["CreatedAt"]),
                 UpdatedAt = Convert.ToDateTime(dict["UpdatedAt"])
             };
@@ -121,7 +122,8 @@ namespace CollegeManagement.API.Repositories.Implementations
             string? category,
             bool? isActive,
             int? campusId = null,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            int? collegeId = null)
         {
             var conn = await GetOpenConnectionAsync(ct);
             var parameters = new DynamicParameters();
@@ -131,6 +133,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_Category", string.IsNullOrWhiteSpace(category) ? null : category.Trim());
             parameters.Add("p_IsActive", isActive.HasValue ? (isActive.Value ? 1 : 0) : null);
             parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
             using var multi = await conn.QueryMultipleAsync(
                 new CommandDefinition(
@@ -153,12 +156,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             };
         }
 
-        public async Task<IReadOnlyList<Template>> GetActiveByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default)
+        public async Task<IReadOnlyList<Template>> GetActiveByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             var conn = await GetOpenConnectionAsync(ct);
             var parameters = new DynamicParameters();
             parameters.Add("p_Category", string.IsNullOrWhiteSpace(category) ? null : category.Trim());
             parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
             var rows = await conn.QueryAsync(
                 new CommandDefinition(
@@ -170,12 +174,13 @@ namespace CollegeManagement.API.Repositories.Implementations
             return rows.Select(MapRowToEntity).ToList();
         }
 
-        public async Task<Template?> GetByIdAsync(int id, int? campusId = null, CancellationToken ct = default)
+        public async Task<Template?> GetByIdAsync(int id, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             var conn = await GetOpenConnectionAsync(ct);
             var parameters = new DynamicParameters();
             parameters.Add("p_Id", id);
             parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
             var row = await conn.QueryFirstOrDefaultAsync(
                 new CommandDefinition(
@@ -187,7 +192,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return row == null ? null : MapRowToEntity(row);
         }
 
-        public async Task<Template?> GetByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
+        public async Task<Template?> GetByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return null;
 
@@ -195,6 +200,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             var parameters = new DynamicParameters();
             parameters.Add("p_TemplateCode", templateCode.Trim());
             parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
             var row = await conn.QueryFirstOrDefaultAsync(
                 new CommandDefinition(
@@ -206,7 +212,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return row == null ? null : MapRowToEntity(row);
         }
 
-        public async Task<bool> ExistsByCodeAsync(string templateCode, int? excludeId = null, int? campusId = null, CancellationToken ct = default)
+        public async Task<bool> ExistsByCodeAsync(string templateCode, int? excludeId = null, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return false;
 
@@ -215,6 +221,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_TemplateCode", templateCode.Trim());
             parameters.Add("p_ExcludeId", excludeId);
             parameters.Add("p_CampusId", campusId);
+            parameters.Add("p_CollegeId", collegeId);
 
             var count = await conn.ExecuteScalarAsync<int>(
                 new CommandDefinition(
@@ -241,6 +248,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             parameters.Add("p_IsDefault", template.IsDefault == true ? 1 : 0);
             parameters.Add("p_IsActive", template.IsActive ? 1 : 0);
             parameters.Add("p_CampusId", template.CampusId);
+            parameters.Add("p_CollegeId", template.CollegeId > 0 ? template.CollegeId : (int?)null);
 
             var row = await conn.QueryFirstOrDefaultAsync(
                 new CommandDefinition(

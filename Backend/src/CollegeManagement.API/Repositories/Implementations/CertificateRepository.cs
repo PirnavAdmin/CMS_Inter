@@ -316,8 +316,13 @@ public class CertificateRepository : ICertificateRepository
             tParams.Add("p_ShortCode", shortCode, DbType.String);
             tParams.Add("p_CodeGuess", codeGuess, DbType.String);
             tParams.Add("p_CanonicalType", canonicalType, DbType.String);
+            int? resolvedCollegeId = dict.ContainsKey("CollegeId") && dict["CollegeId"] != null && dict["CollegeId"] != DBNull.Value
+                ? Convert.ToInt32(dict["CollegeId"])
+                : (int?)null;
+
             tParams.Add("p_RawType", certType.Trim(), DbType.String);
             tParams.Add("p_CampusId", resolvedCampusId, DbType.Int32);
+            tParams.Add("p_CollegeId", resolvedCollegeId, DbType.Int32);
 
             var dbTemplate = await connection.QueryFirstOrDefaultAsync<dynamic>(new CommandDefinition(
                 "sp_GetTemplateForCertificate",

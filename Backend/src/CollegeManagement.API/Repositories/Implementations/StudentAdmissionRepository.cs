@@ -544,7 +544,7 @@ namespace CollegeManagement.API.Repositories.Implementations
                     throw new ArgumentException("Fee structure is required for non-referral admissions.");
 
                 var feeStructureExists = await _context.FeeStructures
-                    .AnyAsync(f => f.FeeStructureId == request.FeeStructureId.Value && f.IsActive && (!collegeId.HasValue || f.Campus.CollegeId == collegeId.Value));
+                    .AnyAsync(f => f.FeeStructureId == request.FeeStructureId.Value && f.IsActive && (!collegeId.HasValue || f.CollegeId == collegeId.Value || (f.Campus != null && f.Campus.CollegeId == collegeId.Value)));
                 if (!feeStructureExists)
                     throw new ArgumentException($"FeeStructureId {request.FeeStructureId.Value} does not exist or is inactive for your college.");
             }

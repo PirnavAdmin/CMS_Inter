@@ -60,7 +60,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelAttendance>(
                 "sp_GetHostelAttendanceById",
-                new { p_AttendanceId = attendanceId },
+                new
+                {
+                    p_AttendanceId = attendanceId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -75,7 +79,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 {
                     p_StudentId = studentId,
                     p_AttendanceDate = attendanceDate.Date,
-                    p_Session = session
+                    p_Session = session,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -114,7 +119,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_AttendanceDate = attendance.AttendanceDate.Date,
                 p_Session = attendance.Session,
                 p_AttendanceStatus = attendance.AttendanceStatus,
-                p_Remarks = attendance.Remarks
+                p_Remarks = attendance.Remarks,
+                p_CollegeId = ResolveCollegeId()
             };
 
             var result = await _dbConnection.ExecuteScalarAsync<int>(
@@ -138,10 +144,16 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 int savedCount = 0;
                 foreach (var record in dto.Records)
                 {
+                    int targetHostelId = record.HostelId > 0 ? record.HostelId : (dto.HostelId ?? 0);
+                    if (targetHostelId <= 0)
+                    {
+                        throw new InvalidOperationException("HostelId is required for bulk hostel attendance.");
+                    }
+
                     var parameters = new
                     {
                         p_StudentId = record.StudentId,
-                        p_HostelId = record.HostelId > 0 ? record.HostelId : (dto.HostelId ?? 1),
+                        p_HostelId = targetHostelId,
                         p_RoomId = record.RoomId,
                         p_BedId = record.BedId,
                         p_WardenAssignmentId = record.WardenAssignmentId,
@@ -174,7 +186,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var result = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_DeleteHostelAttendance",
-                new { p_AttendanceId = attendanceId },
+                new
+                {
+                    p_AttendanceId = attendanceId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result == 1;
@@ -184,7 +200,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelAttendanceExists",
-                new { p_AttendanceId = attendanceId },
+                new
+                {
+                    p_AttendanceId = attendanceId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -193,8 +213,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         public async Task<bool> StudentExistsAsync(int studentId)
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
-                "sp_CheckStudentExists",
-                new { p_StudentId = studentId },
+                "sp_CheckHostelStudentExists",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -204,7 +228,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBlockExists",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -214,7 +242,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckRoomMasterExists",
-                new { p_RoomId = roomId },
+                new
+                {
+                    p_RoomId = roomId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -224,7 +256,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBedExists",
-                new { p_BedId = bedId },
+                new
+                {
+                    p_BedId = bedId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -274,7 +310,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckActiveHostelWardenAssignmentExists",
-                new { p_WardenAssignmentId = wardenAssignmentId },
+                new
+                {
+                    p_WardenAssignmentId = wardenAssignmentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;

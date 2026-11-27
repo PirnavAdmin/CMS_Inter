@@ -62,12 +62,52 @@ public class FeeService : IFeeService
     public Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest r)
     {
         Id(id, "FeeStructureId");
-        if (r.ProgramId.HasValue) Id(r.ProgramId.Value, "ProgramId");
-        if (r.AcademicLevelId.HasValue) Id(r.AcademicLevelId.Value, "AcademicLevelId");
+        if (r.ProgramId.HasValue && r.ProgramId.Value > 0) Id(r.ProgramId.Value, "ProgramId");
+        if (r.AcademicLevelId.HasValue && r.AcademicLevelId.Value > 0) Id(r.AcademicLevelId.Value, "AcademicLevelId");
         r.YearFeeMode = NormalizeYearFeeMode(r.YearFeeMode);
         r.IncrementType = NormalizeIncrementType(r.IncrementType);
         if (r.IncrementValue.HasValue && r.IncrementValue.Value < 0) throw new ArgumentException("IncrementValue cannot be negative.");
+        if (r.Items != null)
+        {
+            foreach (var item in r.Items)
+            {
+                Id(item.FeeTypeId, "FeeTypeId");
+                if (item.Amount <= 0) throw new ArgumentException("Item amount must be greater than zero.");
+                item.Rule = Text(item.Rule, "Rule");
+                if (!item.Rule.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) && !item.Rule.Equals("Optional", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Rule must be Mandatory or Optional.");
+            }
+            if (r.Items.Select(x => x.FeeTypeId).Distinct().Count() != r.Items.Count)
+                throw new ArgumentException("Duplicate fee types are not allowed in a fee structure.");
+        }
         return _repo.UpdateFeeStructureAsync(id, r);
+    }
+
+    public Task<BothYearsFeeStructureResponse?> UpdateBothYearsFeeStructureAsync(int id, UpdateBothYearsFeeStructureRequest r)
+    {
+        Id(id, "FeeStructureId");
+        if (r.ProgramId.HasValue && r.ProgramId.Value > 0) Id(r.ProgramId.Value, "ProgramId");
+        r.YearFeeMode = NormalizeYearFeeMode(r.YearFeeMode);
+        r.IncrementType = NormalizeIncrementType(r.IncrementType);
+        if (r.IncrementValue.HasValue && r.IncrementValue.Value < 0) throw new ArgumentException("IncrementValue cannot be negative.");
+        if (r.YearFeeMode == "different")
+        {
+            if (r.IncrementType == null) throw new ArgumentException("IncrementType is required for Different Fees mode.");
+            if (!r.IncrementValue.HasValue) throw new ArgumentException("IncrementValue is required for Different Fees mode.");
+        }
+        if (r.Items == null || !r.Items.Any()) throw new ArgumentException("At least one fee type item is required.");
+        foreach (var item in r.Items)
+        {
+            Id(item.FeeTypeId, "FeeTypeId");
+            if (item.Amount <= 0) throw new ArgumentException("Item amount must be greater than zero.");
+            item.Rule = Text(item.Rule, "Rule");
+            if (!item.Rule.Equals("Mandatory", StringComparison.OrdinalIgnoreCase) && !item.Rule.Equals("Optional", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Rule must be Mandatory or Optional.");
+        }
+        if (r.Items.Select(x => x.FeeTypeId).Distinct().Count() != r.Items.Count)
+            throw new ArgumentException("Duplicate fee types are not allowed in a fee structure.");
+
+        return _repo.UpdateBothYearsFeeStructureAsync(id, r);
     }
     public Task<bool> DeleteFeeStructureAsync(int id) { Id(id, "FeeStructureId"); return _repo.DeleteFeeStructureAsync(id); }
     public Task<FeeStructureItemResponse?> AddFeeStructureItemAsync(int id, CreateFeeStructureItemRequest r) { Id(id, "FeeStructureId"); Id(r.FeeTypeId, "FeeTypeId"); if (r.Amount <= 0) throw new ArgumentException("Amount must be greater than zero."); r.Rule = Text(r.Rule, "Rule"); return _repo.AddFeeStructureItemAsync(id, r); }

@@ -1,4 +1,4 @@
-using Asp.Versioning;
+﻿using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using CollegeManagement.API.Helpers;
@@ -47,7 +47,7 @@ namespace CollegeManagement.API.Controllers.V1
     [ApiController]
     [ApiVersion("1.0")]
     [Route("api/v{version:apiVersion}/transport/driver")]
-    [Authorize(Roles = "Driver,Bus Driver")]
+    [Authorize(Roles = "Driver, Bus Driver, Super Admin, Admin, Transport Manager")]
     public class TransportDriverDashboardController : ControllerBase
     {
         private readonly ITransportDriverDashboardService _driverDashboardService;
@@ -90,13 +90,14 @@ namespace CollegeManagement.API.Controllers.V1
             var staffId = _jwtTokenHelper.GetStaffId(User);
             if (staffId == null) return Unauthorized();
 
-            var data = await _driverDashboardService.GetDashboardDataAsync(staffId.Value, ct);
+            var campusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request) ?? 0;
+            var data = await _driverDashboardService.GetDashboardDataAsync(staffId.Value, campusId, ct);
             if (data == null)
             {
                 return Ok(new { success = true, message = "No active assignment found.", data = new { assignedVehicle = (object?)null, route = (object?)null } });
             }
 
-            return Ok(new { success = true, message = "Dashboard retrieved.", data = data });
+            return Ok(new { success = true, data = data });
         }
 
         [HttpGet("route")]
@@ -304,8 +305,12 @@ namespace CollegeManagement.API.Controllers.V1
                 Address = request?.Address ?? ""
             };
 
-            var success = await _driverDashboardService.UpdateProfileAsync(staffId.Value, updateDto, ct);
-            return Ok(new { success = success, message = "Profile contact updated.", driverId = staffId });
+                        var success = await _driverDashboardService.UpdateProfileAsync(staffId.Value, updateDto, ct);
+            if (!success)
+            {
+                return BadRequest(new { success = false, message = "Driver profile not found or could not be updated." });
+            }
+            return Ok(new { success = true, message = "Profile contact updated.", driverId = staffId });
         }
     }
 }

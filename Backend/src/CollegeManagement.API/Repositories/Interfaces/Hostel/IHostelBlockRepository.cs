@@ -11,7 +11,7 @@ namespace CollegeManagement.API.Repositories.Interfaces.Hostel
 
         Task<HostelBlock?> GetByIdAsync(int hostelId);
 
-        Task<HostelBlock?> GetByCodeAsync(string hostelCode);
+        Task<HostelBlock?> GetByCodeAsync(string hostelCode, int? campusId = null);
 
         Task<int> CreateAsync(HostelBlock hostelBlock);
 

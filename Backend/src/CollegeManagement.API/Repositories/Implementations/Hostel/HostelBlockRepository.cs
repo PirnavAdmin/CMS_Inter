@@ -53,25 +53,37 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelBlock>(
                 "sp_GetHostelBlockById",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
-        public async Task<HostelBlock?> GetByCodeAsync(string hostelCode)
+        public async Task<HostelBlock?> GetByCodeAsync(string hostelCode, int? campusId = null)
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelBlock>(
                 "sp_GetHostelBlockByCode",
-                new { p_HostelCode = hostelCode },
+                new
+                {
+                    p_HostelCode = hostelCode,
+                    p_CampusId = campusId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<int> CreateAsync(HostelBlock hostelBlock)
         {
+            var collegeId = hostelBlock.CollegeId > 0 ? hostelBlock.CollegeId : ResolveCollegeId();
+
             return await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CreateHostelBlock",
                 new
                 {
-                    p_CampusId = hostelBlock.CampusId ?? 1,
+                    p_CampusId = hostelBlock.CampusId,
+                    p_CollegeId = collegeId,
                     p_HostelName = hostelBlock.HostelName,
                     p_HostelCode = hostelBlock.HostelCode,
                     p_HostelType = hostelBlock.HostelType,
@@ -93,6 +105,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 new
                 {
                     p_HostelId = hostelBlock.HostelId,
+                    p_CampusId = hostelBlock.CampusId,
+                    p_CollegeId = ResolveCollegeId(),
                     p_HostelName = hostelBlock.HostelName,
                     p_HostelCode = hostelBlock.HostelCode,
                     p_HostelType = hostelBlock.HostelType,
@@ -113,7 +127,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_DeleteHostelBlock",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
@@ -123,7 +141,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBlockExists",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;

@@ -1,9 +1,11 @@
 using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.Filters;
 using CollegeManagement.API.Services.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -46,6 +48,11 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? academicYearId = null,
             CancellationToken cancellationToken = default)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Ok(new { success = true, data = Enumerable.Empty<object>() });
+            }
+
             var result = await _hostelFeeConfigService.GetAllAsync(hostelId, status, campusId, boardId, academicYearId);
             return Ok(new { success = true, data = result });
         }

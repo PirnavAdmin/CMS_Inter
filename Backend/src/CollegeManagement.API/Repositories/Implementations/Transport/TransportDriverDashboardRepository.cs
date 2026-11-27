@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -132,66 +132,57 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             return rows >= 0;
         }
 
-        public async Task<object?> GetDashboardDataAsync(int staffId, CancellationToken ct = default)
+        public async Task<object?> GetDashboardDataAsync(int staffId, int campusId = 0, CancellationToken ct = default)
         {
             try
             {
                 var c = Connection;
                 var cmd = new CommandDefinition(
                     "sp_GetDriverDashboardData",
-                    new { p_StaffId = staffId },
+                    new { p_StaffId = staffId, p_CampusId = campusId },
                     commandType: CommandType.StoredProcedure,
                     cancellationToken: ct);
 
                 var row = await c.QueryFirstOrDefaultAsync<dynamic>(cmd);
-                if (row != null)
+
+                if (row == null)
+                    return null;
+
+                return new
                 {
-                    return new
+                    driverProfile = new
                     {
-                        assignedVehicle = new
-                        {
-                            vehicleId = (long?)row.VehicleId,
-                            vehicleNumber = (string?)row.VehicleNumber,
-                            registrationNumber = (string?)row.RegistrationNumber,
-                            vehicleType = (string?)row.VehicleType,
-                            capacity = (int?)row.Capacity,
-                            assignedDate = (DateTime?)row.AssignedDate
-                        },
-                        route = new
-                        {
-                            routeId = (long?)row.RouteId,
-                            routeName = (string?)row.RouteName,
-                            routeCode = (string?)row.RouteCode,
-                            StartLocation = (string?)row.StartLocation,
-                            EndLocation = (string?)row.EndLocation
-                        },
-                        attendant = row.AttendantId == null ? null : new
-                        {
-                            attendantId = (long)row.AttendantId,
-                            attendantName = (string)(row.AttendantName ?? ("Attendant " + row.AttendantId)),
-                            contactNumber = (string)(row.ContactNumber ?? "+91 98480 22338")
-                        },
-                        assignment = new
-                        {
-                            assignmentId = (long)row.AssignmentId,
-                            vehicleNumber = (string?)row.VehicleNumber,
-                            registrationNumber = (string?)row.RegistrationNumber,
-                            vehicleName = (string?)row.VehicleType,
-                            vehicleCapacity = (int?)row.Capacity,
-                            routeName = (string?)row.RouteName,
-                            attendantName = (string?)row.AttendantName,
-                            morningTripTime = (string?)row.MorningTripTime,
-                            eveningTripTime = (string?)row.EveningTripTime,
-                            shift = (string?)row.Shift,
-                            assignedStudents = (int?)row.AssignedStudents ?? 2
-                        },
-                        assignmentId = (long)row.AssignmentId,
-                        morningTripTime = (string?)row.MorningTripTime,
-                        eveningTripTime = (string?)row.EveningTripTime,
-                        shift = (string?)row.Shift,
-                        assignedStudents = (int?)row.AssignedStudents ?? 2
-                    };
-                }
+                        name         = $"{row.DriverFirstName} {row.DriverLastName}".Trim(),
+                        employeeId   = (string?)(row.EmployeeId),
+                        email        = (string?)(row.DriverEmail)
+                    },
+                    assignment = new
+                    {
+                        assignmentId     = (long?)row.AssignmentId,
+                        driverId         = (long?)row.DriverId,
+                        vehicleId        = (long?)row.VehicleId,
+                        vehicleNumber    = (string?)(row.VehicleNumber),
+                        vehicleName      = (string?)(row.VehicleName),
+                        vehicleCapacity  = row.VehicleCapacity != null ? Convert.ToInt32(row.VehicleCapacity) : (int?)null,
+                        routeId          = (long?)row.RouteId,
+                        routeName        = (string?)(row.RouteName),
+                        attendantId      = (long?)row.AttendantId,
+                        attendantName    = (string?)(row.AttendantName),
+                        assignedStudents = row.AssignedStudents != null ? Convert.ToInt32(row.AssignedStudents) : 0,
+                        morningTripTime  = (string?)(row.MorningTripTime),
+                        eveningTripTime  = (string?)(row.EveningTripTime),
+                        effectiveFrom    = row.EffectiveFrom != null ? ((DateTime)row.EffectiveFrom).ToString("yyyy-MM-dd") : null,
+                        effectiveTo      = row.EffectiveTo  != null ? ((DateTime)row.EffectiveTo).ToString("yyyy-MM-dd")  : null,
+                        shift            = (string?)(row.Shift),
+                        academicYear     = (string?)(row.AcademicYear)
+                    },
+                    todaySchedule = new object[] { },
+                    routeDetails  = new { stops = new object[] { } },
+                    morningTrip   = (object?)null,
+                    eveningTrip   = (object?)null,
+                    gpsStatus     = (object?)null,
+                    alerts        = (object?)null
+                };
             }
             catch
             {
