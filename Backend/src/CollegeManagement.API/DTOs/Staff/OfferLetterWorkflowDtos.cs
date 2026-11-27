@@ -8,9 +8,9 @@ namespace CollegeManagement.API.DTOs.Staff
         public string WorkflowPreference { get; set; } = "Automatic"; // "Automatic" | "AdminApproval"
         public bool AutoSendOnSubmission { get; set; } = true;
         public bool AutoSendOnApproval { get; set; } = true;
-        public string? CcHrEmail { get; set; } = "hr@pirnav.edu.in";
+        public string? CcHrEmail { get; set; } = string.Empty;
         public string? EmailSubject { get; set; } = "Official Letter of Appointment & Offer Letter - {{EmployeeId}}";
-        public string? EmailBody { get; set; } = "Dear {{StaffName}},\n\nCongratulations! Your staff onboarding profile has been processed.\nAttached is your official Letter of Appointment and Offer Letter.\n\nWelcome to Pirnav Educational Society.";
+        public string? EmailBody { get; set; } = "Dear {{StaffName}},\n\nCongratulations! Your staff onboarding profile has been processed.\nAttached is your official Letter of Appointment and Offer Letter.\n\nWarm regards,\nHuman Resources & Administration";
         public string? AttachPdfFilenamePattern { get; set; } = "Offer_Letter_{{EmployeeId}}.pdf";
     }
 

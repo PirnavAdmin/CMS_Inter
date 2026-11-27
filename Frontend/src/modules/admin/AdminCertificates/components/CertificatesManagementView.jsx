@@ -1789,46 +1789,29 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
     const loadActiveTemplates = async () => {
       try {
         const res = await apiClient.get(apiEndpoints.certificates.activeTemplates);
-        if (active && Array.isArray(res?.data) && res.data.length > 0) {
-          setActiveTemplatesList(res.data);
-          return;
+        const list = Array.isArray(res?.data) ? res.data : (Array.isArray(res?.data?.data) ? res.data.data : []);
+        if (active) {
+          setActiveTemplatesList(list);
         }
       } catch {
-        // Fallback to storage
+        if (active) setActiveTemplatesList([]);
       }
-      try {
-        const stored = getStoredCertificateTemplates();
-        if (active && Array.isArray(stored) && stored.length > 0) {
-          setActiveTemplatesList(stored);
-        }
-      } catch { }
     };
     loadActiveTemplates();
     return () => { active = false; };
   }, []);
 
   const availableCertificateTypes = useMemo(() => {
-    const defaults = [
-      "Bonafide Certificate",
-      "Study Certificate",
-      "Conduct Certificate",
-      "Transfer Certificate",
-      "Fee Clearance Certificate",
-      "Migration Certificate",
-      "No Objection Certificate",
-      "Character Certificate",
-      "Course Completion Certificate",
-      "Sports Certificate",
-    ];
     const fromRequestType = fromRequestMeta?.type ? [fromRequestMeta.type] : [];
     const currentFormType = form?.type ? [form.type] : [];
-    if (!Array.isArray(activeTemplatesList) || activeTemplatesList.length === 0) {
-      return Array.from(new Set([...defaults, ...fromRequestType, ...currentFormType])).filter(Boolean);
-    }
-    const dynamicTypes = activeTemplatesList
-      .map((t) => t.title || t.name || t.certificateType || t.templateName)
-      .filter((title) => Boolean(title) && !String(title).toLowerCase().includes("upload") && !String(title).toLowerCase().includes("card"));
-    return Array.from(new Set([...dynamicTypes, ...defaults, ...fromRequestType, ...currentFormType])).filter(Boolean);
+
+    // Load strictly from the current college's configured active certificate templates (empty when unconfigured)
+    const dynamicTypes = Array.isArray(activeTemplatesList)
+      ? activeTemplatesList
+          .map((t) => t.title || t.name || t.certificateType || t.templateName)
+          .filter((title) => Boolean(title) && !String(title).toLowerCase().includes("upload") && !String(title).toLowerCase().includes("card"))
+      : [];
+    return Array.from(new Set([...dynamicTypes, ...fromRequestType, ...currentFormType])).filter(Boolean);
   }, [activeTemplatesList, fromRequestMeta?.type, form?.type]);
 
   const formFields = useMemo(
@@ -3924,8 +3907,16 @@ export default function CertificatesManagementView({ Layout = DashboardLayout, p
                                 setErrors((prev) => ({ ...prev, type: undefined, customType: undefined }));
                               }}
                             >
-                              <option value="" disabled hidden>Select Certificate Type</option>
-                              {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                              <option value="" disabled hidden>
+                                {field.options.length === 0 ? "No certificate templates configured" : "Select Certificate Type"}
+                              </option>
+                              {field.options.length === 0 ? (
+                                <option value="" disabled>
+                                  No certificate templates configured (configure in Settings → Templates)
+                                </option>
+                              ) : (
+                                field.options.map((option) => <option key={option} value={option}>{option}</option>)
+                              )}
                             </select>
                             <FaChevronDown size={13} aria-hidden="true" />
                           </div>

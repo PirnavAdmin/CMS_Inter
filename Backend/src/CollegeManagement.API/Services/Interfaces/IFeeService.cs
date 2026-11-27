@@ -14,6 +14,7 @@ public interface IFeeService
     Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null);
     Task<FeeStructureResponse?> GetFeeStructureByIdAsync(int id);
     Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest request);
+    Task<BothYearsFeeStructureResponse?> UpdateBothYearsFeeStructureAsync(int id, UpdateBothYearsFeeStructureRequest request);
     Task<bool> DeleteFeeStructureAsync(int id);
     Task<FeeStructureItemResponse?> AddFeeStructureItemAsync(int id, CreateFeeStructureItemRequest request);
     Task<IEnumerable<FeeStructureItemResponse>> GetFeeStructureItemsAsync(int id);

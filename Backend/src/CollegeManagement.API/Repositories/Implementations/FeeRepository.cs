@@ -1,6 +1,7 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.DTOs.Fees;
 using CollegeManagement.API.Exceptions;
+using CollegeManagement.API.Models.Fee;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
 using Microsoft.AspNetCore.Http;
@@ -243,10 +244,95 @@ public class FeeRepository : IFeeRepository
 
     public async Task<FeeStructureResponse?> UpdateFeeStructureAsync(int id, UpdateFeeStructureRequest request)
     {
-        var c = Connection();
+        if (request.EditBothYears == true)
+        {
+            var bothReq = new UpdateBothYearsFeeStructureRequest
+            {
+                CampusId = request.CampusId,
+                StructureName = request.StructureName,
+                Description = request.Description,
+                ProgramId = request.ProgramId,
+                YearFeeMode = request.YearFeeMode,
+                IncrementType = request.IncrementType,
+                IncrementValue = request.IncrementValue,
+                IsActive = request.IsActive,
+                Items = request.Items ?? new()
+            };
+            var bothResult = await UpdateBothYearsFeeStructureAsync(id, bothReq);
+            if (bothResult?.FirstYear.FeeStructureId == id)
+                return bothResult.FirstYear;
+            if (bothResult?.SecondYear.FeeStructureId == id)
+                return bothResult.SecondYear;
+            return bothResult?.FirstYear;
+        }
+
+        if (request.Items != null && request.Items.Any())
+        {
+            var collegeId = ResolveCollegeId();
+            var c = Connection();
+            if (c.State != ConnectionState.Open)
+                await _db.Database.OpenConnectionAsync();
+
+            var target = await c.QueryFirstOrDefaultAsync<FeeStructure>(
+                "SELECT * FROM FeeStructures WHERE FeeStructureId = @Id",
+                new { Id = id });
+
+            if (target == null)
+                throw new KeyNotFoundException($"Fee structure with ID {id} does not exist.");
+
+            if (collegeId.HasValue && target.CollegeId > 0 && target.CollegeId != collegeId.Value)
+                throw new UnauthorizedAccessException("Fee structure does not belong to the current college.");
+
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var dbConn = _db.Database.GetDbConnection();
+                var dbTx = tx.GetDbTransaction();
+
+                int? newCampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : target.CampusId;
+                int? newProgramId = request.ProgramId.HasValue ? (request.ProgramId.Value > 0 ? request.ProgramId.Value : null) : target.ProgramId;
+                int? newLevelId = request.AcademicLevelId.HasValue && request.AcademicLevelId.Value > 0 ? request.AcademicLevelId.Value : target.AcademicLevelId;
+                string newName = !string.IsNullOrWhiteSpace(request.StructureName) ? request.StructureName.Trim() : target.StructureName;
+
+                await dbConn.ExecuteAsync(@"
+                    UPDATE FeeStructures
+                    SET CampusId = @CampusId,
+                        ProgramId = @ProgramId,
+                        AcademicLevelId = @AcademicLevelId,
+                        StructureName = @StructureName,
+                        Description = @Description,
+                        IsActive = @IsActive,
+                        UpdatedAt = CURRENT_TIMESTAMP(6)
+                    WHERE FeeStructureId = @FeeStructureId",
+                    new
+                    {
+                        CampusId = newCampusId,
+                        ProgramId = newProgramId,
+                        AcademicLevelId = newLevelId,
+                        StructureName = newName,
+                        Description = request.Description ?? target.Description,
+                        request.IsActive,
+                        FeeStructureId = id
+                    },
+                    transaction: dbTx);
+
+                await SyncComponentsAsync(dbConn, dbTx, id, request.Items, (feeTypeId, amt) => amt);
+
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+
+            return await GetFeeStructureByIdAsync(id);
+        }
+
+        var c2 = Connection();
         try
         {
-            using var multi = await c.QueryMultipleAsync(
+            using var multi = await c2.QueryMultipleAsync(
                 "sp_FeeStructure_Update",
                 new
                 {
@@ -265,6 +351,328 @@ public class FeeRepository : IFeeRepository
             return await ReadFeeStructureWithItemsAsync(multi);
         }
         catch (MySqlException ex) { throw TranslateMySqlException(ex); }
+    }
+
+    public async Task<BothYearsFeeStructureResponse?> UpdateBothYearsFeeStructureAsync(int feeStructureId, UpdateBothYearsFeeStructureRequest request)
+    {
+        var collegeId = ResolveCollegeId();
+        var c = Connection();
+        if (c.State != ConnectionState.Open)
+        {
+            await _db.Database.OpenConnectionAsync();
+        }
+
+        // 1. Fetch target structure
+        var target = await c.QueryFirstOrDefaultAsync<FeeStructure>(
+            "SELECT * FROM FeeStructures WHERE FeeStructureId = @Id",
+            new { Id = feeStructureId });
+
+        if (target == null)
+            throw new KeyNotFoundException($"Fee structure with ID {feeStructureId} does not exist.");
+
+        // Validate CollegeId isolation
+        if (collegeId.HasValue && target.CollegeId > 0 && target.CollegeId != collegeId.Value)
+            throw new UnauthorizedAccessException("Fee structure does not belong to the current college.");
+
+        // 2. Fetch paired structure
+        FeeStructure? pair = null;
+        if (target.PairedStructureId.HasValue && target.PairedStructureId.Value > 0)
+        {
+            pair = await c.QueryFirstOrDefaultAsync<FeeStructure>(
+                "SELECT * FROM FeeStructures WHERE FeeStructureId = @PairId",
+                new { PairId = target.PairedStructureId.Value });
+        }
+
+        if (pair == null)
+        {
+            pair = await c.QueryFirstOrDefaultAsync<FeeStructure>(
+                @"SELECT * FROM FeeStructures 
+                  WHERE BoardId = @BoardId 
+                    AND AcademicYearId = @AcademicYearId 
+                    AND GroupId = @GroupId 
+                    AND COALESCE(ProgramId, 0) = COALESCE(@ProgramId, 0) 
+                    AND COALESCE(CampusId, 0) = COALESCE(@CampusId, 0) 
+                    AND FeeStructureId <> @FeeStructureId 
+                  LIMIT 1",
+                new
+                {
+                    target.BoardId,
+                    target.AcademicYearId,
+                    target.GroupId,
+                    target.ProgramId,
+                    target.CampusId,
+                    FeeStructureId = target.FeeStructureId
+                });
+        }
+
+        if (pair == null)
+            throw new InvalidOperationException("This fee structure does not have a linked paired structure. 'Edit Both Years' requires a paired multi-year fee structure.");
+
+        // Validate paired structure college
+        if (collegeId.HasValue && pair.CollegeId > 0 && pair.CollegeId != collegeId.Value)
+            throw new UnauthorizedAccessException("Paired fee structure does not belong to the current college.");
+
+        // 3. Determine 1st Year (Base) and 2nd Year (Pair)
+        var levelOrders = (await c.QueryAsync<(int AcademicLevelId, int DisplayOrder)>(
+            "SELECT AcademicLevelId, DisplayOrder FROM AcademicLevels WHERE AcademicLevelId IN (@Id1, @Id2)",
+            new { Id1 = target.AcademicLevelId, Id2 = pair.AcademicLevelId })).ToDictionary(x => x.AcademicLevelId, x => x.DisplayOrder);
+
+        int targetOrder = levelOrders.TryGetValue(target.AcademicLevelId, out int to) ? to : target.AcademicLevelId;
+        int pairOrder = levelOrders.TryGetValue(pair.AcademicLevelId, out int po) ? po : pair.AcademicLevelId;
+
+        FeeStructure firstYearFs, secondYearFs;
+        if (targetOrder <= pairOrder)
+        {
+            firstYearFs = target;
+            secondYearFs = pair;
+        }
+        else
+        {
+            firstYearFs = pair;
+            secondYearFs = target;
+        }
+
+        // 4. Validate Mode & Increment Rules
+        string mode = (request.YearFeeMode ?? firstYearFs.YearFeeMode ?? "same").Trim().ToLowerInvariant();
+        if (mode != "same" && mode != "different")
+            throw new ArgumentException("YearFeeMode must be 'same' or 'different'.");
+
+        string? incType = null;
+        decimal? incValue = null;
+        if (mode == "different")
+        {
+            incType = (request.IncrementType ?? firstYearFs.IncrementType ?? "percentage").Trim().ToLowerInvariant();
+            if (incType != "percentage" && incType != "fixed")
+                throw new ArgumentException("IncrementType must be 'percentage' or 'fixed' for Different Fees mode.");
+
+            incValue = request.IncrementValue ?? firstYearFs.IncrementValue ?? 0m;
+            if (incValue < 0)
+                throw new ArgumentException("IncrementValue cannot be negative.");
+        }
+
+        if (request.Items == null || !request.Items.Any())
+            throw new ArgumentException("At least one fee structure item is required.");
+
+        if (request.Items.Select(x => x.FeeTypeId).Distinct().Count() != request.Items.Count)
+            throw new ArgumentException("Duplicate fee types are not allowed.");
+
+        // 5. Fetch FeeTypes metadata (to preserve admission fee from increment)
+        var feeTypeIds = request.Items.Select(x => x.FeeTypeId).ToList();
+        var feeTypeMetadata = (await c.QueryAsync<(int FeeTypeId, string FeeTypeName, string Category)>(
+            "SELECT FeeTypeId, FeeTypeName, Category FROM FeeTypes WHERE FeeTypeId IN @Ids",
+            new { Ids = feeTypeIds })).ToDictionary(x => x.FeeTypeId);
+
+        // 6. Calculate Increments
+        decimal firstYearTotal = request.Items.Sum(x => x.Amount);
+        decimal incrementRupees = 0m;
+        int targetFeeTypeId = 0;
+
+        if (mode == "different" && incValue > 0)
+        {
+            if (incType == "percentage")
+                incrementRupees = Math.Round((firstYearTotal * incValue.Value) / 100m, 2);
+            else
+                incrementRupees = Math.Round(incValue.Value, 2);
+
+            var candidateItems = request.Items.Select(it =>
+            {
+                feeTypeMetadata.TryGetValue(it.FeeTypeId, out var meta);
+                bool isAdmission = string.Equals(meta.Category, "admission", StringComparison.OrdinalIgnoreCase) ||
+                                   (meta.FeeTypeName?.Contains("admission", StringComparison.OrdinalIgnoreCase) ?? false);
+                return new { it.FeeTypeId, it.Amount, isAdmission };
+            }).ToList();
+
+            var nonAdmTarget = candidateItems
+                .Where(x => !x.isAdmission)
+                .OrderByDescending(x => x.Amount)
+                .ThenBy(x => x.FeeTypeId)
+                .FirstOrDefault();
+
+            if (nonAdmTarget != null)
+                targetFeeTypeId = nonAdmTarget.FeeTypeId;
+            else
+                targetFeeTypeId = candidateItems.OrderByDescending(x => x.Amount).First().FeeTypeId;
+        }
+
+        // 7. Atomic DB Transaction
+        await using var tx = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var dbConn = _db.Database.GetDbConnection();
+            var dbTx = tx.GetDbTransaction();
+
+            int? newCampusId = request.CampusId.HasValue && request.CampusId.Value > 0 ? request.CampusId.Value : firstYearFs.CampusId;
+            int? newProgramId = request.ProgramId.HasValue ? (request.ProgramId.Value > 0 ? request.ProgramId.Value : null) : firstYearFs.ProgramId;
+
+            string baseName = !string.IsNullOrWhiteSpace(request.StructureName)
+                ? request.StructureName.Trim()
+                : firstYearFs.StructureName;
+
+            string pairName;
+            if (baseName.Contains("1st Year", StringComparison.OrdinalIgnoreCase))
+                pairName = System.Text.RegularExpressions.Regex.Replace(baseName, "1st Year", "2nd Year", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            else if (!baseName.Contains("2nd Year", StringComparison.OrdinalIgnoreCase))
+                pairName = $"{baseName} - 2nd Year";
+            else
+                pairName = secondYearFs.StructureName;
+
+            // 7a. Update First Year Structure Header
+            await dbConn.ExecuteAsync(@"
+                UPDATE FeeStructures
+                SET CampusId = @CampusId,
+                    ProgramId = @ProgramId,
+                    StructureName = @StructureName,
+                    Description = @Description,
+                    YearFeeMode = @YearFeeMode,
+                    IncrementType = @IncrementType,
+                    IncrementValue = @IncrementValue,
+                    PairedStructureId = @PairedStructureId,
+                    IsActive = @IsActive,
+                    UpdatedAt = CURRENT_TIMESTAMP(6)
+                WHERE FeeStructureId = @FeeStructureId",
+                new
+                {
+                    CampusId = newCampusId,
+                    ProgramId = newProgramId,
+                    StructureName = baseName,
+                    Description = request.Description ?? firstYearFs.Description,
+                    YearFeeMode = mode,
+                    IncrementType = mode == "different" ? incType : null,
+                    IncrementValue = mode == "different" ? incValue : null,
+                    PairedStructureId = secondYearFs.FeeStructureId,
+                    request.IsActive,
+                    FeeStructureId = firstYearFs.FeeStructureId
+                },
+                transaction: dbTx);
+
+            // 7b. Update First Year Components
+            await SyncComponentsAsync(dbConn, dbTx, firstYearFs.FeeStructureId, request.Items, (feeTypeId, amt) => amt);
+
+            // 7c. Update Second Year Structure Header
+            await dbConn.ExecuteAsync(@"
+                UPDATE FeeStructures
+                SET CampusId = @CampusId,
+                    ProgramId = @ProgramId,
+                    StructureName = @StructureName,
+                    Description = @Description,
+                    YearFeeMode = @YearFeeMode,
+                    IncrementType = @IncrementType,
+                    IncrementValue = @IncrementValue,
+                    PairedStructureId = @PairedStructureId,
+                    IsActive = @IsActive,
+                    UpdatedAt = CURRENT_TIMESTAMP(6)
+                WHERE FeeStructureId = @FeeStructureId",
+                new
+                {
+                    CampusId = newCampusId,
+                    ProgramId = newProgramId,
+                    StructureName = pairName,
+                    Description = request.Description ?? secondYearFs.Description,
+                    YearFeeMode = mode,
+                    IncrementType = mode == "different" ? incType : null,
+                    IncrementValue = mode == "different" ? incValue : null,
+                    PairedStructureId = firstYearFs.FeeStructureId,
+                    request.IsActive,
+                    FeeStructureId = secondYearFs.FeeStructureId
+                },
+                transaction: dbTx);
+
+            // 7d. Update Second Year Components
+            await SyncComponentsAsync(dbConn, dbTx, secondYearFs.FeeStructureId, request.Items, (feeTypeId, amt) =>
+            {
+                if (mode == "different" && feeTypeId == targetFeeTypeId)
+                    return amt + incrementRupees;
+                return amt;
+            });
+
+            await tx.CommitAsync();
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+
+        // 8. Fetch complete responses
+        var firstYearResp = await GetFeeStructureByIdAsync(firstYearFs.FeeStructureId);
+        var secondYearResp = await GetFeeStructureByIdAsync(secondYearFs.FeeStructureId);
+
+        return new BothYearsFeeStructureResponse
+        {
+            Success = true,
+            Message = "Both fee structures updated successfully.",
+            FirstYear = firstYearResp!,
+            SecondYear = secondYearResp!
+        };
+    }
+
+    private static async Task SyncComponentsAsync(
+        IDbConnection dbConn,
+        IDbTransaction dbTx,
+        int feeStructureId,
+        List<CreateFeeStructureItemRequest> incomingItems,
+        Func<int, decimal, decimal> calculateAmount)
+    {
+        var existing = (await dbConn.QueryAsync<FeeStructureComponent>(
+            "SELECT * FROM FeeStructureComponents WHERE FeeStructureId = @FeeStructureId",
+            new { FeeStructureId = feeStructureId },
+            transaction: dbTx)).ToList();
+
+        var incomingFeeTypeIds = incomingItems.Select(x => x.FeeTypeId).ToHashSet();
+
+        // 1. Deactivate components not present in incoming list
+        foreach (var ex in existing.Where(x => !incomingFeeTypeIds.Contains(x.FeeTypeId) && x.IsActive))
+        {
+            await dbConn.ExecuteAsync(
+                "UPDATE FeeStructureComponents SET IsActive = 0, UpdatedAt = CURRENT_TIMESTAMP(6) WHERE FeeStructureComponentId = @Id",
+                new { Id = ex.FeeStructureComponentId },
+                transaction: dbTx);
+        }
+
+        // 2. Upsert incoming components
+        foreach (var item in incomingItems)
+        {
+            decimal targetAmount = calculateAmount(item.FeeTypeId, item.Amount);
+            bool isMandatory = string.Equals(item.Rule, "Mandatory", StringComparison.OrdinalIgnoreCase);
+
+            var ex = existing.FirstOrDefault(x => x.FeeTypeId == item.FeeTypeId);
+            if (ex != null)
+            {
+                await dbConn.ExecuteAsync(@"
+                    UPDATE FeeStructureComponents
+                    SET Amount = @Amount,
+                        DefaultAmount = @Amount,
+                        IsMandatory = @IsMandatory,
+                        IsActive = 1,
+                        UpdatedAt = CURRENT_TIMESTAMP(6)
+                    WHERE FeeStructureComponentId = @Id",
+                    new
+                    {
+                        Amount = targetAmount,
+                        IsMandatory = isMandatory ? 1 : 0,
+                        Id = ex.FeeStructureComponentId
+                    },
+                    transaction: dbTx);
+            }
+            else
+            {
+                await dbConn.ExecuteAsync(@"
+                    INSERT INTO FeeStructureComponents (
+                        FeeStructureId, FeeTypeId, Amount, DefaultAmount, IsMandatory, IsActive, CreatedAt
+                    )
+                    VALUES (
+                        @FeeStructureId, @FeeTypeId, @Amount, @Amount, @IsMandatory, 1, CURRENT_TIMESTAMP(6)
+                    )",
+                    new
+                    {
+                        FeeStructureId = feeStructureId,
+                        item.FeeTypeId,
+                        Amount = targetAmount,
+                        IsMandatory = isMandatory ? 1 : 0
+                    },
+                    transaction: dbTx);
+            }
+        }
     }
 
     public async Task<bool> DeleteFeeStructureAsync(int id)

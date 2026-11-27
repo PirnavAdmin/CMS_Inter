@@ -14,6 +14,7 @@ public interface IFeeRepository
     Task<IEnumerable<FeeStructureResponse>> GetFeeStructuresAsync(int? campusId = null);
     Task<FeeStructureResponse?> GetFeeStructureByIdAsync(int feeStructureId);
     Task<FeeStructureResponse?> UpdateFeeStructureAsync(int feeStructureId, UpdateFeeStructureRequest request);
+    Task<BothYearsFeeStructureResponse?> UpdateBothYearsFeeStructureAsync(int feeStructureId, UpdateBothYearsFeeStructureRequest request);
     Task<bool> DeleteFeeStructureAsync(int feeStructureId);
     Task<FeeStructureItemResponse?> AddFeeStructureItemAsync(int feeStructureId, CreateFeeStructureItemRequest request);
     Task<IEnumerable<FeeStructureItemResponse>> GetFeeStructureItemsAsync(int feeStructureId);

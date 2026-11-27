@@ -19,6 +19,7 @@ namespace CollegeManagement.API.DTOs.Settings
         public bool IsActive { get; set; }
         public int Version { get; set; }
         public int? CampusId { get; set; }
+        public int? CollegeId { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
     }
@@ -52,6 +53,7 @@ namespace CollegeManagement.API.DTOs.Settings
         public bool? IsDefault { get; set; } = false;
 
         public bool IsActive { get; set; } = true;
+        public int? CollegeId { get; set; }
     }
 
     public class UpdateTemplateDto

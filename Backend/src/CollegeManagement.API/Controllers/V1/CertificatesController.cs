@@ -62,6 +62,14 @@ public class CertificatesController : ControllerBase
         return null;
     }
 
+    private int? GetCollegeIdFromUser()
+    {
+        var val = User?.FindFirst("CollegeId")?.Value ?? User?.FindFirst("collegeId")?.Value;
+        if (int.TryParse(val, out var cid) && cid > 0)
+            return cid;
+        return null;
+    }
+
     private string GetCurrentUserName(string? fallback = "Admin")
     {
         return User.Identity?.Name ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value ?? User.FindFirst("name")?.Value ?? fallback ?? "Admin";
@@ -75,7 +83,8 @@ public class CertificatesController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<CollegeManagement.API.DTOs.Settings.TemplateResponseDto>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetActiveTemplates(CancellationToken ct = default)
     {
-        var templates = await _templateService.GetActiveTemplatesByCategoryAsync("Certificate", null, ct);
+        var collegeId = GetCollegeIdFromUser();
+        var templates = await _templateService.GetActiveTemplatesByCategoryAsync("Certificate", null, ct, collegeId);
         return Ok(templates);
     }
 
@@ -91,7 +100,8 @@ public class CertificatesController : ControllerBase
         if (string.IsNullOrWhiteSpace(templateCode))
             return BadRequest(new { message = "Template code is required." });
 
-        var template = await _templateService.GetTemplateByCodeAsync(templateCode, null, ct);
+        var collegeId = GetCollegeIdFromUser();
+        var template = await _templateService.GetTemplateByCodeAsync(templateCode, null, ct, collegeId);
         if (template == null)
             return NotFound(new { message = $"Certificate template with code '{templateCode}' not found." });
 
@@ -113,7 +123,8 @@ public class CertificatesController : ControllerBase
     {
         try
         {
-            var result = await _templateService.RenderTemplateAsync(request, null, ct);
+            var collegeId = GetCollegeIdFromUser();
+            var result = await _templateService.RenderTemplateAsync(request, null, ct, collegeId);
             return Ok(result);
         }
         catch (System.ComponentModel.DataAnnotations.ValidationException ex)

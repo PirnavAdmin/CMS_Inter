@@ -120,6 +120,7 @@ namespace CollegeManagement.API.Services.Implementations
                 IsActive = t.IsActive,
                 Version = ver,
                 CampusId = t.CampusId,
+                CollegeId = t.CollegeId,
                 CreatedAt = t.CreatedAt,
                 UpdatedAt = t.UpdatedAt
             };
@@ -132,7 +133,8 @@ namespace CollegeManagement.API.Services.Implementations
             string? category,
             bool? isActive,
             int? campusId = null,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            int? collegeId = null)
         {
             if (pageNumber < 1) pageNumber = 1;
             if (pageSize < 1) pageSize = 10;
@@ -140,21 +142,21 @@ namespace CollegeManagement.API.Services.Implementations
 
             await _repository.EnsureSeedsAsync(ct);
 
-            return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
+            return await _repository.GetAllAsync(pageNumber, pageSize, search, category, isActive, campusId, ct, collegeId);
         }
 
-        public async Task<TemplateResponseDto?> GetTemplateByIdAsync(int id, int? campusId = null, CancellationToken ct = default)
+        public async Task<TemplateResponseDto?> GetTemplateByIdAsync(int id, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             if (id <= 0) return null;
-            var t = await _repository.GetByIdAsync(id, campusId, ct);
+            var t = await _repository.GetByIdAsync(id, campusId, ct, collegeId);
             return t == null ? null : MapToDto(t);
         }
 
-        public async Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default)
+        public async Task<TemplateResponseDto?> GetTemplateByCodeAsync(string templateCode, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             if (string.IsNullOrWhiteSpace(templateCode)) return null;
             var code = templateCode.Trim();
-            var t = await _repository.GetByCodeAsync(code, campusId, ct);
+            var t = await _repository.GetByCodeAsync(code, campusId, ct, collegeId);
             if (t == null)
             {
                 var alias = code.ToUpperInvariant().Replace("-", "_") switch
@@ -173,26 +175,26 @@ namespace CollegeManagement.API.Services.Implementations
                 };
                 if (!string.IsNullOrEmpty(alias))
                 {
-                    t = await _repository.GetByCodeAsync(alias, campusId, ct);
+                    t = await _repository.GetByCodeAsync(alias, campusId, ct, collegeId);
                 }
             }
             return t == null ? null : MapToDto(t);
         }
 
-        public async Task<IReadOnlyList<TemplateResponseDto>> GetActiveTemplatesByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default)
+        public async Task<IReadOnlyList<TemplateResponseDto>> GetActiveTemplatesByCategoryAsync(string? category, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             var cat = string.IsNullOrWhiteSpace(category) ? "Certificate" : category.Trim();
-            var list = await _repository.GetActiveByCategoryAsync(cat, campusId, ct);
+            var list = await _repository.GetActiveByCategoryAsync(cat, campusId, ct, collegeId);
             return list.Select(MapToDto).ToList();
         }
 
-        public async Task<TemplateResponseDto> CreateTemplateAsync(CreateTemplateDto dto, int? campusId = null, CancellationToken ct = default)
+        public async Task<TemplateResponseDto> CreateTemplateAsync(CreateTemplateDto dto, int? campusId = null, CancellationToken ct = default, int? collegeId = null)
         {
             if (dto == null)
                 throw new ValidationException("Request body cannot be null.");
 
             var cleanCode = dto.TemplateCode.Trim().ToUpperInvariant();
-            if (await _repository.ExistsByCodeAsync(cleanCode, null, campusId, ct))
+            if (await _repository.ExistsByCodeAsync(cleanCode, null, campusId, ct, collegeId))
             {
                 throw new ValidationException($"A template with code '{cleanCode}' already exists.");
             }
@@ -214,6 +216,7 @@ namespace CollegeManagement.API.Services.Implementations
                 IsActive = dto.IsActive,
                 Version = "v1",
                 CampusId = campusId,
+                CollegeId = (collegeId.HasValue && collegeId.Value > 0) ? collegeId.Value : (dto.CollegeId ?? 1),
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -343,7 +346,8 @@ namespace CollegeManagement.API.Services.Implementations
         public async Task<RenderedTemplateResponseDto> RenderTemplateAsync(
             RenderCertificateTemplateRequestDto request,
             int? campusId = null,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            int? collegeId = null)
         {
             if (request == null)
                 throw new ValidationException("Render request cannot be null.");
@@ -353,7 +357,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (!string.IsNullOrWhiteSpace(request.TemplateCode))
             {
                 var code = request.TemplateCode.Trim();
-                template = await _repository.GetByCodeAsync(code, campusId, ct);
+                template = await _repository.GetByCodeAsync(code, campusId, ct, collegeId);
                 if (template == null)
                 {
                     var alias = code.ToUpperInvariant() switch
@@ -372,21 +376,21 @@ namespace CollegeManagement.API.Services.Implementations
                     };
                     if (!string.IsNullOrEmpty(alias))
                     {
-                        template = await _repository.GetByCodeAsync(alias, campusId, ct);
+                        template = await _repository.GetByCodeAsync(alias, campusId, ct, collegeId);
                     }
                 }
             }
 
             if (template == null && request.TemplateId.HasValue && request.TemplateId.Value > 0)
             {
-                template = await _repository.GetByIdAsync(request.TemplateId.Value, campusId, ct);
+                template = await _repository.GetByIdAsync(request.TemplateId.Value, campusId, ct, collegeId);
             }
 
             if (template == null)
             {
-                template = await _repository.GetByCodeAsync("BC", campusId, ct)
-                    ?? await _repository.GetByCodeAsync("BONAFIDE_CERT", campusId, ct)
-                    ?? (await _repository.GetActiveByCategoryAsync("Certificate", campusId, ct)).FirstOrDefault();
+                template = await _repository.GetByCodeAsync("BC", campusId, ct, collegeId)
+                    ?? await _repository.GetByCodeAsync("BONAFIDE_CERT", campusId, ct, collegeId)
+                    ?? (await _repository.GetActiveByCategoryAsync("Certificate", campusId, ct, collegeId)).FirstOrDefault();
             }
 
             if (template == null)

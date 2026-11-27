@@ -1,12 +1,15 @@
 import apiClient from "./apiClient";
 import { apiEndpoints } from "./apiEndpoints";
+import { getAuthToken } from "../modules/auth/authStorage.js";
 
 let inFlightGetConfig = null;
+let inFlightConfigToken = null;
 let inFlightGetPublic = null;
 
 export const landingPageApi = {
   async getConfig(collegeId = null) {
-    if (inFlightGetConfig && !collegeId) {
+    const token = getAuthToken();
+    if (inFlightGetConfig && !collegeId && inFlightConfigToken === token) {
       return inFlightGetConfig;
     }
     const fetchPromise = (async () => {
@@ -15,19 +18,14 @@ export const landingPageApi = {
         if (collegeId) params.collegeId = collegeId;
         const response = await apiClient.get(apiEndpoints.landingPage.getConfig, {
           params,
-          validateStatus: (status) => status < 500,
         });
-        if (response.status === 404) {
-          return null;
-        }
+        if (response.data?.success === false) throw new Error(response.data.message || "Unable to load branding configuration.");
         return response.data?.data ?? response.data ?? null;
-      } catch {
-        return null;
       } finally {
-        if (!collegeId) inFlightGetConfig = null;
+        if (!collegeId && inFlightGetConfig === fetchPromise) { inFlightGetConfig = null; inFlightConfigToken = null; }
       }
     })();
-    if (!collegeId) inFlightGetConfig = fetchPromise;
+    if (!collegeId) { inFlightGetConfig = fetchPromise; inFlightConfigToken = token; }
     return fetchPromise;
   },
 

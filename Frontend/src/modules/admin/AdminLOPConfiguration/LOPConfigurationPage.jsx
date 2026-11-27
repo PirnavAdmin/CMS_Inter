@@ -23,6 +23,7 @@ import { Modal } from "@/shared/components/Ui.jsx";
 import { money } from "@/modules/admin/AdminInventory/inventoryModel.js";
 import { useDialogFocus } from "@/modules/admin/AdminInventory/components/InventoryUi.jsx";
 import { useCampusContext } from "@/context/CampusContext.jsx";
+import { useAcademicContext } from "@/context/AcademicContext.jsx";
 import { getApiErrorMessage } from "@/api/apiClient.js";
 import CommonLOPPolicy from "./CommonLOPPolicy.jsx";
 import { extractLopRows, lopApi } from "./lopApi.js";
@@ -395,11 +396,22 @@ function LOPRecordModal({ modalState, onClose, onSave, staffList, defaultBasis, 
 
 export default function LOPConfigurationPage() {
   const campusCtx = useCampusContext();
+  const academicCtx = useAcademicContext?.() || {};
   const campuses = campusCtx?.campuses || [];
   const selectedCampusId =
     campusCtx?.selectedCampus?.campusId ||
     campusCtx?.selectedCampus?.id ||
     campusCtx?.selectedCampusId ||
+    "";
+  const selectedBoardId =
+    academicCtx?.selectedBoard?.boardId ||
+    academicCtx?.selectedBoard?.id ||
+    academicCtx?.selectedBoardId ||
+    "";
+  const selectedAcademicYearId =
+    academicCtx?.selectedAcademicYear?.academicYearId ||
+    academicCtx?.selectedAcademicYear?.id ||
+    academicCtx?.selectedAcademicYearId ||
     "";
 
   const [activeTab, setActiveTab] = useState("policy"); // "policy" | "preview" | "records"
@@ -430,18 +442,20 @@ export default function LOPConfigurationPage() {
   });
 
   const campusParam = selectedCampusId ? Number(selectedCampusId) : undefined;
+  const boardParam = selectedBoardId ? Number(selectedBoardId) : undefined;
+  const academicYearParam = selectedAcademicYearId ? Number(selectedAcademicYearId) : undefined;
 
-  // Fetch Campus Staff Dropdown
+  // Fetch Campus/Board/AcademicYear Staff Dropdown
   useEffect(() => {
     const controller = new AbortController();
     lopApi
-      .getStaffList({ campusId: campusParam }, controller.signal)
+      .getStaffList({ campusId: campusParam, boardId: boardParam, academicYearId: academicYearParam }, controller.signal)
       .then((res) => setStaffList(extractLopRows(res)))
       .catch((err) => {
         if (!controller.signal.aborted) setError(getApiErrorMessage(err));
       });
     return () => controller.abort();
-  }, [campusParam, revision]);
+  }, [campusParam, boardParam, academicYearParam, revision]);
 
   // Fetch Live Monthly Preview & Summary
   const loadPreview = useCallback(
@@ -453,12 +467,15 @@ export default function LOPConfigurationPage() {
             month,
             search: previewSearch || undefined,
             campusId: campusParam,
+            boardId: boardParam,
+            academicYearId: academicYearParam,
             staffType: staffTypeFilter !== "All" ? staffTypeFilter : undefined,
             impactedOnly,
           },
           signal,
         );
         const items = extractLopRows(res);
+        setError("");
         setPreviewData({
           policy: res?.policy || null,
           summary: res?.summary || null,
@@ -470,7 +487,7 @@ export default function LOPConfigurationPage() {
         if (!signal?.aborted) setPreviewLoading(false);
       }
     },
-    [month, previewSearch, campusParam, staffTypeFilter, impactedOnly],
+    [month, previewSearch, campusParam, boardParam, academicYearParam, staffTypeFilter, impactedOnly],
   );
 
   useEffect(() => {
@@ -489,6 +506,8 @@ export default function LOPConfigurationPage() {
           month: recordsMonth || undefined,
           search: recordsSearch || undefined,
           campusId: campusParam,
+          boardId: boardParam,
+          academicYearId: academicYearParam,
           source: recordsSource || undefined,
         },
         controller.signal,
@@ -504,7 +523,7 @@ export default function LOPConfigurationPage() {
         if (!controller.signal.aborted) setRecordsLoading(false);
       });
     return () => controller.abort();
-  }, [recordsMonth, recordsSearch, recordsSource, campusParam, revision]);
+  }, [recordsMonth, recordsSearch, recordsSource, campusParam, boardParam, academicYearParam, revision]);
 
   const visiblePreviewItems = useMemo(() => {
     if (!hideNoSalary) return previewData.items;
@@ -517,10 +536,16 @@ export default function LOPConfigurationPage() {
     setError("");
     setNotice("");
     try {
-      const res = await lopApi.syncMonthlyRecords({
-        month,
-        campusId: campusParam || null,
-      });
+      const res = await lopApi.syncMonthlyRecords(
+        {
+          month,
+          campusId: campusParam || null,
+        },
+        {
+          boardId: boardParam,
+          academicYearId: academicYearParam,
+        },
+      );
       setNotice(
         `Synced ${res.syncedCount} impacted staff record(s) for ${formatMonthLabel(month)} (${res.totalLopDays} total LOP days · ${money(res.totalDeduction)}).`,
       );

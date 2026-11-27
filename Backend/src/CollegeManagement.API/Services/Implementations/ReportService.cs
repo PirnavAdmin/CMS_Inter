@@ -72,8 +72,8 @@ public class ReportService : IReportService
     public Task<IReadOnlyList<ReportFilterBoardDto>> GetFilterBoardsAsync(int? campusId, CancellationToken ct = default)
         => SafeListAsync("GetFilterBoardsAsync", () => _repo.GetFilterBoardsAsync(campusId, ct));
 
-    public Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, CancellationToken ct = default)
-        => SafeListAsync("GetFilterAcademicYearsAsync", () => _repo.GetFilterAcademicYearsAsync(boardId, ct));
+    public Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, int? campusId = null, int? collegeId = null, CancellationToken ct = default)
+        => SafeListAsync("GetFilterAcademicYearsAsync", () => _repo.GetFilterAcademicYearsAsync(boardId, campusId, collegeId, ct));
 
     public Task<IReadOnlyList<ReportFilterAcademicLevelDto>> GetFilterAcademicLevelsAsync(int? boardId, CancellationToken ct = default)
         => SafeListAsync("GetFilterAcademicLevelsAsync", () => _repo.GetFilterAcademicLevelsAsync(boardId, ct));

@@ -74,6 +74,29 @@ public class UpdateFeeStructureRequest
     public string? IncrementType { get; set; }
     public decimal? IncrementValue { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool? EditBothYears { get; set; }
+    public List<CreateFeeStructureItemRequest>? Items { get; set; }
+}
+
+public class UpdateBothYearsFeeStructureRequest
+{
+    public int? CampusId { get; set; }
+    public string? StructureName { get; set; }
+    public string? Description { get; set; }
+    public int? ProgramId { get; set; }
+    public string? YearFeeMode { get; set; }
+    public string? IncrementType { get; set; }
+    public decimal? IncrementValue { get; set; }
+    public bool IsActive { get; set; } = true;
+    public List<CreateFeeStructureItemRequest> Items { get; set; } = new();
+}
+
+public class BothYearsFeeStructureResponse
+{
+    public bool Success { get; set; } = true;
+    public string Message { get; set; } = "Both fee structures updated successfully.";
+    public FeeStructureResponse FirstYear { get; set; } = null!;
+    public FeeStructureResponse SecondYear { get; set; } = null!;
 }
 
 public class CreateFeeStructureItemRequest

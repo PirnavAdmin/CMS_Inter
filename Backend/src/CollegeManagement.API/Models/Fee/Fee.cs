@@ -22,6 +22,7 @@ public class FeeType
 public class FeeStructure
 {
     [Key] public int FeeStructureId { get; set; }
+    public int CollegeId { get; set; } = 1;
     public int? CampusId { get; set; }
     [Required] public int BoardId { get; set; }
     [Required] public int AcademicYearId { get; set; }

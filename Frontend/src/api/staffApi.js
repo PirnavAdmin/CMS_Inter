@@ -8,64 +8,50 @@ export const getStaffPaged = (params) => {
   return api.get("/api/v1/staff", { params });
 };
 
-// 2. Generate the next employee ID through the number-series endpoint or direct staff endpoint.
+// 2. Read-only preview of the next employee ID (does NOT mutate CurrentSequence in DB; generation happens atomically on Save).
 export const getNextEmployeeId = async (staffType = "Teaching", campusId = null) => {
   const normalizedType = String(staffType || "Teaching").replace(/[^a-z]/gi, "").toLowerCase();
   const isNonTeaching = normalizedType === "nonteaching";
   const seriesCode = isNonTeaching ? "NON_TEACHING_STAFF_ID" : "TEACHING_STAFF_ID";
-  try {
-    const response = await api.post(
-      apiEndpoints.numberSeries.generateNext(seriesCode),
-      {
-        board: "",
-        dept: "",
-        type: staffType,
-        staff: "",
-        desig: "",
-        cert: "",
-        academicYear: "",
-        group: "",
-        section: "",
-        level: "",
-        exam: "",
-        campusId: campusId || undefined,
-      },
-      { params: campusId ? { campusId } : {} }
-    );
-    const payload = response?.data?.data ?? response?.data ?? {};
-    const nextEmployeeId = typeof payload === "string"
-      ? payload
-      : payload.generatedNumber || payload.nextEmployeeId || payload.employeeId || payload.code;
 
-    if (nextEmployeeId) {
+  // Primary: read-only staff preview endpoint
+  try {
+    const previewRes = await api.get("/api/v1/staff/next-employee-id", {
+      params: {
+        staffType,
+        ...(campusId ? { campusId } : {}),
+      },
+    });
+    const data = previewRes?.data ?? {};
+    const nextId = data.nextEmployeeId || data.employeeId;
+    if (nextId) {
       return {
-        ...response,
+        ...previewRes,
         data: {
-          ...(typeof payload === "object" ? payload : {}),
-          nextEmployeeId,
-          employeeId: nextEmployeeId,
+          ...data,
+          nextEmployeeId: nextId,
+          employeeId: nextId,
         },
       };
     }
   } catch (err) {
-    console.warn("Number series endpoint failed, falling back to staff next-employee-id endpoint:", err);
+    console.warn("Staff preview endpoint failed, falling back to read-only number-series lookup:", err);
   }
 
-  // Direct Staff endpoint fallback
-  const fallbackRes = await api.get("/api/v1/staff/next-employee-id", {
-    params: {
-      staffType,
-      ...(campusId ? { campusId } : {}),
-    },
+  // Secondary: read-only number-series configuration lookup
+  const seriesRes = await api.get(apiEndpoints.numberSeries.getByCode(seriesCode), {
+    params: campusId ? { campusId } : {},
   });
-  const data = fallbackRes?.data ?? {};
-  const nextId = data.nextEmployeeId || data.employeeId;
+  const payload = seriesRes?.data?.data ?? seriesRes?.data ?? {};
+  const nextEmployeeId = typeof payload === "string"
+    ? payload
+    : payload.livePreview || payload.nextEmployeeId || payload.employeeId || payload.code;
   return {
-    ...fallbackRes,
+    ...seriesRes,
     data: {
-      ...data,
-      nextEmployeeId: nextId,
-      employeeId: nextId,
+      ...(typeof payload === "object" ? payload : {}),
+      nextEmployeeId,
+      employeeId: nextEmployeeId,
     },
   };
 };

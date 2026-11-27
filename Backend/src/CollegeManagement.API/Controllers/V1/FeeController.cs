@@ -217,10 +217,37 @@ public class FeeController : ControllerBase
     [HttpGet("structures/{id:int}")]
     public async Task<IActionResult> GetFeeStructure(int id) => Ok(await _service.GetFeeStructureByIdAsync(id));
 
-    /// <summary>Update fee structure program or active status.</summary>
+    /// <summary>Update fee structure program, active status, or components.</summary>
     [HttpPut("structures/{id:int}")]
     public async Task<IActionResult> UpdateFeeStructure(int id, UpdateFeeStructureRequest request)
     {
+        if (request.EditBothYears == true)
+        {
+            var bothReq = new UpdateBothYearsFeeStructureRequest
+            {
+                CampusId = request.CampusId,
+                StructureName = request.StructureName,
+                Description = request.Description,
+                ProgramId = request.ProgramId,
+                YearFeeMode = request.YearFeeMode,
+                IncrementType = request.IncrementType,
+                IncrementValue = request.IncrementValue,
+                IsActive = request.IsActive,
+                Items = request.Items ?? new()
+            };
+            var bothResult = await _service.UpdateBothYearsFeeStructureAsync(id, bothReq);
+            if (_realtimeEventService != null && bothResult != null)
+            {
+                _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+                {
+                    Module = "Fees",
+                    Action = "BothYearsStructuresUpdated",
+                    EntityId = id.ToString()
+                });
+            }
+            return Ok(bothResult);
+        }
+
         var result = await _service.UpdateFeeStructureAsync(id, request);
         if (_realtimeEventService != null)
         {
@@ -228,6 +255,23 @@ public class FeeController : ControllerBase
             {
                 Module = "Fees",
                 Action = "StructureUpdated",
+                EntityId = id.ToString()
+            });
+        }
+        return Ok(result);
+    }
+
+    /// <summary>Update both paired 1st-year and 2nd-year fee structures together in a single transaction.</summary>
+    [HttpPut("structures/{id:int}/both-years")]
+    public async Task<IActionResult> UpdateBothYearsFeeStructure(int id, UpdateBothYearsFeeStructureRequest request)
+    {
+        var result = await _service.UpdateBothYearsFeeStructureAsync(id, request);
+        if (_realtimeEventService != null && result != null)
+        {
+            _ = _realtimeEventService.PublishDomainEventAsync(new DomainEventPayload
+            {
+                Module = "Fees",
+                Action = "BothYearsStructuresUpdated",
                 EntityId = id.ToString()
             });
         }

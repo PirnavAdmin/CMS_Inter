@@ -56,7 +56,7 @@ export const lopApi = {
     request(`policies/${encodeURIComponent(policyId)}`, { method: "delete" }),
 
   getPreview: (params, signal) => request("preview", { params, signal }),
-  syncMonthlyRecords: (data) => request("sync-records", { method: "post", data }),
+  syncMonthlyRecords: (data, params) => request("sync-records", { method: "post", data, params }),
 
   getStaffList: (params, signal) => request("staff", { params, signal }),
   getRecords: (params, signal) => request("records", { params, signal }),
