@@ -71,23 +71,40 @@ const openDatabase = () => new Promise((resolve, reject) => {
   request.onerror = () => reject(new Error("Browser image storage is unavailable."));
 });
 const savedRevisions = new Map();
+const brandingIdentity = () => {
+  const user = getAuthUser();
+  const token = getAuthToken();
+  const collegeId = Number(user?.collegeId ?? user?.CollegeId);
+  const userId = user?.userId ?? user?.UserId ?? user?.id ?? user?.Id;
+  return { token, collegeId: Number.isInteger(collegeId) && collegeId > 0 ? collegeId : null, userId: userId == null ? "" : String(userId) };
+};
+const brandingCacheKey = (identity) => identity.token && identity.collegeId && identity.userId ? `college:${identity.collegeId}:user:${identity.userId}` : null;
+const validBranding = (data, identity) => Boolean(data && typeof data === "object" && !Array.isArray(data)
+  && data.success !== false && Number(data.collegeId ?? data.CollegeId) === identity.collegeId
+  && typeof data.dashboardTitle === "string" && typeof data.dashboardSubtitle !== "undefined"
+  && typeof data.dashboardTagline !== "undefined" && Object.hasOwn(data, "dashboardLogo"));
+const sameIdentity = (a, b) => a.token === b.token && a.collegeId === b.collegeId && a.userId === b.userId;
 export async function readCampusImages(campusId) {
-  const cacheKey = String(campusId);
+  const identity = brandingIdentity();
+  const cacheKey = brandingCacheKey(identity);
   const revision = savedRevisions.get(cacheKey);
   try {
-    const token = getAuthToken();
-    const serverData = token
+    if (identity.token && !identity.collegeId) throw new Error("The signed-in account has no verified college ID. Contact the administrator.");
+    const serverData = identity.token
       ? await landingPageApi.getConfig()
       : await landingPageApi.getPublicConfig();
 
+    if (!sameIdentity(identity, brandingIdentity())) throw new Error("The signed-in account changed while loading branding.");
+    if (identity.token && !validBranding(serverData, identity)) throw new Error("The server returned an invalid or mismatched college branding configuration.");
     if (serverData && typeof serverData === "object" && Object.keys(serverData).length > 0) {
       try {
+        if (!cacheKey) return serverData;
         if (savedRevisions.get(cacheKey) !== revision) return serverData;
         const db = await openDatabase();
-        if (savedRevisions.get(cacheKey) !== revision) { db.close(); return serverData; }
+        if (savedRevisions.get(cacheKey) !== revision || !sameIdentity(identity, brandingIdentity())) { db.close(); return serverData; }
         await new Promise((resolve, reject) => {
           const transaction = db.transaction("images", "readwrite");
-          transaction.objectStore("images").put(serverData, String(campusId));
+          transaction.objectStore("images").put(serverData, cacheKey);
           transaction.oncomplete = resolve;
           transaction.onerror = transaction.onabort = reject;
         });
@@ -98,14 +115,16 @@ export async function readCampusImages(campusId) {
       return serverData;
     }
   } catch (err) {
-    // Fall back to local storage if server is unavailable
+    const status = Number(err?.response?.status);
+    if (!sameIdentity(identity, brandingIdentity()) || !cacheKey || (status >= 400 && status < 500) || !err?.response && !err?.request) throw err;
   }
 
+  if (!cacheKey) return {};
   const db = await openDatabase();
   try {
     return await new Promise((resolve, reject) => {
-      const request = db.transaction("images").objectStore("images").get(String(campusId));
-      request.onsuccess = () => resolve(request.result || {});
+      const request = db.transaction("images").objectStore("images").get(cacheKey);
+      request.onsuccess = () => resolve(sameIdentity(identity, brandingIdentity()) && validBranding(request.result, identity) ? request.result : {});
       request.onerror = () => reject(new Error("Unable to load saved campus images."));
     });
   } finally { db.close(); }
@@ -114,7 +133,10 @@ export async function saveCampusImages(campusId, images, { requirePersisted = fa
   if (campusId == null || campusId === "") throw new Error("Select a campus before saving images.");
   let savedImages = images;
   let confirmed = false;
+  const identity = brandingIdentity();
+  const cacheKey = brandingCacheKey(identity);
   if (requirePersisted && !getAuthToken()) throw new Error("Sign in before saving header configuration.");
+  if (identity.token && !identity.collegeId) throw new Error("The signed-in account has no verified college ID. Contact the administrator.");
 
   // Save to backend database API
   if (getAuthToken()) {
@@ -123,10 +145,11 @@ export async function saveCampusImages(campusId, images, { requirePersisted = fa
         ...images,
         campusId: Number(campusId) || null,
       });
-      const hasConfiguration = response && typeof response === "object" && Object.hasOwn(response, "dashboardLogo");
+      if (!sameIdentity(identity, brandingIdentity())) throw new Error("The signed-in account changed while saving branding.");
+      const hasConfiguration = validBranding(response, identity);
       if (requirePersisted && !hasConfiguration) throw new Error("The backend did not return the saved header configuration. Your draft has been kept; reload to verify the saved settings.");
-      if (requirePersisted && images.dashboardLogo && response.dashboardLogo !== images.dashboardLogo)
-        throw new Error("The backend did not confirm the selected dashboard logo. Your draft has been kept; reload to verify the saved settings.");
+      if (requirePersisted && ["dashboardTitle", "dashboardSubtitle", "dashboardTagline", "dashboardLogo"].some((key) => (response[key] ?? "") !== (images[key] ?? "")))
+        throw new Error("The backend did not confirm the submitted header title, subtitle, tagline and logo. Your draft has been kept; reload to verify the saved settings.");
       if (hasConfiguration) {
         // Keep browser-only settings that are not part of this API's DTO.
         savedImages = { ...images, ...response };
@@ -139,13 +162,16 @@ export async function saveCampusImages(campusId, images, { requirePersisted = fa
     }
   }
 
-  savedRevisions.set(String(campusId), (savedRevisions.get(String(campusId)) || 0) + 1);
+  if (!confirmed && identity.token) throw new Error("The backend did not return a valid college configuration.");
+  savedRevisions.set(cacheKey, (savedRevisions.get(cacheKey) || 0) + 1);
   try {
+    if (!cacheKey) throw new Error("A verified college and user are required for browser caching.");
     const db = await openDatabase();
     try {
+      if (!sameIdentity(identity, brandingIdentity())) throw new Error("The signed-in account changed while saving branding.");
       await new Promise((resolve, reject) => {
         const transaction = db.transaction("images", "readwrite");
-        transaction.objectStore("images").put(savedImages, String(campusId));
+        transaction.objectStore("images").put(savedImages, cacheKey);
         transaction.oncomplete = resolve;
         transaction.onerror = transaction.onabort = () => reject(new Error("Images could not be saved. Check available browser storage."));
       });
@@ -154,7 +180,8 @@ export async function saveCampusImages(campusId, images, { requirePersisted = fa
     if (!confirmed) throw error;
     console.warn("Configuration saved to server, but browser cache is unavailable:", error);
   }
-  window.dispatchEvent(new CustomEvent("campus-images-changed", { detail: { campusId, images: savedImages } }));
+  if (!sameIdentity(identity, brandingIdentity())) throw new Error("The signed-in account changed while saving branding.");
+  window.dispatchEvent(new CustomEvent("campus-images-changed", { detail: { campusId, collegeId: identity.collegeId, userId: identity.userId, images: savedImages } }));
   try { localStorage.setItem("cms-campus-images-revision", `${Date.now()}-${Math.random()}`); } catch { /* Same-tab updates still work. */ }
   return savedImages;
 }
@@ -177,38 +204,53 @@ export async function readCampusImageFile(file, { allowSvg = false } = {}) {
 }
 export function useCampusImages() {
   const { selectedCampusId } = useCampusContext();
-  const [saved, setSaved] = useState({ campusId: null, images: {} });
+  const [identity, setIdentity] = useState(brandingIdentity);
+  const [saved, setSaved] = useState({ campusId: null, identity: null, images: {} });
+  useEffect(() => {
+    const update = () => setIdentity((previous) => { const next = brandingIdentity(); return sameIdentity(previous, next) ? previous : next; });
+    window.addEventListener("cms-auth-login", update);
+    window.addEventListener("cms-auth-logout", update);
+    window.addEventListener("storage", update);
+    return () => { window.removeEventListener("cms-auth-login", update); window.removeEventListener("cms-auth-logout", update); window.removeEventListener("storage", update); };
+  }, []);
   useEffect(() => {
     let active = true;
     let requestId = 0;
+    let pending = false;
     const load = async () => {
+      if (pending || !sameIdentity(identity, brandingIdentity())) return;
+      pending = true;
       const current = ++requestId;
       try {
         const images = await readCampusImages(selectedCampusId);
-        if (active && current === requestId) setSaved((previous) => {
+        if (active && current === requestId && sameIdentity(identity, brandingIdentity())) setSaved((previous) => {
           const keys = Object.keys(images);
-          if (previous.campusId === selectedCampusId && keys.length === Object.keys(previous.images).length
+          if (previous.campusId === selectedCampusId && previous.identity && sameIdentity(previous.identity, identity) && keys.length === Object.keys(previous.images).length
             && keys.every((key) => Object.hasOwn(previous.images, key) && Object.is(previous.images[key], images[key]))) return previous;
-          return { campusId: selectedCampusId, images };
+          return { campusId: selectedCampusId, identity, images };
         });
-      } catch {
+      } catch (error) {
         // A failed refresh must not temporarily replace saved branding with defaults.
-        if (active && current === requestId) setSaved((previous) => previous.campusId === selectedCampusId ? previous : { campusId: selectedCampusId, images: {} });
-      }
+        if (active && current === requestId) setSaved((previous) => [401, 403, 404].includes(Number(error?.response?.status)) ? { campusId: selectedCampusId, identity, images: {} } : previous.campusId === selectedCampusId && previous.identity && sameIdentity(previous.identity, identity) ? previous : { campusId: selectedCampusId, identity, images: {} });
+      } finally { pending = false; }
     };
     const onStorage = (event) => { if (event.key === "cms-campus-images-revision") load(); };
     const onChanged = (event) => {
       if (event.detail?.images) {
-        if (String(event.detail.campusId) !== String(selectedCampusId)) return;
+        if (Number(event.detail.collegeId) !== identity.collegeId || String(event.detail.userId) !== identity.userId || !sameIdentity(identity, brandingIdentity())) return;
         // Invalidate older GETs so they cannot overwrite this confirmed PUT result.
         requestId += 1;
-        setSaved({ campusId: selectedCampusId, images: event.detail.images });
+        setSaved({ campusId: selectedCampusId, identity, images: event.detail.images });
       } else load();
     };
     load();
+    const onFocus = () => { if (typeof document === "undefined" || document.visibilityState !== "hidden") load(); };
+    const onVisibility = () => { if (document.visibilityState === "visible") load(); };
     window.addEventListener("campus-images-changed", onChanged);
     window.addEventListener("storage", onStorage);
-    return () => { active = false; window.removeEventListener("campus-images-changed", onChanged); window.removeEventListener("storage", onStorage); };
-  }, [selectedCampusId]);
-  return saved.campusId === selectedCampusId ? saved.images : {};
+    window.addEventListener("focus", onFocus);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+    return () => { active = false; requestId += 1; window.removeEventListener("campus-images-changed", onChanged); window.removeEventListener("storage", onStorage); window.removeEventListener("focus", onFocus); if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility); };
+  }, [selectedCampusId, identity]);
+  return saved.campusId === selectedCampusId && saved.identity && sameIdentity(saved.identity, identity) && sameIdentity(identity, brandingIdentity()) ? saved.images : {};
 }
