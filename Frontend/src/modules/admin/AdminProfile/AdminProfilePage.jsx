@@ -30,13 +30,21 @@ const CAMPUS_OPTIONS = [
   "Medical Sciences Campus"
 ];
 
-const LOCAL_STORAGE_PROFILE_KEY = "cms_admin_profile";
+const getScopedProfileKeys = (authUser) => {
+  const collegeId = authUser?.collegeId || authUser?.CollegeId || 1;
+  const userId = authUser?.id || authUser?.userId || authUser?.adminId || "admin";
+  return {
+    profileKey: `cms_admin_profile_c${collegeId}_u${userId}`,
+    photoKey: `cms_admin_photo_c${collegeId}_u${userId}`,
+  };
+};
 
 export default function AdminProfilePage() {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
   const authUser = getAuthUser() || {};
+  const { profileKey: LOCAL_STORAGE_PROFILE_KEY, photoKey: LOCAL_STORAGE_PHOTO_KEY } = getScopedProfileKeys(authUser);
 
   // Basic Details State
   const [fullName, setFullName] = useState("");
@@ -72,10 +80,10 @@ export default function AdminProfilePage() {
       savedProfile = null;
     }
 
-    const initialName = savedProfile?.fullName || authUser?.name || authUser?.unique_name || authUser?.fullName || "Pirnavsms";
-    const initialEmail = savedProfile?.email || authUser?.email || "pirnavsms@gmail.com";
-    const initialPhone = savedProfile?.phoneNumber || authUser?.phoneNumber || authUser?.mobile || "9905852577";
-    const initialCampus = savedProfile?.campus || "Main Campus";
+    const initialName = savedProfile?.fullName || authUser?.name || authUser?.unique_name || authUser?.fullName || "Administrator";
+    const initialEmail = savedProfile?.email || authUser?.email || "";
+    const initialPhone = savedProfile?.phoneNumber || authUser?.phoneNumber || authUser?.mobile || "";
+    const initialCampus = savedProfile?.campus || authUser?.campusName || "Main Campus";
     const initialRole = savedProfile?.role || authUser?.role || "Admin";
     const rawInitialPhoto = savedProfile?.photo || authUser?.photoUrl || authUser?.photoPath || authUser?.photo || null;
     let initialPhoto = null;
@@ -188,10 +196,10 @@ export default function AdminProfilePage() {
         updatedAt: new Date().toISOString()
       };
 
-      // Save to localStorage
+      // Save to tenant- and user-scoped localStorage
       localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(updatedProfile));
       if (serverPhotoUrl) {
-        localStorage.setItem("cms_admin_photo", serverPhotoUrl);
+        localStorage.setItem(LOCAL_STORAGE_PHOTO_KEY, serverPhotoUrl);
       }
 
       // Update auth user session storage if available

@@ -438,18 +438,51 @@ namespace CollegeManagement.API.Services.Implementations
         // VERIFY
         // =====================================================
 
-        public async Task<bool> VerifyAsync(
+                public async Task<bool> VerifyAsync(
             VerifyStudentAdmissionRequest request)
         {
             if (request == null)
                 throw new ArgumentNullException(nameof(request));
 
             if (request.AdmissionId <= 0)
-                throw new ArgumentException(
-                    "Invalid AdmissionId.");
+                throw new ArgumentException("Invalid AdmissionId.");
 
-            return await _repository.VerifyAsync(
-                request);
+            // 1. Fetch current admission record
+            var admission = await _repository.GetByIdAsync(request.AdmissionId);
+            if (admission == null)
+            {
+                throw new KeyNotFoundException($"Student admission with ID {request.AdmissionId} not found.");
+            }
+
+            // 2. Reject if marked rejected
+            if (admission.IsRejected || string.Equals(admission.Status, "Rejected", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Cannot verify a rejected student admission.");
+            }
+
+            // 3. Handle already verified or approved (idempotent success)
+            if (admission.IsVerified || string.Equals(admission.Status, "Verified", StringComparison.OrdinalIgnoreCase) ||
+                admission.IsApproved || string.Equals(admission.Status, "Approved", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Student admission {AdmissionId} is already verified.", request.AdmissionId);
+                return true;
+            }
+
+            // 4. Validate allowed status transitions
+            var validStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Pending",
+                "Submitted",
+                "Request Approved"
+            };
+
+            if (!string.IsNullOrEmpty(admission.Status) && !validStatuses.Contains(admission.Status))
+            {
+                throw new InvalidOperationException($"Cannot verify admission in '{admission.Status}' status. Allowed statuses are: Pending, Submitted, Request Approved.");
+            }
+
+            // 5. Execute repository verification
+            return await _repository.VerifyAsync(request);
         }
 
         //generate//

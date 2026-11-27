@@ -295,11 +295,12 @@ test("refresh failures preserve loaded admissions; successful refresh replaces t
   const existing = [{ admissionId: 5 }], toasts = [];
   const context = vm.createContext({
     useCallback: fn => fn, admissionsRequestRef: { current: 0 }, admissionListParams: { campusId: "1" },
+    currentAdmissionsCampusRef: { current: "1" },
     apiEndpoints: { admissions: { getAll: "/api/v1/student-admissions" } },
     apiClient: { get: async () => { throw new Error("Offline"); } },
     getCollection: value => value, normalizeAdmissionRow: value => value,
     getApiErrorMessage: error => error.message, admissions: existing,
-    setListLoading() {}, setToast: message => toasts.push(message),
+    setListLoading() {}, setAdmissionsCampus() {}, setListRefreshError() {}, setToast: message => toasts.push(message),
   });
   context.setAdmissions = rows => { context.admissions = rows; };
   vm.runInContext(`${section(admissionSource, "  const refreshAdmissions = useCallback", "  useEffect(() => {\n    setPage(1);")};globalThis.refresh = refreshAdmissions;`, context);
@@ -309,6 +310,98 @@ test("refresh failures preserve loaded admissions; successful refresh replaces t
   context.apiClient.get = async () => ({ data: [{ admissionId: 6 }] });
   await context.refresh();
   assert.equal(context.admissions[0].admissionId, 6);
+});
+
+test("fee account identifiers never fall back to generic admission or student ids", () => {
+  const context = vm.createContext({
+    getObject: value => value, getCollection: () => [],
+    read: (value, ...keys) => keys.map(key => value?.[key]).find(value => value != null),
+    readId: (value, ...keys) => keys.map(key => value?.[key]).find(value => value != null),
+    numericId: value => Number.isInteger(Number(value)) && Number(value) > 0 ? Number(value) : null,
+  });
+  vm.runInContext(`${section(admissionSource, "const readStudentFeeAssignmentId =", "const resolveApprovedStudentId =")};globalThis.getFeeId = readStudentFeeAssignmentId;`, context);
+  assert.equal(context.getFeeId({ id: 671, admissionId: 671, studentId: 671 }), "");
+  assert.equal(context.getFeeId({ studentFeeId: 812, id: 671 }), 812);
+  assert.equal(context.getFeeId({ studentFee: { studentFeeId: 813 } }), 813);
+});
+
+function verificationFixture({ postError, latest = { admissionId: 670, status: "Verified" }, latestError, refreshed = [] } = {}) {
+  const calls = { posts: [], gets: [], toasts: [], pages: [], views: [] };
+  const context = vm.createContext({
+    verifiedInFlightRef: { current: new Set() }, admissionKeyFor: record => String(record.admissionId || record.id),
+    admissionStatusBody: id => ({ admissionId: Number(id), remarks: "" }),
+    apiEndpoints: { admissions: { verify: id => `/verify/${id}`, getById: id => `/admissions/${id}` } },
+    apiClient: {
+      post: async (...args) => { calls.posts.push(args); if (postError) throw postError; return { data: {} }; },
+      get: async (...args) => { calls.gets.push(args); if (latestError) throw latestError; return { data: latest }; },
+    },
+    refreshAdmissions: async () => refreshed,
+    getObject: data => data, readId: (item, ...keys) => keys.map(key => item?.[key]).find(Boolean),
+    readText: (item, ...keys) => keys.map(key => item?.[key]).find(Boolean) || "",
+    normalizeAdmissionStatus: value => String(value).toLowerCase() === "verified" ? "Verified" : "Pending",
+    getApiErrorMessage: error => error.message || "Request failed",
+    setToast: (message, type) => calls.toasts.push({ message, type }),
+    setActionBusy() {}, setViewMode: value => calls.views.push(value), setPage: value => calls.pages.push(value),
+  });
+  vm.runInContext(`${section(admissionSource, "  const verifyAdmission = async", "  const submit = async")};globalThis.verify = verifyAdmission;`, context);
+  return { context, calls, record: { id: 670, admissionId: 670, admissionNo: "A-670" } };
+}
+
+test("verification disables retries and distinguishes a successful update from a failed list refresh", async () => {
+  const f = verificationFixture({ refreshed: null });
+  await f.context.verify(f.record);
+  assert.equal(f.calls.posts[0][2].skipNetworkRetry, true);
+  assert.equal(f.calls.gets.length, 0);
+  assert.match(f.calls.toasts[0].message, /was verified.*could not be refreshed/);
+  assert.equal(f.calls.toasts[0].type, "warning");
+});
+
+test("verification error reconciles only the same admission and preserves the API error", async () => {
+  const f = verificationFixture({ postError: new Error("Admission could not be verified") });
+  await f.context.verify(f.record);
+  assert.equal(f.calls.gets[0][0], "/admissions/670");
+  assert.match(f.calls.toasts[0].message, /confirmed Verified.*Admission could not be verified/);
+  assert.equal(f.calls.toasts[0].type, "warning");
+  const other = verificationFixture({ postError: new Error("Backend rejected"), latest: { admissionId: 671, status: "Verified" } });
+  await other.context.verify(other.record);
+  assert.match(other.calls.toasts[0].message, /verification failed.*Backend rejected/);
+  assert.equal(other.calls.views.length, 0);
+});
+
+test("verification remains uncertain if the read-only reconciliation fails", async () => {
+  const f = verificationFixture({ postError: new Error("Network error"), latestError: new Error("Offline") });
+  await f.context.verify(f.record);
+  assert.match(f.calls.toasts[0].message, /Network error.*status could not be confirmed/);
+  assert.equal(f.calls.views.length, 0);
+});
+
+test("verification in-flight guard blocks a second click for the same admission", async () => {
+  const f = verificationFixture();
+  let finish;
+  f.context.apiClient.post = (...args) => { f.calls.posts.push(args); return new Promise(resolve => { finish = resolve; }); };
+  const first = f.context.verify(f.record);
+  await f.context.verify(f.record);
+  assert.equal(f.calls.posts.length, 1);
+  finish({ data: {} });
+  await first;
+});
+
+test("campus switch prevents an old list response from overwriting the current campus", async () => {
+  let finish;
+  const context = vm.createContext({
+    useCallback: fn => fn, admissionsRequestRef: { current: 0 }, admissionListParams: { campusId: "1" },
+    currentAdmissionsCampusRef: { current: "1" },
+    apiEndpoints: { admissions: { getAll: "/admissions" } },
+    apiClient: { get: () => new Promise(resolve => { finish = resolve; }) },
+    getCollection: value => value, normalizeAdmissionRow: value => value, getApiErrorMessage: error => error.message,
+    setListLoading() {}, setListRefreshError() {}, setAdmissionsCampus() {}, setToast() {},
+    setAdmissions() { assert.fail("Old campus data must not be saved"); },
+  });
+  vm.runInContext(`${section(admissionSource, "  const refreshAdmissions = useCallback", "  useEffect(() => {\n    setPage(1);")};globalThis.refresh = refreshAdmissions;`, context);
+  const pending = context.refresh();
+  context.currentAdmissionsCampusRef.current = "2";
+  finish({ data: [{ admissionId: 670 }] });
+  assert.equal(await pending, null);
 });
 
 test("the existing draft retains uncertain outcome across edits and reloads until explicitly cleared", () => {

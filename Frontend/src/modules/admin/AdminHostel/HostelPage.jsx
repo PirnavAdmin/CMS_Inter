@@ -409,9 +409,16 @@ export default function HostelPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const user = getAuthUser();
-  const { selectedCampus } = useCampusContext();
-  const curCampusId = selectedCampus?.id ?? selectedCampus?.campusId;
+  const { selectedCampus, selectedCampusId } = useCampusContext();
+  const rawCampusId = selectedCampus?.id ?? selectedCampus?.campusId ?? selectedCampusId;
+  const curCampusId =
+    rawCampusId !== undefined && rawCampusId !== null && String(rawCampusId).trim() !== "" && !Number.isNaN(Number(rawCampusId))
+      ? Number(rawCampusId)
+      : null;
+  const tenantCollegeId = user?.collegeId ? Number(user.collegeId) : 1;
   const isTenantCollege = Boolean(user?.collegeId && Number(user.collegeId) > 1);
+  const storageKeyHostelPayments = `cms_hostel_fee_payments_c${tenantCollegeId}_cam${curCampusId || 0}`;
+  const storageKeyVacatedStudents = `hostel_vacated_students_c${tenantCollegeId}_cam${curCampusId || 0}`;
   const adminView = useMemo(() => resolveHostelView(location.pathname, location.search), [location.pathname, location.search]);
   const isAdminHostelRoute = Boolean(adminView);
   const isWardenRoute = /^\/warden(?:-|\/|$)/i.test(location.pathname);
@@ -848,6 +855,14 @@ export default function HostelPage() {
         setIsLoading(false);
         return;
       }
+      // Clear previous campus data immediately so old campus records never flash on campus switch
+      blocksRef.current = [];
+      categoriesRef.current = [];
+      allocationsRef.current = [];
+      setBlocks([]); setCategories([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
+      setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
+      setCandidateAdmissions([]); setCandidateStudents([]);
+      setDashboardData(null);
       if (isWarden && !wardenStaffId) {
         setBlocks([]); setRooms([]); setBeds([]); setWardens([]); setAllocations([]);
         setOutpasses([]); setTransfers([]); setAttendanceRecords([]); setAttendanceStudents([]);
@@ -1182,26 +1197,25 @@ export default function HostelPage() {
     }
   });
 
-  // Helper to refresh a specific entity list after mutation
+  // Helper to refresh a specific entity list after mutation (always scoped to curCampusId)
   const refreshBlocks = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getHostelBlocks();
+      const res = await hostelApi.getHostelBlocks(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
         const serverBlocks = raw.map(mapBlock);
-        setBlocks((prev) => {
-          const map = new Map();
-          prev.forEach((b) => map.set(String(b.id || b.code).toLowerCase(), b));
-          serverBlocks.forEach((b) => map.set(String(b.id || b.code).toLowerCase(), b));
-          return Array.from(map.values());
-        });
+        const uniqueBlocks = Array.from(new Map(serverBlocks.map((b) => [String(b.id || b.code).toLowerCase(), b])).values());
+        blocksRef.current = uniqueBlocks;
+        setBlocks(uniqueBlocks);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapBlock]);
+  }, [mapBlock, curCampusId, isTenantCollege]);
 
   const refreshCategories = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getRoomTypes();
+      const res = await hostelApi.getRoomTypes(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
         const uniqueCats = Array.from(new Map(raw.map(mapCategory).map((c) => [String(c.id || c.name), c])).values());
@@ -1209,54 +1223,54 @@ export default function HostelPage() {
         setCategories(uniqueCats);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapCategory]);
+  }, [mapCategory, curCampusId, isTenantCollege]);
 
   const refreshRooms = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getRooms();
+      const res = await hostelApi.getRooms(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
         const serverRooms = raw.map((r) => mapRoom(r, blocksRef.current, categoriesRef.current));
-        setRooms((prev) => {
-          const map = new Map();
-          prev.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.floor || ''}-${r.roomNo}`), r));
-          serverRooms.forEach((r) => map.set(String(r.id || `${r.hostelId || r.block}-${r.floor || ''}-${r.roomNo}`), r));
-          return Array.from(map.values());
-        });
+        const uniqueRooms = Array.from(new Map(serverRooms.map((r) => [String(r.id || `${r.hostelId || r.block}-${r.floor || ""}-${r.roomNo}`), r])).values());
+        setRooms(uniqueRooms);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapRoom]);
+  }, [mapRoom, curCampusId, isTenantCollege]);
 
   const refreshBeds = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getBeds();
+      const res = await hostelApi.getBeds(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
         const serverBeds = raw.map(mapBed);
-        setBeds((prev) => {
-          const map = new Map();
-          prev.forEach((bd) => map.set(String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd));
-          serverBeds.forEach((bd) => map.set(String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd));
-          return Array.from(map.values());
-        });
+        const uniqueBeds = Array.from(new Map(serverBeds.map((bd) => [String(bd.id || `${bd.roomId}-${bd.bedNumber}`), bd])).values());
+        setBeds(uniqueBeds);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapBed]);
+  }, [mapBed, curCampusId, isTenantCollege]);
 
   const refreshWardens = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getWardens();
+      const params = {
+        ...(curCampusId ? { campusId: curCampusId } : {}),
+        ...(isWarden && wardenStaffId ? { staffId: wardenStaffId, status: "Active" } : {}),
+      };
+      const res = await hostelApi.getWardens(Object.keys(params).length > 0 ? params : undefined);
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
         const uniqueWardens = Array.from(new Map(raw.map(mapWarden).map((w) => [String(w.id || `${w.hostelId}-${w.staffId}`), w])).values());
         setWardens(uniqueWardens);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapWarden]);
+  }, [mapWarden, curCampusId, isTenantCollege, isWarden, wardenStaffId]);
 
   const refreshAllocations = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getStudentAllocations();
+      const res = await hostelApi.getStudentAllocations(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = extractCollection(res?.data);
       if (Array.isArray(raw)) {
         const mapped = raw.map(mapAllocation);
@@ -1289,22 +1303,24 @@ export default function HostelPage() {
         setAttendanceStudents(uniqueAttStudents);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapAllocation]);
+  }, [mapAllocation, curCampusId, isTenantCollege]);
 
   const refreshOutpasses = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getOutpassLeave();
+      const res = await hostelApi.getOutpassLeave(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) {
         const uniqueOutpass = Array.from(new Map(raw.map(mapOutpass).map((o) => [String(o.id), o])).values());
         setOutpasses(uniqueOutpass);
       }
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapOutpass]);
+  }, [mapOutpass, curCampusId, isTenantCollege]);
 
   const refreshTransfers = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
-      const res = await hostelApi.getTransferVacate();
+      const res = await hostelApi.getTransferVacate(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) {
         const uniqueTransfer = Array.from(new Map(raw.map(mapTransfer).map((t) => [String(t.id), t])).values());
@@ -1313,22 +1329,24 @@ export default function HostelPage() {
     } catch (err) {
       console.error("Failed to refresh transfers:", err);
     }
-  }, [mapTransfer]);
+  }, [mapTransfer, curCampusId, isTenantCollege]);
 
   const refreshDashboard = useCallback(async () => {
+    if ((isTenantCollege && !curCampusId) || isWarden) return;
     try {
-      const res = await hostelApi.getHostelDashboard();
+      const res = await hostelApi.getHostelDashboard(curCampusId ? { campusId: curCampusId } : undefined);
       setDashboardData(res?.data?.data ?? res?.data ?? null);
     } catch (_) { /* Intentionally ignored. */ }
-  }, []);
+  }, [curCampusId, isTenantCollege, isWarden]);
 
   const refreshAttendance = useCallback(async () => {
+    if (isTenantCollege && !curCampusId) return;
     try {
       const res = await hostelApi.getAttendance(curCampusId ? { campusId: curCampusId } : undefined);
       const raw = res?.data?.data ?? res?.data?.items ?? (Array.isArray(res?.data) ? res.data : []);
       if (Array.isArray(raw)) setAttendanceRecords(raw.map(mapAttendanceRecord).filter(Boolean));
     } catch (_) { /* Intentionally ignored. */ }
-  }, [mapAttendanceRecord]);
+  }, [mapAttendanceRecord, curCampusId, isTenantCollege]);
 
   // ── Synchronize route location with initial tab ──────────────────────
   useEffect(() => {
@@ -1537,29 +1555,30 @@ export default function HostelPage() {
     setReportPage(1);
   }, [reportCategory, reportBlockFilter, reportCategoryFilter, reportSearch]);
 
-  // ── Monthly Revenue & Fee Collections Persistent State ────────────────
-  const STORAGE_KEY_HOSTEL_PAYMENTS = "cms_hostel_fee_payments";
+  // ── Monthly Revenue & Fee Collections Persistent State (Tenant & Campus Scoped) ──
   const [feePayments, setFeePayments] = useState(() => {
     try {
-      const raw = typeof window !== "undefined" ? window.localStorage?.getItem(STORAGE_KEY_HOSTEL_PAYMENTS) : null;
+      const raw = typeof window !== "undefined" ? window.localStorage?.getItem(storageKeyHostelPayments) : null;
       if (raw) return JSON.parse(raw);
     } catch { /* Intentionally ignored. */ }
-    return {
-      "1": { paidAmount: 12000, lastPaymentDate: "2026-10-02", paymentMode: "UPI (GPay)", receiptNo: "RCP-2026-001", notes: "Full payment received" },
-      "2": { paidAmount: 8500, lastPaymentDate: "2026-10-03", paymentMode: "Net Banking", receiptNo: "RCP-2026-002", notes: "Paid via College Portal" },
-      "3": { paidAmount: 6000, lastPaymentDate: "2026-10-04", paymentMode: "UPI (PhonePe)", receiptNo: "RCP-2026-003", notes: "Full fee cleared" },
-      "4": { paidAmount: 4500, lastPaymentDate: "2026-10-05", paymentMode: "Cash", receiptNo: "RCP-2026-004", notes: "Cash counter payment" },
-      "5": { paidAmount: 3500, lastPaymentDate: "2026-10-06", paymentMode: "UPI", receiptNo: "RCP-2026-005", notes: "Partial fee received (Due: ₹2,500)" },
-      "6": { paidAmount: 0, lastPaymentDate: "-", paymentMode: "-", receiptNo: "-", notes: "Fee pending" },
-    };
+    return {};
   });
+
+  useEffect(() => {
+    try {
+      const raw = typeof window !== "undefined" ? window.localStorage?.getItem(storageKeyHostelPayments) : null;
+      setFeePayments(raw ? JSON.parse(raw) : {});
+    } catch {
+      setFeePayments({});
+    }
+  }, [storageKeyHostelPayments]);
 
   const handleSaveFeePayment = (allocationId, paymentRecord) => {
     setFeePayments((prev) => {
       const next = { ...prev, [String(allocationId)]: paymentRecord };
       try {
         if (typeof window !== "undefined") {
-          window.localStorage?.setItem(STORAGE_KEY_HOSTEL_PAYMENTS, JSON.stringify(next));
+          window.localStorage?.setItem(storageKeyHostelPayments, JSON.stringify(next));
         }
       } catch { /* Intentionally ignored. */ }
       return next;
@@ -1737,9 +1756,9 @@ export default function HostelPage() {
       const rawFee = parseFloat(String(a.monthlyFee || a.fee || 0).replace(/[^0-9.]/g, "")) || 0;
       const monthlyFee = rawFee > 0 ? rawFee : 6000;
       
-      const paidAmount = paymentInfo?.paidAmount !== undefined 
-        ? Math.min(monthlyFee, Math.max(0, Number(paymentInfo.paidAmount))) 
-        : (paymentInfo === null && idx < 4 ? monthlyFee : 0);
+      const paidAmount = paymentInfo?.paidAmount !== undefined
+        ? Math.min(monthlyFee, Math.max(0, Number(paymentInfo.paidAmount)))
+        : 0;
       const dueAmount = Math.max(0, monthlyFee - paidAmount);
       const paymentStatus = dueAmount === 0 ? "Paid" : paidAmount > 0 ? "Partial" : "Pending";
       
@@ -1755,9 +1774,9 @@ export default function HostelPage() {
         paidAmount,
         dueAmount,
         paymentStatus,
-        lastPaymentDate: paymentInfo?.lastPaymentDate || (paidAmount > 0 ? "2026-10-05" : "-"),
-        receiptNo: paymentInfo?.receiptNo || (paidAmount > 0 ? `RCP-2026-00${idx + 1}` : "-"),
-        paymentMode: paymentInfo?.paymentMode || (paidAmount > 0 ? "UPI" : "-"),
+        lastPaymentDate: paymentInfo?.lastPaymentDate || "-",
+        receiptNo: paymentInfo?.receiptNo || "-",
+        paymentMode: paymentInfo?.paymentMode || "-",
         notes: paymentInfo?.notes || "",
       };
     });
@@ -1922,8 +1941,13 @@ export default function HostelPage() {
         return;
       }
 
+      if (!curCampusId) {
+        showToast("Please select a valid campus before saving a hostel block.", "warning");
+        return false;
+      }
+
       const payload = {
-        campusId: Number(window.localStorage.getItem("cms_selected_campus_id")) || 1,
+        campusId: Number(curCampusId),
         hostelName: name,
         hostelCode: code,
         hostelType: type,
@@ -1940,12 +1964,11 @@ export default function HostelPage() {
         showToast(`Hostel block ${name} added successfully!`);
       }
       closeModal();
-      (async () => {
-        try { await refreshBlocks(); } catch (_) { /* Intentionally ignored. */ }
-        try { await refreshDashboard(); } catch (_) { /* Intentionally ignored. */ }
-      })();
+      await Promise.allSettled([refreshBlocks(), refreshDashboard()]);
+      return true;
     } catch (err) {
       showToast(getApiErrorMessage(err) || "Failed to save hostel block.", "danger");
+      return false;
     } finally {
       isSavingBlockRef.current = false;
     }
@@ -1985,11 +2008,16 @@ export default function HostelPage() {
     if (!block) return;
     try {
       showToast("Generating room configurations and beds on server...", "info");
-      const defaultRoomType = categories[0]?.id || 1;
+      const defaultRoomType = categories[0]?.id ? Number(categories[0].id) : null;
       const rawHostelId = Number(block.hostelId ?? block.id);
+      const matchedBlkId = Number(blocks.find((b) => b.name === block.name || b.code === block.code)?.id);
       const targetHostelId = (!isNaN(rawHostelId) && rawHostelId > 0)
         ? rawHostelId
-        : (Number(blocks.find((b) => b.name === block.name || b.code === block.code)?.id) || 1);
+        : ((!isNaN(matchedBlkId) && matchedBlkId > 0) ? matchedBlkId : 0);
+      if (!targetHostelId) {
+        showToast("Please select a valid hostel block first.", "warning");
+        return;
+      }
       const blockCode = block.code || block.name || `BLK-${targetHostelId}`;
       const blockName = block.name || block.code || `Hostel Block #${targetHostelId}`;
       const generatedLocalRooms = [];
@@ -2311,6 +2339,7 @@ export default function HostelPage() {
                    !catData.type?.includes("Non-AC") && !catData.name?.includes("Non-AC") && catData.acType !== "Non-AC";
       const cleanFee = Number(String(catData.fee || catData.monthlyFee || catData.standardMonthlyFee || "").replace(/[^0-9.]/g, "")) || 0;
       const payload = {
+        ...(curCampusId ? { campusId: Number(curCampusId) } : {}),
         roomTypeSpecification: catData.name || catData.specification || "Standard Room",
         bedCapacity: Number(catData.capacity) || 2,
         acType: isAc ? "AC" : "Non-AC",
@@ -2406,7 +2435,11 @@ export default function HostelPage() {
         b.name === roomData.block ||
         b.name === roomData.blockName
       );
-      const hostelId = blk ? Number(blk.id) : (Number(blocks[0]?.id) || 1);
+      const hostelId = blk ? Number(blk.id) : Number(blocks[0]?.id);
+      if (!hostelId || isNaN(hostelId) || hostelId <= 0) {
+        showToast("Please create or select a valid hostel block before adding rooms.", "warning");
+        return;
+      }
 
       const cat = categories.find((c) =>
         String(c.id) === String(roomData.roomTypeId) ||
@@ -2414,7 +2447,7 @@ export default function HostelPage() {
         c.name === roomData.type ||
         c.name?.toLowerCase() === String(roomData.type || "").toLowerCase()
       ) || categories[0];
-      const roomTypeId = cat ? Number(cat.id) : 1;
+      const roomTypeId = cat ? Number(cat.id) : null;
 
       // Parse single room (101), range (101-105), or comma-separated list (101, 102, 103)
       const parseRoomNumbers = (inputStr) => {
@@ -2875,11 +2908,19 @@ export default function HostelPage() {
       const isEditing = modal.mode === "edit" || Boolean(allocData.id && allocations.some((a) => Number(a.id) === Number(allocData.id)));
 
       const blk = blocks.find((b) => b.name === allocData.blockName || b.code === allocData.blockCode || String(b.id) === String(allocData.hostelId));
-      const hostelId = Number(allocData.hostelId) || (blk ? Number(blk.id) : (Number(blocks[0]?.id) || 1));
+      const hostelId = Number(allocData.hostelId) || (blk ? Number(blk.id) : Number(blocks[0]?.id));
+      if (!hostelId || isNaN(hostelId) || hostelId <= 0) {
+        showToast("Please select a valid hostel block.", "warning");
+        return;
+      }
 
       const rm = rooms.find((r) => (String(r.id) === String(allocData.roomId) || r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room) && String(r.hostelId) === String(hostelId))
         || rooms.find((r) => r.roomNo === allocData.room || `Room #${r.roomNo}` === allocData.room || String(r.id) === String(allocData.roomId));
-      const roomId = rm ? Number(rm.id) : (Number(allocData.roomId) || (Number(rooms[0]?.id) || 1));
+      const roomId = rm ? Number(rm.id) : (Number(allocData.roomId) || Number(rooms[0]?.id));
+      if (!roomId || isNaN(roomId) || roomId <= 0) {
+        showToast("Please select a valid room.", "warning");
+        return;
+      }
 
       // Resolve actual database bed ID for this specific room
       const cleanBed = (s) => String(s || "").replace(/[^0-9a-zA-Z]/g, "").toLowerCase();
@@ -2980,7 +3021,7 @@ export default function HostelPage() {
         showToast(`Room & Bed allocated to ${allocData.studentName} successfully!`);
       }
       try {
-        const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+        const stored = JSON.parse(localStorage.getItem(storageKeyVacatedStudents) || "[]");
         const filtered = (Array.isArray(stored) ? stored : []).filter(
           (s) =>
             !(
@@ -2988,7 +3029,7 @@ export default function HostelPage() {
               (allocData.admissionNo && String(s.admissionNo).trim().toLowerCase() === String(allocData.admissionNo).trim().toLowerCase())
             )
         );
-        localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+        localStorage.setItem(storageKeyVacatedStudents, JSON.stringify(filtered));
       } catch (_) { /* Intentionally ignored. */ }
       closeModal();
       (async () => {
@@ -3014,7 +3055,7 @@ export default function HostelPage() {
     try {
       // 1. Persist to localStorage so the vacated student is remembered across refreshes
       try {
-        const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+        const stored = JSON.parse(localStorage.getItem(storageKeyVacatedStudents) || "[]");
         const record = {
           studentId: alloc.studentId,
           admissionNo: alloc.admissionNo,
@@ -3032,7 +3073,7 @@ export default function HostelPage() {
             )
         );
         filtered.push(record);
-        localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+        localStorage.setItem(storageKeyVacatedStudents, JSON.stringify(filtered));
       } catch (_) { /* Intentionally ignored. */ }
 
       // 2. Optimistically mark allocation as Vacated in allocations state
@@ -3076,11 +3117,16 @@ export default function HostelPage() {
       );
       const blk = blocks.find((b) => b.name === outData.blockName || b.code === outData.blockCode || String(b.id) === String(outData.hostelId));
       const rm = rooms.find((r) => r.roomNo === outData.roomNo || r.roomNo === outData.roomNumber || String(r.id) === String(outData.roomId));
-      const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || blocks[0]?.id || 1);
-      const roomId = Number(outData.roomId || alloc?.roomId || rm?.id || rooms[0]?.id || 1);
+      const hostelId = Number(outData.hostelId || alloc?.hostelId || blk?.id || blocks[0]?.id);
+      const roomId = Number(outData.roomId || alloc?.roomId || rm?.id || rooms[0]?.id);
       const bedId = Number(outData.bedId || alloc?.bedId);
       const studentId = Number(outData.studentId || alloc?.studentId);
       const wardenAssignmentId = outData.wardenAssignmentId ? Number(outData.wardenAssignmentId) : (alloc?.wardenAssignmentId ? Number(alloc.wardenAssignmentId) : null);
+
+      if (!hostelId || isNaN(hostelId) || hostelId <= 0 || !roomId || isNaN(roomId) || roomId <= 0) {
+        showToast("Unable to resolve student's hostel block or room.", "warning");
+        return;
+      }
 
       if (!studentId || isNaN(studentId) || studentId <= 0) {
         showToast("Please select an active resident student for outpass.", "warning");
@@ -3254,7 +3300,7 @@ export default function HostelPage() {
       // If Vacate is approved, mark student's allocation as Vacated in allocations state
       if (apiStatus === "Approved" && isVacate && matchedTr) {
         try {
-          const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+          const stored = JSON.parse(localStorage.getItem(storageKeyVacatedStudents) || "[]");
           const record = {
             studentId: matchedTr.studentId,
             admissionNo: matchedTr.admissionNo,
@@ -3272,7 +3318,7 @@ export default function HostelPage() {
               )
           );
           filtered.push(record);
-          localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+          localStorage.setItem(storageKeyVacatedStudents, JSON.stringify(filtered));
         } catch (_) { /* Intentionally ignored. */ }
 
         setAllocations((prev) =>
@@ -3385,7 +3431,7 @@ export default function HostelPage() {
 
       if (isVacate) {
         try {
-          const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+          const stored = JSON.parse(localStorage.getItem(storageKeyVacatedStudents) || "[]");
           const record = {
             studentId: payload.studentId,
             admissionNo: payload.admissionNo,
@@ -3402,7 +3448,7 @@ export default function HostelPage() {
               )
           );
           filtered.push(record);
-          localStorage.setItem("hostel_vacated_students", JSON.stringify(filtered));
+          localStorage.setItem(storageKeyVacatedStudents, JSON.stringify(filtered));
         } catch (_) {}
 
         setAllocations((prev) =>
@@ -10214,8 +10260,10 @@ function BlockModal({ modal, closeModal, handleSaveBlock, onViewRooms, setFilter
             if (duplicateCodeWarning || isSubmitting) return;
             setIsSubmitting(true);
             try {
-              await handleSaveBlock(form);
-              closeModal();
+              const saved = await handleSaveBlock(form);
+              if (saved !== false) {
+                closeModal();
+              }
             } finally {
               setIsSubmitting(false);
             }
@@ -15078,9 +15126,11 @@ function AllocationModal({
         });
       }
 
-      // 3. From persisted localStorage
+      // 3. From persisted localStorage (tenant & campus scoped)
       try {
-        const stored = JSON.parse(localStorage.getItem("hostel_vacated_students") || "[]");
+        const modalCollegeId = getAuthUser()?.collegeId || 1;
+        const scopedVacatedKey = `hostel_vacated_students_c${modalCollegeId}_cam${curCampusId || 0}`;
+        const stored = JSON.parse(localStorage.getItem(scopedVacatedKey) || "[]");
         if (Array.isArray(stored)) {
           stored.forEach((s) => {
             addKeys(s.studentId, s.admissionNo, s.studentName);

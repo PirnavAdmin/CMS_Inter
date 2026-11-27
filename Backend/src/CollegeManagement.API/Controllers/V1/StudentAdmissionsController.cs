@@ -376,22 +376,21 @@ namespace CollegeManagement.API.Controllers.V1
         [HttpPost("{id:int}/verify")]
         public async Task<IActionResult> Verify(
             int id,
-            [FromBody] VerifyStudentAdmissionRequest request)
+            [FromBody] VerifyStudentAdmissionRequest? request)
         {
             try
             {
+                request ??= new VerifyStudentAdmissionRequest();
                 request.AdmissionId = id;
 
-                var success =
-                    await _service.VerifyAsync(request);
+                var success = await _service.VerifyAsync(request);
 
                 if (!success)
                 {
                     return BadRequest(new
                     {
                         statusCode = 400,
-                        message =
-                            "Admission could not be verified."
+                        message = "Admission could not be verified."
                     });
                 }
 
@@ -408,8 +407,23 @@ namespace CollegeManagement.API.Controllers.V1
                 return Ok(new
                 {
                     statusCode = 200,
-                    message =
-                        "Student admission verified successfully."
+                    message = "Student admission verified successfully."
+                });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new
+                {
+                    statusCode = 404,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    statusCode = 400,
+                    message = ex.Message
                 });
             }
             catch (ArgumentException ex)
@@ -425,8 +439,7 @@ namespace CollegeManagement.API.Controllers.V1
                 return StatusCode(500, new
                 {
                     statusCode = 500,
-                    message =
-                        "An unexpected server error occurred.",
+                    message = "An unexpected server error occurred.",
                     details = ex.Message
                 });
             }

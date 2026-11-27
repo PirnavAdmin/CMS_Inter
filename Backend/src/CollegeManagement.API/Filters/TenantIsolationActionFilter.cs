@@ -243,13 +243,20 @@ namespace CollegeManagement.API.Filters
                 int? idVal = TryExtractId(context, "id");
                 string ctrl = controllerName ?? string.Empty;
 
-                if (string.Equals(ctrl, "Students", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(ctrl, "StudentAdmissions", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(ctrl, "Students", StringComparison.OrdinalIgnoreCase))
                 {
                     int? targetStudentId = TryExtractId(context, "studentId") ?? idVal;
                     if (targetStudentId.HasValue && targetStudentId.Value > 0)
                     {
                         await _securityService.ValidateStudentOwnershipAsync(targetStudentId.Value, collegeId.Value);
+                    }
+                }
+                else if (string.Equals(ctrl, "StudentAdmissions", StringComparison.OrdinalIgnoreCase))
+                {
+                    int? targetAdmissionId = TryExtractId(context, "admissionId") ?? idVal;
+                    if (targetAdmissionId.HasValue && targetAdmissionId.Value > 0)
+                    {
+                        await _securityService.ValidateAdmissionOwnershipAsync(targetAdmissionId.Value, collegeId.Value);
                     }
                 }
                 else if (string.Equals(ctrl, "Staff", StringComparison.OrdinalIgnoreCase) ||

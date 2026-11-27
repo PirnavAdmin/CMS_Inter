@@ -228,10 +228,16 @@ export function CampusProvider({ children }) {
   // Save selected campus id to tenant-scoped localStorage
   useEffect(() => {
     const suffix = getTenantKeySuffix();
+    const u = getAuthUser();
+    const isTenantCollege = Boolean(u?.collegeId && Number(u.collegeId) > 1);
     try {
       if (selectedCampusId != null && selectedCampusId !== "") {
         localStorage.setItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`, String(selectedCampusId));
-        localStorage.setItem(STORAGE_KEY_SELECTED_CAMPUS, String(selectedCampusId));
+        if (!isTenantCollege) {
+          localStorage.setItem(STORAGE_KEY_SELECTED_CAMPUS, String(selectedCampusId));
+        } else {
+          localStorage.removeItem(STORAGE_KEY_SELECTED_CAMPUS);
+        }
       } else {
         localStorage.removeItem(`${STORAGE_KEY_SELECTED_CAMPUS}${suffix}`);
       }
