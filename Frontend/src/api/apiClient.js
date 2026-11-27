@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT } from "../modules/auth/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken, getAuthUser, BACKEND_ADMIN_JWT } from "../modules/auth/authStorage.js";
 
 let activeApiRequests = 0;
 import { handleMockApiRequest } from "./mockApiAdapter.js";
@@ -202,7 +202,7 @@ apiClient.interceptors.request.use(
     }
 
     try {
-      const u = getAuthUser();
+      const u = typeof getAuthUser === "function" ? getAuthUser() : null;
       const userCollegeId = Number(u?.collegeId || u?.CollegeId || 0);
       const selectedCampusId =
         userCollegeId > 1
@@ -363,7 +363,7 @@ apiClient.interceptors.response.use(
     }
 
     // Auto-retry ONLY for College 1 legacy mock/demo sessions — never swap a real multi-tenant college JWT
-    const activeUser = getAuthUser();
+    const activeUser = typeof getAuthUser === "function" ? getAuthUser() : null;
     const isMultiTenantCollege = Boolean(activeUser?.collegeId && Number(activeUser.collegeId) > 1);
     if (is403 && originalRequest && !originalRequest._adminRetry && isExamCellRoute && isExplicitMockToken && !isMultiTenantCollege) {
       originalRequest._adminRetry = true;

@@ -7,7 +7,7 @@ namespace CollegeManagement.API.Controllers
 {
     [ApiController]
     [Route("api/v1/transport/pickup-points")]
-    [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
+    [Authorize]
     public class PickupPointController : ControllerBase
     {
         private readonly IPickupPointService _service;
@@ -20,6 +20,15 @@ namespace CollegeManagement.API.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAll([FromQuery] PickupPointFilterDto filter)
         {
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                var resolved = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request);
+                if (resolved.HasValue && resolved.Value > 0)
+                {
+                    filter.CampusId = resolved.Value;
+                }
+            }
+
             var result = await _service.GetAllAsync(filter);
             return Ok(result);
         }
@@ -34,6 +43,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpPost]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Create([FromBody] CreatePickupPointDto dto)
         {
             if (dto == null)
@@ -102,6 +112,7 @@ namespace CollegeManagement.API.Controllers
 
 
         [HttpPut("{id}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Update(
             string id,
             [FromBody] UpdatePickupPointDto dto)
@@ -147,6 +158,7 @@ namespace CollegeManagement.API.Controllers
         }
 
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Delete(string id)
         {
             long targetId = 0;
