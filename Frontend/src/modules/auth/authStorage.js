@@ -206,7 +206,22 @@ export const clearAuthSession = () => {
   try {
     window.localStorage.removeItem("staff_profile_data");
     window.sessionStorage.removeItem("staff_profile_data");
-    // Remove namespaced staff profiles but preserve user profile photos across logins/logouts
+    // Remove tenant/campus/module cached keys to prevent cross-college leakage on the same browser
+    const exactTenantKeys = new Set([
+      "cms_hostel_fee_payments",
+      "hostel_vacated_students",
+      "cms_certificates",
+      "cms_offer_letter_templates",
+      "cms_offer_letter_automation",
+      "cms_custom_tokens",
+      "pjc-credential-settings",
+      "NumberSeries_Config",
+      "NumberSeries_Deleted",
+      "studentAdmissionRecords",
+      "studentAcademicAssignments",
+      "cms_admin_profile",
+      "cms_admin_photo",
+    ]);
     Object.keys(window.localStorage || {}).forEach((k) => {
       if (
         (k.startsWith("staff_profile_") && k !== "staff_profile_photo" && !k.endsWith("_photo")) ||
@@ -215,7 +230,12 @@ export const clearAuthSession = () => {
         k.startsWith("cms_cached_boards") ||
         k.startsWith("cms_cached_academic_years") ||
         k.startsWith("cms_selected_board") ||
-        k.startsWith("cms_selected_academic_year")
+        k.startsWith("cms_selected_academic_year") ||
+        k.startsWith("cms_hostel_fee_payments") ||
+        k.startsWith("hostel_vacated_students") ||
+        k.startsWith("cms_admin_profile") ||
+        k.startsWith("cms_admin_photo") ||
+        exactTenantKeys.has(k)
       ) {
         window.localStorage.removeItem(k);
       }

@@ -14,6 +14,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task ValidateDesignationOwnershipAsync(int designationId, int collegeId);
         Task ValidateExamOwnershipAsync(int examId, int collegeId);
         Task ValidateFeeStructureOwnershipAsync(int feeStructureId, int collegeId);
+        Task ValidateHostelResourceOwnershipAsync(string resourceType, int entityId, int collegeId, bool throwIfMissing = true);
         Task ValidateEntityOwnershipAsync<T>(int entityId, int collegeId) where T : class;
     }
 }

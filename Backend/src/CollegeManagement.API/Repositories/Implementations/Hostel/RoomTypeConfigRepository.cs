@@ -49,12 +49,16 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
 
         public async Task<RoomTypeConfig?> GetByIdAsync(int roomTypeId)
         {
+            var collegeId = ResolveCollegeId();
             var roomType = await _dbConnection.QueryFirstOrDefaultAsync<RoomTypeConfig>(
                 "sp_GetRoomTypeConfigById",
-                new { p_RoomTypeId = roomTypeId },
+                new
+                {
+                    p_RoomTypeId = roomTypeId,
+                    p_CollegeId = collegeId
+                },
                 commandType: CommandType.StoredProcedure);
 
-            var collegeId = ResolveCollegeId();
             if (roomType != null && collegeId.HasValue && roomType.CollegeId > 0 && roomType.CollegeId != collegeId.Value)
             {
                 return null;
@@ -123,7 +127,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var affectedRows = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_DeleteRoomTypeConfig",
-                new { p_RoomTypeId = roomTypeId },
+                new
+                {
+                    p_RoomTypeId = roomTypeId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return affectedRows > 0;
@@ -133,7 +141,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckRoomTypeConfigExists",
-                new { p_RoomTypeId = roomTypeId },
+                new
+                {
+                    p_RoomTypeId = roomTypeId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;

@@ -274,6 +274,50 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
+        public async Task ValidateHostelResourceOwnershipAsync(string resourceType, int entityId, int collegeId, bool throwIfMissing = true)
+        {
+            if (entityId <= 0)
+            {
+                if (throwIfMissing) throw new NotFoundException("Hostel resource not found.");
+                return;
+            }
+            if (collegeId <= 0) throw new ForbiddenException("Tenant context required.");
+
+            string? sql = resourceType.ToLowerInvariant() switch
+            {
+                "blocks" => "SELECT CollegeId FROM hostel_blocks WHERE HostelId = @Id LIMIT 1;",
+                "room-types" => "SELECT CollegeId FROM room_type_configs WHERE RoomTypeId = @Id LIMIT 1;",
+                "rooms" => "SELECT hb.CollegeId FROM room_masters rm INNER JOIN hostel_blocks hb ON rm.HostelId = hb.HostelId WHERE rm.RoomId = @Id LIMIT 1;",
+                "beds" => "SELECT hb.CollegeId FROM hostel_beds b INNER JOIN room_masters rm ON b.RoomId = rm.RoomId INNER JOIN hostel_blocks hb ON rm.HostelId = hb.HostelId WHERE b.BedId = @Id LIMIT 1;",
+                "wardens" => "SELECT hb.CollegeId FROM hostel_warden_assignments hwa INNER JOIN hostel_blocks hb ON hwa.HostelId = hb.HostelId WHERE hwa.WardenAssignmentId = @Id LIMIT 1;",
+                "allocations" => "SELECT hb.CollegeId FROM hostel_student_allocations hsa INNER JOIN hostel_blocks hb ON hsa.HostelId = hb.HostelId WHERE hsa.AllocationId = @Id LIMIT 1;",
+                "attendance" => "SELECT hb.CollegeId FROM hostel_attendance ha INNER JOIN hostel_blocks hb ON ha.HostelId = hb.HostelId WHERE ha.AttendanceId = @Id LIMIT 1;",
+                "outpass-leave" => "SELECT hb.CollegeId FROM hostel_outpass_leave hol INNER JOIN hostel_blocks hb ON hol.HostelId = hb.HostelId WHERE hol.RequestId = @Id LIMIT 1;",
+                "transfer-vacate" => "SELECT hb.CollegeId FROM hostel_transfer_vacate htv INNER JOIN hostel_blocks hb ON htv.FromHostelId = hb.HostelId WHERE htv.RequestId = @Id LIMIT 1;",
+                "fees" => "SELECT hb.CollegeId FROM hostel_fee_configs fc INNER JOIN hostel_blocks hb ON fc.HostelId = hb.HostelId WHERE fc.FeeConfigId = @Id LIMIT 1;",
+                _ => null
+            };
+
+            if (sql == null) return;
+
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+
+            var ownerCollegeId = await conn.QueryFirstOrDefaultAsync<int?>(sql, new { Id = entityId });
+            if (!ownerCollegeId.HasValue)
+            {
+                if (throwIfMissing) throw new NotFoundException("Hostel resource not found.");
+                return;
+            }
+
+            if (ownerCollegeId.Value != collegeId)
+            {
+                _logger.LogWarning("IDOR Block: CollegeId {CollegeId} attempted to access Hostel {Resource} ID {EntityId} belonging to CollegeId {OwnerCollegeId}",
+                    collegeId, resourceType, entityId, ownerCollegeId.Value);
+                throw new ForbiddenException("Access denied: You do not have permission to view or manage hostel resources of another college.");
+            }
+        }
+
         public async Task ValidateEntityOwnershipAsync<T>(int entityId, int collegeId) where T : class
         {
             if (entityId <= 0) throw new NotFoundException("Resource not found.");

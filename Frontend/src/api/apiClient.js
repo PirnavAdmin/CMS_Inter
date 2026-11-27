@@ -203,10 +203,14 @@ apiClient.interceptors.request.use(
 
     try {
       const u = getAuthUser();
-      const suffix = u?.collegeId ? `_c${u.collegeId}` : "";
+      const userCollegeId = Number(u?.collegeId || u?.CollegeId || 0);
       const selectedCampusId =
-        (suffix ? window.localStorage.getItem(`cms_selected_campus_id${suffix}`) : null) ||
-        window.localStorage.getItem("cms_selected_campus_id");
+        userCollegeId > 1
+          ? window.localStorage.getItem(`cms_selected_campus_id_c${userCollegeId}`)
+          : (
+              (userCollegeId > 0 ? window.localStorage.getItem(`cms_selected_campus_id_c${userCollegeId}`) : null) ||
+              window.localStorage.getItem("cms_selected_campus_id")
+            );
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
       const clientIp = window.localStorage.getItem("cms_client_ip") || window.sessionStorage.getItem("cms_client_ip");
       if (clientIp) config.headers["X-Client-IP"] = clientIp;
@@ -358,8 +362,10 @@ apiClient.interceptors.response.use(
       error.response.data = { message: "Backend returned HTML instead of JSON. Check API base URL or proxy." };
     }
 
-    // Auto-retry exam cell and protected portal routes with Admin token if backend role restriction returned 403
-    if (is403 && originalRequest && !originalRequest._adminRetry && isExamCellRoute) {
+    // Auto-retry ONLY for College 1 legacy mock/demo sessions — never swap a real multi-tenant college JWT
+    const activeUser = getAuthUser();
+    const isMultiTenantCollege = Boolean(activeUser?.collegeId && Number(activeUser.collegeId) > 1);
+    if (is403 && originalRequest && !originalRequest._adminRetry && isExamCellRoute && isExplicitMockToken && !isMultiTenantCollege) {
       originalRequest._adminRetry = true;
       if (typeof originalRequest.headers?.set === "function") {
         originalRequest.headers.set("Authorization", `Bearer ${BACKEND_ADMIN_JWT}`);

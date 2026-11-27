@@ -407,9 +407,9 @@ function examCellShieldPlugin(apiBaseUrl) {
             }
           }
 
-          // If this was a mutation (POST, PUT, PATCH, DELETE), NEVER synthesize mock GET data!
-          // Return the real upstream status & response if available, or 503 if unreachable.
-          if (req.method !== "GET" && req.method !== "HEAD") {
+          // If this was a mutation (POST, PUT, PATCH, DELETE) or a Hostel API response,
+          // NEVER mask real backend errors (400/403/500) as empty 200 OK!
+          if ((req.method !== "GET" && req.method !== "HEAD") || isHostel) {
             if (upstreamRes) {
               const text = await upstreamRes.text();
               const contentType = upstreamRes.headers.get("content-type") || "application/json";
