@@ -57,6 +57,12 @@ const formatAmount = (value) => {
 };
 const MOBILE_FIELDS = new Set(["studentMobileNumber", "mobile", "fatherMobile", "motherMobile", "guardianMobile"]);
 const DIGIT_LIMITS = { aadhaar: 12, pincode: 6, passYear: 4 };
+const INDIAN_ADDRESS_STATES = ["Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"];
+const normalizePostalState = (state) => {
+  const key = String(state || "").trim().toLowerCase().replace(/&/g, "and").replace(/\s+/g, " ");
+  const aliases = { orissa: "Odisha", pondicherry: "Puducherry", "nct of delhi": "Delhi" };
+  return aliases[key] || INDIAN_ADDRESS_STATES.find((item) => item.toLowerCase() === key) || String(state || "").trim();
+};
 const AMOUNT_FIELDS = new Set(["feeAmount", "totalFee", "discount", "fine", "netPayable", "amountPaid", "balanceAmount"]);
 const ALPHA_FIELDS = new Set([
   "firstName",
@@ -902,7 +908,7 @@ const steps = [
       { name: "streetVillage", label: "Street / Village" },
       { name: "city", label: "Town", required: true },
       { name: "district", label: "District", required: true },
-      { name: "state", label: "State", type: "select", options: ["Andhra Pradesh", "Telangana", "Karnataka", "Maharashtra", "Delhi"], required: true },
+      { name: "state", label: "State", type: "select", options: INDIAN_ADDRESS_STATES, required: true },
       { name: "pincode", label: "Pincode", required: true },
     ],
   },
@@ -3156,7 +3162,7 @@ export default function AdmissionPage() {
   const verifiedInFlightRef = useRef(new Set());
   const admissionsRequestRef = useRef(0);
   const scholarshipRequestRef = useRef(0);
-  const autoLocationRef = useRef({ city: "", district: "", state: "" });
+  const lastLocationLookupRef = useRef(initialDraft.values.pincode && initialDraft.values.city && initialDraft.values.district && initialDraft.values.state ? { pincode: String(initialDraft.values.pincode), restored: true } : null);
 
   const current = allSteps[step];
   const isAdmissionFormStep = step < ADMISSION_FORM_STEP_COUNT;
@@ -4645,22 +4651,11 @@ export default function AdmissionPage() {
   useEffect(() => {
     if (viewMode !== "form") return undefined;
     const pincode = String(values.pincode || "").trim();
-    if (!/^[0-9]{6}$/.test(pincode)) {
+    if (!/^[1-9][0-9]{5}$/.test(pincode)) {
       pincodeRequestRef.current += 1;
-      setValues((current) => {
-        const next = { ...current };
-        let changed = false;
-        ["city", "district", "state"].forEach((key) => {
-          if (autoLocationRef.current[key] && current[key] === autoLocationRef.current[key]) {
-            next[key] = "";
-            changed = true;
-          }
-        });
-        return changed ? next : current;
-      });
-      autoLocationRef.current = { city: "", district: "", state: "" };
       return undefined;
     }
+    if (lastLocationLookupRef.current?.pincode === pincode) return undefined;
     let ignore = false;
     const requestId = pincodeRequestRef.current + 1;
     pincodeRequestRef.current = requestId;
@@ -4670,31 +4665,20 @@ export default function AdmissionPage() {
         const data = response.data?.data ?? response.data?.Data ?? response.data;
         const city = readText(data, "city", "City", "mandal", "Mandal", "postOffice", "PostOffice");
         const district = readText(data, "district", "District");
-        const state = readText(data, "state", "State");
+        const state = normalizePostalState(readText(data, "state", "State"));
         if (ignore || pincodeRequestRef.current !== requestId) return;
-        setValues((current) => {
-          const next = { ...current };
-          const incoming = { city, district, state };
-          ["city", "district", "state"].forEach((key) => {
-            const wasAutoFilled = autoLocationRef.current[key] && current[key] === autoLocationRef.current[key];
-            if (!current[key] || wasAutoFilled) next[key] = incoming[key] || "";
-          });
-          autoLocationRef.current = {
-            city: next.city === city ? city : "",
-            district: next.district === district ? district : "",
-            state: next.state === state ? state : "",
-          };
-          return next;
-        });
+        if (data?.found === false || !city || !district || !state || !INDIAN_ADDRESS_STATES.includes(state)) throw new Error("Incomplete pincode details");
+        lastLocationLookupRef.current = { pincode, restored: false };
+        setValues((current) => String(current.pincode || "").trim() === pincode ? { ...current, city, district, state } : current);
       } catch {
-        if (!ignore && pincodeRequestRef.current === requestId) setToast("Pincode details could not be loaded. You can enter address details manually.", "warning");
+        if (!ignore && pincodeRequestRef.current === requestId) setToast("Pincode details could not be verified. Please review and enter the town, district and state manually.", "warning");
       }
     }, 450);
     return () => {
       ignore = true;
       window.clearTimeout(timer);
     };
-  }, [values.pincode, viewMode]);
+  }, [values.pincode, viewMode, setToast]);
 
   const fee = deriveAdmissionFee(values);
   const changePlan = (plan) => {
@@ -4758,6 +4742,16 @@ export default function AdmissionPage() {
   }, [selectedCampusValue, selectedContextBoardValue, selectedContextYearValue]);
 
   const setValue = (name, val) => {
+    if (name === "pincode") {
+      const nextPincode = sanitizeValue(fieldByName.pincode, val);
+      if (String(values.pincode || "") !== nextPincode) {
+        pincodeRequestRef.current += 1;
+        lastLocationLookupRef.current = null;
+        setValues((current) => ({ ...current, pincode: nextPincode, ...(/^[1-9][0-9]{5}$/.test(String(current.pincode || "")) ? { city: "", district: "", state: "" } : {}) }));
+        setErrors((current) => ({ ...current, pincode: undefined }));
+      }
+      return;
+    }
     if (name === "campus" && !editingAdmissionId && selectedCampusValue) {
       const referral = Boolean(val && String(val) !== String(selectedCampusValue));
       setValues((current) => ({ ...current, campus: String(selectedCampusValue), isReferral: referral,
@@ -5065,7 +5059,7 @@ export default function AdmissionPage() {
       else if (f.type === "email" && val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) next[f.name] = "Enter a valid email";
       else if (MOBILE_FIELDS.has(f.name) && val && !/^[0-9]{10}$/.test(String(val))) next[f.name] = "Enter a valid 10 digit number";
       else if (f.name === "aadhaar" && val && !/^[0-9]{12}$/.test(String(val))) next[f.name] = "Enter a valid 12 digit Aadhaar number";
-      else if (f.name === "pincode" && val && !/^[0-9]{6}$/.test(String(val))) next[f.name] = "Enter a valid 6 digit pincode";
+      else if (f.name === "pincode" && val && !/^[1-9][0-9]{5}$/.test(String(val))) next[f.name] = "Enter a valid 6 digit pincode that does not start with 0";
       else if (ALPHA_FIELDS.has(f.name) && val && !/^[A-Za-z ]+$/.test(String(val))) next[f.name] = `${f.label} can contain only letters and spaces`;
       else if (f.type === "number" && val && Number.isNaN(Number(val))) next[f.name] = "Enter a valid number";
       else if (f.type === "file" && val?.size > MAX_DOCUMENT_SIZE) next[f.name] = "File size must not exceed 2 MB.";
@@ -5144,6 +5138,8 @@ export default function AdmissionPage() {
   };
 
   const resetAdmissionDraftState = () => {
+    lastLocationLookupRef.current = null;
+    pincodeRequestRef.current += 1;
     uncertainAdmissionRef.current = false;
     allocatedAdmissionNumbersRef.current.clear();
     suppressPersistRef.current = true;
@@ -5172,6 +5168,8 @@ export default function AdmissionPage() {
   };
 
   const clearAdmissionForm = () => {
+    lastLocationLookupRef.current = null;
+    pincodeRequestRef.current += 1;
     uncertainAdmissionRef.current = false;
     allowAutomaticNumberAllocation.current = true;
     allocatedAdmissionNumbersRef.current.clear();
