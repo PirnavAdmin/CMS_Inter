@@ -25,8 +25,17 @@ public class StudentTransportService : IStudentTransportService
 
     public async Task<StudentTransportResponseDto> GetStudentTransportDetailsAsync(int? studentId, string? academicYear = "2027-28")
     {
-        int targetStudentId = studentId ?? 6;
-        
+        if (!studentId.HasValue || studentId.Value <= 0)
+        {
+            return new StudentTransportResponseDto
+            {
+                StudentId = 0,
+                Message = "Valid studentId is required.",
+                HasTransportAccess = false
+            };
+        }
+
+        int targetStudentId = studentId.Value;
         var result = await _repository.GetStudentTransportDetailsAsync(targetStudentId);
         
         if (result == null)

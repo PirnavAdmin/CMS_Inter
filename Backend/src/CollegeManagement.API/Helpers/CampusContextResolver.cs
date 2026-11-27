@@ -7,7 +7,8 @@ public static class CampusContextResolver
 {
     public static int? ResolveCollegeId(ClaimsPrincipal? user, Microsoft.AspNetCore.Http.HttpRequest? request = null)
     {
-        if (request != null && request.Headers.TryGetValue("X-College-Id", out var xCol) &&
+        bool isSuperAdmin = user != null && (user.IsInRole("Super Admin") || user.IsInRole("SuperAdmin"));
+        if (isSuperAdmin && request != null && request.Headers.TryGetValue("X-College-Id", out var xCol) &&
             int.TryParse(xCol.FirstOrDefault(), out int headerColId) && headerColId > 0)
         {
             return headerColId;
@@ -22,6 +23,12 @@ public static class CampusContextResolver
             {
                 return colId;
             }
+        }
+
+        if (request != null && request.Headers.TryGetValue("X-College-Id", out var fallbackCol) &&
+            int.TryParse(fallbackCol.FirstOrDefault(), out int fbColId) && fbColId > 0 && (user?.Identity?.IsAuthenticated != true))
+        {
+            return fbColId;
         }
 
         return null;

@@ -25,23 +25,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
-        private int ResolveCollegeId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            return 1;
-        }
+        private int ResolveCollegeId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request) ?? 0;
 
-        private int ResolveCampusId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CampusId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("campusId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            if (_httpContextAccessor?.HttpContext?.Request.Headers.TryGetValue("X-Campus-Id", out var h) == true &&
-                int.TryParse(h.FirstOrDefault(), out int hid) && hid > 0) return hid;
-            return 0;
-        }
+        private int ResolveCampusId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request) ?? 0;
 
         public async Task<TransportDashboardResponseDto> GetDashboardAsync(int? collegeId = null, int? campusId = null)
         {
@@ -104,9 +92,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<OperationDetailsDto?> GetOperationDetailsAsync(long assignmentId)
         {
             var c = Connection;
+            int collegeId = ResolveCollegeId();
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportOperationDetails",
-                new { p_AssignmentId = assignmentId },
+                new { p_AssignmentId = assignmentId, p_CollegeId = collegeId > 0 ? collegeId : (int?)null },
                 commandType: CommandType.StoredProcedure);
 
             var details = await multi.ReadFirstOrDefaultAsync<OperationDetailsDto>();

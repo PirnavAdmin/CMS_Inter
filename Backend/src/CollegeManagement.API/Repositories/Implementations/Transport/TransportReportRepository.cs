@@ -4,10 +4,12 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Reports;
 using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces;
 
 namespace CollegeManagement.API.Repositories.Implementations
@@ -15,20 +17,32 @@ namespace CollegeManagement.API.Repositories.Implementations
     public class TransportReportRepository : ITransportReportRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public TransportReportRepository(AppDbContext context)
+        public TransportReportRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
+        private (int? collegeId, int? campusId) ResolveTenant(ReportFilterDto? filter)
+        {
+            var user = _httpContextAccessor?.HttpContext?.User;
+            var req = _httpContextAccessor?.HttpContext?.Request;
+            int? collegeId = (filter?.CollegeId > 0) ? filter.CollegeId : CampusContextResolver.ResolveCollegeId(user, req);
+            int? campusId = (filter?.CampusId > 0) ? (int)filter.CampusId.Value : CampusContextResolver.ResolveCampusId(user, req);
+            return (collegeId, campusId);
+        }
+
         public async Task<TransportDashboardReportResponseDto> GetDashboardReportAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDashboard",
-                new { p_CampusId = (int?)filter.CampusId, p_CollegeId = (int?)null },
+                new { p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             var kpi = await multi.ReadFirstOrDefaultAsync<dynamic>();
 
@@ -72,9 +86,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<TripReportDto>> GetTripReportsAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
-                new { p_ReportType = "trip-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
+                new { p_ReportType = "trip-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             var list = raw.ToList();
@@ -92,8 +107,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                 TripNo = $"TRP-{((long)(x.TripId ?? idx++)):D3}",
                 VehicleNumber = (string)(x.VehicleNumber ?? ""),
                 RouteName = (string)(x.RouteName ?? "N/A"),
-                DriverName = "Assigned Driver",
-                BusAttendant = "Assigned Attendant",
+                DriverName = (string)(x.DriverName ?? "Assigned Driver"),
+                BusAttendant = (string)(x.AttendantName ?? "Assigned Attendant"),
                 StudentsOnRoute = (int)(x.StudentsPresent ?? 0),
                 CapacityUsed = $"{x.StudentsPresent ?? 0} Students",
                 EffectiveFrom = x.TripDate != null ? ((DateTime)x.TripDate).ToString("yyyy-MM-dd") : DateTime.UtcNow.ToString("yyyy-MM-dd"),
@@ -104,9 +119,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<VehicleReportDto>> GetVehicleReportsAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
-                new { p_ReportType = "vehicle-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
+                new { p_ReportType = "vehicle-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             var list = raw.ToList();
@@ -138,9 +154,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<DriverReportDto>> GetDriverReportsAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
-                new { p_ReportType = "driver-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
+                new { p_ReportType = "driver-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             var list = raw.ToList();
@@ -170,9 +187,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<RouteReportDto>> GetRouteReportsAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
-                new { p_ReportType = "route-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
+                new { p_ReportType = "route-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             var list = raw.ToList();
@@ -202,9 +220,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<StudentTransportReportDto>> GetStudentTransportReportsAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportReports",
-                new { p_ReportType = "student-transport-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "" },
+                new { p_ReportType = "student-transport-reports", p_RouteId = filter.RouteId, p_VehicleId = filter.VehicleId, p_Status = filter.Status ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             var list = raw.ToList();
@@ -238,9 +257,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<VehicleStudentReportDto>> GetVehicleWiseAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDashboard",
-                new { p_CampusId = (int?)filter.CampusId, p_CollegeId = (int?)null },
+                new { p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             await multi.ReadFirstOrDefaultAsync<dynamic>(); // skip KPI
             var occupancy = await multi.ReadAsync<dynamic>();
@@ -273,9 +293,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<RouteStudentReportDto>> GetRouteWiseAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             using var multi = await c.QueryMultipleAsync(
                 "sp_GetTransportDashboard",
-                new { p_CampusId = (int?)filter.CampusId, p_CollegeId = (int?)null },
+                new { p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             await multi.ReadFirstOrDefaultAsync<dynamic>(); // skip KPI
             await multi.ReadAsync<dynamic>(); // skip occupancy
@@ -300,15 +321,16 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<PickupPointReportDto>> GetPickupPointWiseAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetPickupPoints",
-                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null, p_CampusId = filter.CampusId },
+                new { p_RouteId = filter.RouteId, p_Search = filter.Search ?? "", p_Status = (byte?)null, p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             return raw.Select(x => new PickupPointReportDto
             {
                 PickupPointId = (long)x.PickupPointId,
-                PickupPointName = (string)(x.StopName ?? ""),
+                PickupPointName = (string)(x.StopName ?? x.PickupPointName ?? ""),
                 RouteName = (string)(x.RouteName ?? ""),
                 StudentCount = 0
             }).ToList();
@@ -317,6 +339,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<DriverVehicleReportDto>> GetDriverWiseAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetTransportVehicleAssignments",
                 new
@@ -326,8 +349,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     p_DriverId = filter.DriverId,
                     p_Status = (byte?)null,
                     p_Search = filter.Search ?? "",
-                    p_CampusId = (int?)filter.CampusId,
-                    p_CollegeId = (int?)null
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -348,9 +371,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<MaintenanceReportDto>> GetMaintenanceAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = await c.QueryAsync<dynamic>(
                 "sp_GetVehicleMaintenances",
-                new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "" },
+                new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             return raw.Select(x => new MaintenanceReportDto
@@ -367,9 +391,10 @@ namespace CollegeManagement.API.Repositories.Implementations
         public async Task<IEnumerable<MonthlyMaintenanceCostDto>> GetMonthlyCostAsync(ReportFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter);
             var raw = (await c.QueryAsync<VehicleMaintenanceDto>(
                 "sp_GetVehicleMaintenances",
-                new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "" },
+                new { p_VehicleId = filter.VehicleId, p_FromDate = filter.FromDate?.Date, p_ToDate = filter.ToDate?.Date, p_Status = (byte?)null, p_Search = filter.Search ?? "", p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure)).ToList();
 
             return raw

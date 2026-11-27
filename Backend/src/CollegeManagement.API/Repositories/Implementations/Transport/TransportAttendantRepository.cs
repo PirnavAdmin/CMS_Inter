@@ -22,13 +22,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _httpContextAccessor = httpContextAccessor;
         }
 
-        private int? ResolveCollegeId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            return null;
-        }
+        private int? ResolveCollegeId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+
+        private int? ResolveCampusId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
@@ -79,10 +77,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportAttendantDto?> GetByIdAsync(long attendantId)
         {
             var c = Connection;
-            const string sql = "CALL sp_GetTransportAttendantById(@p_Id);";
+            const string sql = "CALL sp_GetTransportAttendantById(@p_Id, @p_CollegeId);";
             return await c.QueryFirstOrDefaultAsync<TransportAttendantDto>(
                 sql,
-                new { p_Id = attendantId },
+                new { p_Id = attendantId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.Text);
         }
 
@@ -108,7 +106,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_IsDeleted = (byte)0,
                     p_CreatedBy = userId,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CampusId = ResolveCampusId(),
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -136,7 +136,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_IsDeleted = (byte)0,
                     p_CreatedBy = (long?)null,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -147,7 +148,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportAttendants",
-                new { p_Id = attendantId, p_UpdatedBy = userId },
+                new { p_Id = attendantId, p_UpdatedBy = userId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -155,7 +156,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<TransportAttendantLookupDto>> GetLookupAsync()
         {
             var c = Connection;
-            return await c.QueryAsync<TransportAttendantLookupDto>("sp_GetTransportAttendantLookup", commandType: CommandType.StoredProcedure);
+            return await c.QueryAsync<TransportAttendantLookupDto>(
+                "sp_GetTransportAttendantLookup",
+                new { p_CampusId = ResolveCampusId(), p_CollegeId = ResolveCollegeId() },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportAttendantDto?> GetByIdOrNameAsync(string attendantIdOrName)
@@ -166,10 +170,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var id = long.TryParse(search, out long attendantId) ? attendantId : -1;
             
             var c = Connection;
-            const string sql = "CALL sp_GetTransportAttendantByIdOrName(@p_SearchId, @p_SearchStr);";
+            const string sql = "CALL sp_GetTransportAttendantByIdOrName(@p_SearchId, @p_SearchStr, @p_CollegeId);";
             return await c.QueryFirstOrDefaultAsync<TransportAttendantDto>(
                 sql,
-                new { p_SearchId = id, p_SearchStr = search },
+                new { p_SearchId = id, p_SearchStr = search, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.Text);
         }
     }

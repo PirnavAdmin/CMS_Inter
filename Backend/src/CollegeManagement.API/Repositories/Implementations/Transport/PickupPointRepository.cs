@@ -3,7 +3,9 @@ using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
 using CollegeManagement.API.Dtos.Transport.PickupPoint;
+using CollegeManagement.API.Helpers;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using System.Collections.Generic;
@@ -15,13 +17,24 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class PickupPointRepository : IPickupPointRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public PickupPointRepository(AppDbContext context)
+        public PickupPointRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
+
+        private (int? collegeId, int? campusId) ResolveTenant(int? collegeOverride = null, int? campusOverride = null)
+        {
+            var user = _httpContextAccessor?.HttpContext?.User;
+            var req = _httpContextAccessor?.HttpContext?.Request;
+            int? collegeId = (collegeOverride > 0) ? collegeOverride : CampusContextResolver.ResolveCollegeId(user, req);
+            int? campusId = (campusOverride > 0) ? campusOverride : CampusContextResolver.ResolveCampusId(user, req);
+            return (collegeId, campusId);
+        }
 
         public async Task<PagedResult<PickupPointDto>> GetAllAsync(PickupPointFilterDto filter)
         {
@@ -29,6 +42,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
 
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter.CollegeId, filter.CampusId.HasValue ? (int)filter.CampusId.Value : null);
             var all = (await c.QueryAsync<PickupPointDto>(
                 "sp_GetPickupPoints",
                 new
@@ -36,7 +50,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_RouteId = filter.RouteId,
                     p_Search = filter.Search ?? "",
                     p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
-                    p_CampusId = filter.CampusId
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
 
@@ -58,15 +73,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<PickupPointDto?> GetByIdAsync(long pickupPointId)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             return await c.QueryFirstOrDefaultAsync<PickupPointDto>(
                 "sp_GetPickupPointById",
-                new { p_Id = pickupPointId },
+                new { p_Id = pickupPointId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<long> CreateAsync(CreatePickupPointDto dto, long? userId)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(null, dto.CampusId.HasValue ? (int?)dto.CampusId.Value : null);
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreatePickupPoints",
                 new
@@ -85,7 +102,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_IsActive = (byte)1,
                     p_CreatedBy = userId,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId.HasValue ? (int?)dto.CampusId.Value : (int?)null
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -93,6 +111,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long pickupPointId, UpdatePickupPointDto dto, long? userId)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(null, dto.CampusId.HasValue ? (int?)dto.CampusId.Value : null);
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdatePickupPoints",
                 new
@@ -112,7 +131,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_IsActive = (byte)1,
                     p_CreatedBy = (long?)null,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId.HasValue ? (int?)dto.CampusId.Value : (int?)null
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -122,9 +142,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long pickupPointId, long? userId)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeletePickupPoints",
-                new { p_Id = pickupPointId, p_UpdatedBy = userId },
+                new { p_Id = pickupPointId, p_UpdatedBy = userId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -132,9 +153,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<PickupPointLookupDto>> GetLookupAsync(long? routeId)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant();
             return await c.QueryAsync<PickupPointLookupDto>(
                 "sp_GetPickupPointLookup",
-                new { p_RouteId = routeId },
+                new { p_RouteId = routeId, p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -155,9 +177,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             }
 
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant();
             var all = await c.QueryAsync<PickupPointDto>(
                 "sp_GetPickupPoints",
-                new { p_RouteId = routeId, p_Search = search, p_Status = (byte?)null, p_CampusId = (int?)null },
+                new { p_RouteId = routeId, p_Search = search, p_Status = (byte?)null, p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             return all.FirstOrDefault(p => p.PickupPointName.Equals(search, System.StringComparison.OrdinalIgnoreCase));
@@ -166,9 +189,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> ExistsAsync(long routeId, string pickupPointName, long? excludePickupPointId = null)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckPickupPointExists",
-                new { p_RouteId = routeId, p_StopName = pickupPointName.Trim(), p_ExcludeId = excludePickupPointId },
+                new { p_RouteId = routeId, p_StopName = pickupPointName.Trim(), p_ExcludeId = excludePickupPointId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }
@@ -176,9 +200,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> SequenceExistsAsync(long routeId, int sequenceNo, long? excludePickupPointId = null)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             return await c.ExecuteScalarAsync<int>(
                 "sp_CheckPickupPointSequenceExists",
-                new { p_RouteId = routeId, p_SequenceNo = sequenceNo, p_ExcludeId = excludePickupPointId },
+                new { p_RouteId = routeId, p_SequenceNo = sequenceNo, p_ExcludeId = excludePickupPointId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure) > 0;
         }
     }

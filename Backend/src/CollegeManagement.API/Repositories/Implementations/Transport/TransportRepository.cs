@@ -6,21 +6,27 @@ using System.Data;
 using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 public class TransportRepository : ITransportRepository
 {
     private readonly AppDbContext _context;
+    private readonly IHttpContextAccessor? _httpContextAccessor;
 
-    public TransportRepository(AppDbContext context)
+    public TransportRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
     {
         _context = context;
+        _httpContextAccessor = httpContextAccessor;
     }
 
     private IDbConnection Connection => _context.Database.GetDbConnection();
+    private int? ResolveCollegeId() => CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+    private int? ResolveCampusId() => CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
 
     private static bool ParseStatus(dynamic? val)
     {
@@ -52,7 +58,8 @@ public class TransportRepository : ITransportRepository
                 p_Search = "",
                 p_VehicleType = (string?)null,
                 p_Status = (byte?)null,
-                p_CampusId = (int?)null
+                p_CampusId = ResolveCampusId(),
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure)).ToList();
 
@@ -80,7 +87,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         var v = await conn.QueryFirstOrDefaultAsync<dynamic>(
             "sp_GetTransportVehiclesById",
-            new { p_Id = id },
+            new { p_Id = id, p_CollegeId = ResolveCollegeId() },
             commandType: CommandType.StoredProcedure);
 
         if (v == null) return null;
@@ -115,7 +122,12 @@ public class TransportRepository : ITransportRepository
         );";
 
         var id = await conn.ExecuteScalarAsync<long>(
-            sql20,
+            @"CALL sp_CreateTransportVehicles(
+                @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
+                @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
+                @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
+                @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy, @p_CampusId, @p_CollegeId
+            );",
             new
             {
                 p_VehicleNumber = vehicle.VehicleNumber ?? "",
@@ -137,7 +149,8 @@ public class TransportRepository : ITransportRepository
                 p_InsuranceNumber = vehicle.InsuranceNumber ?? "",
                 p_CreatedBy = vehicle.CreatedBy,
                 p_UpdatedBy = vehicle.CreatedBy,
-                p_CampusId = vehicle.CampusId ?? 1
+                p_CampusId = vehicle.CampusId ?? ResolveCampusId(),
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.Text);
 
@@ -149,7 +162,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         conn.Execute(
             "sp_DeleteTransportVehicles",
-            new { p_VehicleId = vehicle.VehicleId, p_UpdatedBy = vehicle.UpdatedBy },
+            new { p_Id = vehicle.VehicleId, p_UpdatedBy = vehicle.UpdatedBy, p_CollegeId = ResolveCollegeId() },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -164,8 +177,8 @@ public class TransportRepository : ITransportRepository
                 p_Search = "",
                 p_Status = (byte?)null,
                 p_BusType = (string?)null,
-                p_CampusId = (int?)null,
-                p_CollegeId = (int?)null
+                p_CampusId = ResolveCampusId(),
+                p_CollegeId = ResolveCollegeId()
             },
             commandType: CommandType.StoredProcedure)).ToList();
 
@@ -195,7 +208,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         var r = await conn.QueryFirstOrDefaultAsync<dynamic>(
             "sp_GetTransportRouteById",
-            new { p_Id = id },
+            new { p_Id = id, p_CollegeId = ResolveCollegeId() },
             commandType: CommandType.StoredProcedure);
 
         if (r == null) return null;
@@ -243,7 +256,7 @@ public class TransportRepository : ITransportRepository
                 p_Description = route.Description ?? "",
                 p_Status = route.Status ? (byte)1 : (byte)0,
                 p_CreatedBy = route.CreatedBy,
-                p_CampusId = route.CampusId ?? 1,
+                p_CampusId = route.CampusId ?? ResolveCampusId() ?? 0,
                 p_StartLatitude = (decimal?)null,
                 p_StartLongitude = (decimal?)null,
                 p_EndLatitude = (decimal?)null,
@@ -260,7 +273,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         conn.Execute(
             "sp_DeleteTransportRoute",
-            new { p_RouteId = route.RouteId, p_UpdatedBy = route.UpdatedBy },
+            new { p_RouteId = route.RouteId, p_UpdatedBy = route.UpdatedBy, p_CollegeId = ResolveCollegeId() },
             commandType: CommandType.StoredProcedure);
     }
 
@@ -270,7 +283,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         var list = (await conn.QueryAsync<dynamic>(
             "sp_GetTransportDrivers",
-            new { p_Search = "", p_Status = (byte?)null, p_CampusId = (int?)null },
+            new { p_Search = "", p_Status = (byte?)null, p_CampusId = ResolveCampusId(), p_CollegeId = ResolveCollegeId(), p_PageNumber = 1, p_PageSize = 500 },
             commandType: CommandType.StoredProcedure)).ToList();
 
         return list.Select(d => new TransportDriver
@@ -298,7 +311,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         var d = await conn.QueryFirstOrDefaultAsync<dynamic>(
             "sp_GetTransportDriversById",
-            new { p_Id = id },
+            new { p_Id = id, p_CollegeId = ResolveCollegeId() },
             commandType: CommandType.StoredProcedure);
 
         if (d == null) return null;
@@ -357,7 +370,7 @@ public class TransportRepository : ITransportRepository
         var conn = Connection;
         conn.Execute(
             "sp_DeleteTransportDrivers",
-            new { p_DriverId = driver.DriverId, p_UpdatedBy = driver.UpdatedBy },
+            new { p_DriverId = driver.DriverId, p_UpdatedBy = driver.UpdatedBy, p_CollegeId = ResolveCollegeId() },
             commandType: CommandType.StoredProcedure);
     }
 

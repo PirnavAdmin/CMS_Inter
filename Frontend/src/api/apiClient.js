@@ -1,6 +1,6 @@
 import axios from "axios";
 import { env } from "../config/env.js";
-import { clearAuthSession, getAuthToken, updateAuthToken, BACKEND_ADMIN_JWT } from "../modules/auth/authStorage.js";
+import { clearAuthSession, getAuthToken, updateAuthToken, getAuthUser, BACKEND_ADMIN_JWT } from "../modules/auth/authStorage.js";
 
 let activeApiRequests = 0;
 import { handleMockApiRequest } from "./mockApiAdapter.js";
@@ -208,6 +208,7 @@ apiClient.interceptors.request.use(
         (suffix ? window.localStorage.getItem(`cms_selected_campus_id${suffix}`) : null) ||
         window.localStorage.getItem("cms_selected_campus_id");
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
+      if (u?.collegeId) config.headers["X-College-Id"] = String(u.collegeId);
       const clientIp = window.localStorage.getItem("cms_client_ip") || window.sessionStorage.getItem("cms_client_ip");
       if (clientIp) config.headers["X-Client-IP"] = clientIp;
     } catch {

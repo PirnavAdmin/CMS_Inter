@@ -187,7 +187,9 @@ namespace CollegeManagement.API.Filters
                 else if (arg != null && !arg.GetType().IsPrimitive && arg is not string && arg is not decimal && arg is not DateTime)
                 {
                     var campusProp = arg.GetType().GetProperty("CampusId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
-                    if (campusProp != null && campusProp.CanWrite && (campusProp.PropertyType == typeof(int) || campusProp.PropertyType == typeof(int?)))
+                    if (campusProp != null && campusProp.CanWrite &&
+                        (campusProp.PropertyType == typeof(int) || campusProp.PropertyType == typeof(int?) ||
+                         campusProp.PropertyType == typeof(long) || campusProp.PropertyType == typeof(long?)))
                     {
                         int? propVal = TryToInt(campusProp.GetValue(arg));
                         if (propVal.HasValue && propVal.Value > 0 && propVal.Value != NoCampusSentinel)
@@ -208,8 +210,17 @@ namespace CollegeManagement.API.Filters
                         }
                         else
                         {
-                            campusProp.SetValue(arg, effectiveCampusId);
+                            object valToSet = (campusProp.PropertyType == typeof(long) || campusProp.PropertyType == typeof(long?))
+                                ? (long)effectiveCampusId
+                                : effectiveCampusId;
+                            campusProp.SetValue(arg, valToSet);
                         }
+                    }
+
+                    var collegeProp = arg.GetType().GetProperty("CollegeId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                    if (collegeProp != null && collegeProp.CanWrite && (collegeProp.PropertyType == typeof(int) || collegeProp.PropertyType == typeof(int?)))
+                    {
+                        collegeProp.SetValue(arg, collegeId.Value);
                     }
                 }
             }
@@ -291,6 +302,10 @@ namespace CollegeManagement.API.Filters
                          string.Equals(ctrl, "HostelFee", StringComparison.OrdinalIgnoreCase))
                 {
                     await ValidateHostelIsolationAsync(context, ctrl, idVal, collegeId.Value);
+                }
+                else if (IsTransportController(ctrl))
+                {
+                    await ValidateTransportIsolationAsync(context, ctrl, collegeId.Value);
                 }
             }
             catch (ForbiddenException fex)
@@ -463,6 +478,112 @@ namespace CollegeManagement.API.Filters
                     }
                 }
             }
+        }
+
+        private static bool IsTransportController(string ctrl) =>
+            ctrl.StartsWith("Transport", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ctrl, "PickupPoint", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ctrl, "VehicleMaintenance", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ctrl, "StudentTransportAssignment", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ctrl, "StudentTransport", StringComparison.OrdinalIgnoreCase);
+
+        private async Task ValidateTransportIsolationAsync(ActionExecutingContext context, string ctrl, int collegeId)
+        {
+            string? routeResource = ctrl switch
+            {
+                var c when string.Equals(c, "TransportRoutes", StringComparison.OrdinalIgnoreCase) || string.Equals(c, "TransportRoute", StringComparison.OrdinalIgnoreCase) => "routes",
+                var c when string.Equals(c, "PickupPoint", StringComparison.OrdinalIgnoreCase) => "pickup-points",
+                var c when string.Equals(c, "TransportVehicle", StringComparison.OrdinalIgnoreCase) => "vehicles",
+                var c when string.Equals(c, "TransportDriver", StringComparison.OrdinalIgnoreCase) => "drivers",
+                var c when string.Equals(c, "TransportAttendant", StringComparison.OrdinalIgnoreCase) => "attendants",
+                var c when string.Equals(c, "TransportVehicleAssignment", StringComparison.OrdinalIgnoreCase) => "vehicle-assignments",
+                var c when string.Equals(c, "StudentTransportAssignment", StringComparison.OrdinalIgnoreCase) => "student-assignments",
+                var c when string.Equals(c, "VehicleMaintenance", StringComparison.OrdinalIgnoreCase) => "maintenance",
+                var c when string.Equals(c, "TransportOperations", StringComparison.OrdinalIgnoreCase) => "trips",
+                var c when string.Equals(c, "TransportDashboard", StringComparison.OrdinalIgnoreCase) => "vehicle-assignments",
+                var c when string.Equals(c, "TransportDriverDashboard", StringComparison.OrdinalIgnoreCase) => "trips",
+                _ => null
+            };
+
+            long? primaryId = TryExtractLong(context, "id")
+                           ?? TryExtractLong(context, "tripId")
+                           ?? TryExtractLong(context, "assignmentId")
+                           ?? TryExtractLong(context, "routeIdOrCode");
+
+            // Avoid false NotFound on string codes/numbers (e.g. "HABSIGUDA_1" or "AP053834") which controllers resolve in-method
+            if (routeResource != null && primaryId.HasValue && primaryId.Value > 0)
+            {
+                string path = (context.HttpContext.Request.Path.Value ?? string.Empty).ToLowerInvariant();
+                bool isDocRoute = path.Contains("/documents/");
+                await _securityService.ValidateTransportResourceOwnershipAsync(routeResource, primaryId.Value, collegeId, throwIfMissing: false);
+                if (isDocRoute)
+                {
+                    long? docId = TryExtractLong(context, "docId");
+                    if (docId.HasValue && docId.Value > 0)
+                    {
+                        await _securityService.ValidateTransportResourceOwnershipAsync("documents", docId.Value, collegeId, throwIfMissing: false);
+                    }
+                }
+            }
+
+            var transportRefChecks = new (string propName, string resourceType)[]
+            {
+                ("routeId", "routes"),
+                ("pickupPointId", "pickup-points"),
+                ("vehicleId", "vehicles"),
+                ("driverId", "drivers"),
+                ("attendantId", "attendants"),
+                ("vehicleAssignmentId", "vehicle-assignments"),
+                ("tripId", "trips"),
+                ("maintenanceId", "maintenance")
+            };
+
+            foreach (var (propName, resType) in transportRefChecks)
+            {
+                long? qVal = TryExtractLong(context, propName);
+                if (qVal.HasValue && qVal.Value > 0)
+                {
+                    await _securityService.ValidateTransportResourceOwnershipAsync(resType, qVal.Value, collegeId, throwIfMissing: false);
+                }
+            }
+
+            foreach (var arg in context.ActionArguments.Values)
+            {
+                if (arg == null || arg.GetType().IsPrimitive || arg is string || arg is decimal || arg is DateTime)
+                    continue;
+
+                var type = arg.GetType();
+                foreach (var (propName, resType) in transportRefChecks)
+                {
+                    var prop = type.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                    if (prop != null)
+                    {
+                        long? pVal = TryToLong(prop.GetValue(arg));
+                        if (pVal.HasValue && pVal.Value > 0)
+                        {
+                            await _securityService.ValidateTransportResourceOwnershipAsync(resType, pVal.Value, collegeId, throwIfMissing: false);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static long? TryExtractLong(ActionExecutingContext context, string key)
+        {
+            if (context.ActionArguments.TryGetValue(key, out var argVal))
+                return TryToLong(argVal);
+            if (context.RouteData.Values.TryGetValue(key, out var routeVal))
+                return TryToLong(routeVal);
+            return null;
+        }
+
+        private static long? TryToLong(object? value)
+        {
+            if (value == null) return null;
+            if (value is long l) return l;
+            if (value is int i) return i;
+            if (long.TryParse(value.ToString(), out var parsed)) return parsed;
+            return null;
         }
 
         private static int? TryExtractId(ActionExecutingContext context, string key)

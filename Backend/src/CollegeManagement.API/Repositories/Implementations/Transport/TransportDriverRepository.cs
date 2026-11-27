@@ -22,13 +22,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _httpContextAccessor = httpContextAccessor;
         }
 
-        private int? ResolveCollegeId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            return null;
-        }
+        private int? ResolveCollegeId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+
+        private int? ResolveCampusId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
@@ -86,16 +84,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportDriverDto?> GetByIdAsync(long driverId)
         {
             var c = Connection;
+            var collegeId = ResolveCollegeId();
             var driver = await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
                 "sp_GetTransportDriversById",
-                new { p_Id = driverId },
+                new { p_Id = driverId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
 
             if (driver == null)
             {
                 driver = await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
                     "sp_GetTransportDriverByIdOrNumber",
-                    new { p_SearchId = driverId, p_SearchStr = driverId.ToString() },
+                    new { p_SearchId = driverId, p_SearchStr = driverId.ToString(), p_CollegeId = collegeId },
                     commandType: CommandType.StoredProcedure);
             }
 
@@ -170,11 +169,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long driverId, long? userId)
         {
             var c = Connection;
+            var collegeId = ResolveCollegeId();
             try
             {
                 var result = await c.ExecuteScalarAsync<int?>(
                     "sp_DeleteTransportDrivers",
-                    new { p_DriverId = driverId, p_UpdatedBy = userId },
+                    new { p_DriverId = driverId, p_UpdatedBy = userId, p_CollegeId = collegeId },
                     commandType: CommandType.StoredProcedure);
                 if (result.HasValue && result.Value == 1) return true;
             }
@@ -185,7 +185,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
             var rows = await c.ExecuteAsync(
                 "sp_DeleteTransportDrivers",
-                new { p_DriverId = driverId, p_UpdatedBy = userId },
+                new { p_DriverId = driverId, p_UpdatedBy = userId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0 || rows == -1;
         }
@@ -195,7 +195,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportDriverExists",
-                new { p_LicenceNumber = licenceNumber.Trim(), p_MobileNumber = mobileNumber.Trim(), p_ExcludeId = excludeDriverId },
+                new { p_LicenceNumber = licenceNumber.Trim(), p_MobileNumber = mobileNumber.Trim(), p_ExcludeId = excludeDriverId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }
@@ -203,7 +203,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<TransportDriverLookupDto>> GetLookupAsync()
         {
             var c = Connection;
-            return await c.QueryAsync<TransportDriverLookupDto>("sp_GetTransportDriverLookup", commandType: CommandType.StoredProcedure);
+            return await c.QueryAsync<TransportDriverLookupDto>(
+                "sp_GetTransportDriverLookup",
+                new { p_CampusId = ResolveCampusId(), p_CollegeId = ResolveCollegeId() },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportDriverDto?> GetByIdOrNumberAsync(string driverIdOrNumber)
@@ -215,7 +218,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.QueryFirstOrDefaultAsync<TransportDriverDto>(
                 "sp_GetTransportDriverByIdOrNumber",
-                new { p_SearchId = isNumeric ? id : -1, p_SearchStr = trimmed },
+                new { p_SearchId = isNumeric ? id : -1, p_SearchStr = trimmed, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -224,7 +227,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.QueryAsync<DriverDocumentDto>(
                 "sp_GetDriverDocuments",
-                new { p_DriverId = driverId },
+                new { p_DriverId = driverId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -242,7 +245,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_IssueDate = !string.IsNullOrWhiteSpace(dto.IssueDate) ? DateTime.Parse(dto.IssueDate) : (DateTime?)null,
                     p_ExpiryDate = !string.IsNullOrWhiteSpace(dto.ExpiryDate) ? DateTime.Parse(dto.ExpiryDate) : (DateTime?)null,
                     p_Status = dto.Status,
-                    p_FileName = dto.FileName
+                    p_FileName = dto.FileName,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -255,7 +259,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var rows = await c.ExecuteScalarAsync<int>(
                 "sp_DeleteDriverDocument",
-                new { p_DocumentId = documentId, p_DriverId = driverId },
+                new { p_DocumentId = documentId, p_DriverId = driverId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }

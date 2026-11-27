@@ -6,8 +6,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Operations;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Repositories.Implementations.Transport
@@ -15,13 +17,24 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class TransportOperationsRepository : ITransportOperationsRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public TransportOperationsRepository(AppDbContext context)
+        public TransportOperationsRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
+
+        private (int? collegeId, int? campusId) ResolveTenant(int? collegeOverride = null, int? campusOverride = null)
+        {
+            var user = _httpContextAccessor?.HttpContext?.User;
+            var req = _httpContextAccessor?.HttpContext?.Request;
+            int? collegeId = (collegeOverride > 0) ? collegeOverride : CampusContextResolver.ResolveCollegeId(user, req);
+            int? campusId = (campusOverride > 0) ? campusOverride : CampusContextResolver.ResolveCampusId(user, req);
+            return (collegeId, campusId);
+        }
 
         public async Task<List<VehicleTripCardDto>> GetTripsAsync(
             long? routeId,
@@ -32,6 +45,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             CancellationToken ct = default)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant();
             var cmd = new CommandDefinition(
                 "sp_GetTransportTrips",
                 new
@@ -40,7 +54,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_VehicleId = vehicleId,
                     p_TripDate = tripDate?.Date,
                     p_Status = status,
-                    p_Search = search ?? ""
+                    p_Search = search ?? "",
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);
@@ -75,6 +91,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             CancellationToken ct = default)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant();
             var cmd = new CommandDefinition(
                 "sp_CreateTransportTrip",
                 new
@@ -90,7 +107,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_EndTime = dto.EveningTripTime,
                     p_StudentsPresent = dto.StudentsCount,
                     p_Status = dto.Status ?? "Running",
-                    p_CreatedBy = (long?)null
+                    p_CreatedBy = (long?)null,
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);
@@ -104,6 +123,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             CancellationToken ct = default)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             var cmd = new CommandDefinition(
                 "sp_UpdateTransportTrip",
                 new
@@ -113,7 +133,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_EndTime = dto.EveningTripTime,
                     p_StudentsPresent = dto.StudentsCount,
                     p_Status = dto.Status,
-                    p_UpdatedBy = (long?)null
+                    p_UpdatedBy = (long?)null,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);
@@ -127,9 +148,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             CancellationToken ct = default)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             var cmd = new CommandDefinition(
                 "sp_DeleteTransportTrip",
-                new { p_TripId = tripId, p_UpdatedBy = (long?)null },
+                new { p_TripId = tripId, p_UpdatedBy = (long?)null, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);
 
@@ -141,6 +163,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             CancellationToken ct = default)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant();
             var assignmentsCmd = new CommandDefinition(
                 "sp_GetTransportVehicleAssignments",
                 new
@@ -150,8 +173,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_DriverId = (long?)null,
                     p_Status = (byte)1,
                     p_Search = "",
-                    p_CampusId = (int?)null,
-                    p_CollegeId = (int?)null
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);
@@ -165,7 +188,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
             var stopsCmd = new CommandDefinition(
                 "sp_GetPickupPoints",
-                new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null, p_CampusId = (int?)null },
+                new { p_RouteId = (long?)null, p_Search = "", p_Status = (byte?)null, p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure,
                 cancellationToken: ct);
 

@@ -25,6 +25,15 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> GetAll(
             [FromQuery] VehicleMaintenanceFilterDto filter)
         {
+            if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
+            {
+                filter.CampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, filter.CampusId);
+            }
+            if (!filter.CollegeId.HasValue || filter.CollegeId.Value <= 0)
+            {
+                filter.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+            }
+
             var result = await _service.GetAllAsync(filter);
 
             return Ok(new
@@ -55,6 +64,15 @@ namespace CollegeManagement.API.Controllers.V1
         [Authorize(Roles = "Transport Manager,Admin,Super Admin,Principal")]
         public async Task<IActionResult> Create([FromBody] CreateVehicleMaintenanceDto dto)
         {
+            if (!dto.CampusId.HasValue || dto.CampusId.Value <= 0)
+            {
+                dto.CampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, dto.CampusId);
+            }
+            if (!dto.CollegeId.HasValue || dto.CollegeId.Value <= 0)
+            {
+                dto.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+            }
+
             var userId = GetUserId();
             var id = await _service.CreateAsync(dto, userId);
 
@@ -72,6 +90,15 @@ namespace CollegeManagement.API.Controllers.V1
             string id,
             [FromBody] UpdateVehicleMaintenanceDto dto)
         {
+            if (!dto.CampusId.HasValue || dto.CampusId.Value <= 0)
+            {
+                dto.CampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, dto.CampusId);
+            }
+            if (!dto.CollegeId.HasValue || dto.CollegeId.Value <= 0)
+            {
+                dto.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+            }
+
             var userId = GetUserId();
             long? targetId = null;
             if (long.TryParse(id, out long parsedId))
@@ -88,20 +115,7 @@ namespace CollegeManagement.API.Controllers.V1
                 }
             }
 
-            // Fallback create
-            var createDto = new CreateVehicleMaintenanceDto
-            {
-                VehicleId = dto.VehicleId > 0 ? dto.VehicleId : 1,
-                ServiceType = !string.IsNullOrWhiteSpace(dto.ServiceType) ? dto.ServiceType : "General Service",
-                ServiceDate = dto.ServiceDate != default ? dto.ServiceDate : DateTime.UtcNow,
-                Cost = dto.Cost,
-                VendorCenter = dto.VendorCenter ?? "",
-                NextServiceDue = dto.NextServiceDue,
-                Remarks = dto.Remarks ?? ""
-            };
-
-            var newId = await _service.CreateAsync(createDto, userId);
-            return Ok(new { success = true, message = "Vehicle maintenance updated successfully.", maintenanceId = newId });
+            return NotFound(new { success = false, message = "Vehicle maintenance record not found." });
         }
 
         [HttpDelete("{id}")]
@@ -135,10 +149,10 @@ namespace CollegeManagement.API.Controllers.V1
             var claim = User.FindFirst("UserId")
                      ?? User.FindFirst(ClaimTypes.NameIdentifier);
 
-            if (claim == null)
-                return 1;
+            if (claim != null && long.TryParse(claim.Value, out var uid) && uid > 0)
+                return uid;
 
-            return Convert.ToInt64(claim.Value);
+            return 0;
         }
     }
 }

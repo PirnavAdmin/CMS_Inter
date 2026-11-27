@@ -6,6 +6,10 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
 
         public long? VehicleId { get; set; }
 
+        public int? CampusId { get; set; }
+
+        public int? CollegeId { get; set; }
+
         public DateTime? FromDate { get; set; }
 
         public DateTime? ToDate { get; set; }

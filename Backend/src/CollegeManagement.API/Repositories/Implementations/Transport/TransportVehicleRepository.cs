@@ -24,13 +24,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _httpContextAccessor = httpContextAccessor;
         }
 
-        private int? ResolveCollegeId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            return null;
-        }
+        private int? ResolveCollegeId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+
+        private int? ResolveCampusId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
@@ -44,7 +42,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 if (fromCampus.HasValue && fromCampus.Value > 0)
                     return fromCampus.Value;
             }
-            return requestedCollegeId ?? ResolveCollegeId() ?? 1;
+            return requestedCollegeId ?? ResolveCollegeId() ?? throw new ValidationException("Tenant CollegeId is required.");
         }
 
         private static Exception TranslateVehicleDbException(MySqlException ex, string vehicleNumber)
@@ -95,10 +93,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
             var list = items.AsQueryable();
             if (collegeId.HasValue && collegeId.Value > 0)
-                list = list.Where(v => v.CollegeId == collegeId.Value || v.CollegeId == 0);
+                list = list.Where(v => v.CollegeId == collegeId.Value);
             if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
             if (filter.CampusId.HasValue && filter.CampusId.Value > 0)
-                list = list.Where(v => v.CampusId == filter.CampusId.Value || v.CampusId == null);
+                list = list.Where(v => v.CampusId == filter.CampusId.Value || (v.CampusId == null && filter.CampusId.Value == 1 && collegeId == 1));
 
             var totalCount = list.Count();
             var paged = list.Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
@@ -108,6 +106,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportVehicleDto?> GetByIdAsync(long vehicleId)
         {
             var c = Connection;
+            var collegeId = ResolveCollegeId();
             const string sql = @"
                 SELECT 
                     v.VehicleId,
@@ -134,10 +133,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 FROM TransportVehicles v
                 LEFT JOIN Campuses c ON v.CampusId = c.CampusId
                 WHERE v.VehicleId = @Id AND v.IsDeleted = 0
+                  AND (@CollegeId IS NULL OR @CollegeId <= 0 OR v.CollegeId = @CollegeId)
                 LIMIT 1;";
             return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(
                 sql,
-                new { Id = vehicleId },
+                new { Id = vehicleId, CollegeId = collegeId },
                 commandType: CommandType.Text);
         }
 
@@ -149,14 +149,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
             try
             {
-                const string sql20 = @"CALL sp_CreateTransportVehicles(
+                const string sql21 = @"CALL sp_CreateTransportVehicles(
                     @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
                     @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
                     @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
-                    @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy, @p_CampusId
+                    @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy, @p_CampusId, @p_CollegeId
                 );";
 
-                newId = await c.ExecuteScalarAsync<long>(sql20, new
+                newId = await c.ExecuteScalarAsync<long>(sql21, new
                 {
                     p_VehicleNumber = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
@@ -177,7 +177,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_InsuranceNumber = dto.InsuranceNumber,
                     p_CreatedBy = userId,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId
+                    p_CampusId = dto.CampusId,
+                    p_CollegeId = collegeId
                 }, commandType: CommandType.Text);
             }
             catch (MySqlException ex)
@@ -355,9 +356,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long vehicleId, long? userId)
         {
             var c = Connection;
+            var collegeId = ResolveCollegeId();
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportVehicles", 
-                new { p_Id = vehicleId, p_UpdatedBy = userId }, 
+                new { p_Id = vehicleId, p_UpdatedBy = userId, p_CollegeId = collegeId }, 
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -365,7 +367,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<TransportVehicleLookupDto>> GetLookupAsync()
         {
             var c = Connection;
-            return await c.QueryAsync<TransportVehicleLookupDto>("sp_GetTransportVehicleLookup", commandType: CommandType.StoredProcedure);
+            return await c.QueryAsync<TransportVehicleLookupDto>(
+                "sp_GetTransportVehicleLookup",
+                new { p_CampusId = ResolveCampusId(), p_CollegeId = ResolveCollegeId() },
+                commandType: CommandType.StoredProcedure);
         }
 
         public async Task<TransportVehicleDto?> GetByIdOrNumberAsync(string vehicleIdOrNumber)
@@ -374,7 +379,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var id = long.TryParse(vehicleIdOrNumber.Trim(), out var i) ? i : -1;
             return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(
                 "sp_GetTransportVehicleByIdOrNumber",
-                new { p_SearchId = id, p_SearchStr = vehicleIdOrNumber.Trim() },
+                new { p_SearchId = id, p_SearchStr = vehicleIdOrNumber.Trim(), p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -383,7 +388,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportVehicleExists",
-                new { p_VehicleNumber = vehicleNumber.Trim(), p_RegistrationNumber = registrationNumber.Trim(), p_ExcludeId = excludeVehicleId },
+                new { p_VehicleNumber = vehicleNumber.Trim(), p_RegistrationNumber = registrationNumber.Trim(), p_ExcludeId = excludeVehicleId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }

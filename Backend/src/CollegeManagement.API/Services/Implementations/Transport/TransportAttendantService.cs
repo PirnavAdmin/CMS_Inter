@@ -5,10 +5,13 @@ using System.Threading.Tasks;
 using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Attendant;
+using CollegeManagement.API.Exceptions;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models;
 using CollegeManagement.API.Models.Staff;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 
 namespace CollegeManagement.API.Services.Implementations
@@ -17,11 +20,13 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly ITransportAttendantRepository _repository;
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public TransportAttendantService(ITransportAttendantRepository repository, AppDbContext context)
+        public TransportAttendantService(ITransportAttendantRepository repository, AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _repository = repository;
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task<PagedResult<TransportAttendantDto>> GetAllAsync(TransportAttendantFilterDto filter)
@@ -53,10 +58,21 @@ namespace CollegeManagement.API.Services.Implementations
                 linkedStaff = await _context.Staffs.FirstOrDefaultAsync(s => s.Mobile == dto.MobileNumber.Trim() && !s.IsDeleted);
             }
 
-            // Reject if Staff does not exist
+            // Reject if Staff does not exist or belongs to another college
             if (linkedStaff == null)
             {
                 throw new ArgumentException("Staff record not found. Transport attendant must be linked to an existing active Staff member.");
+            }
+
+            var callerCollegeId = CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+            if (callerCollegeId.HasValue && callerCollegeId.Value > 0 && linkedStaff.CampusId.HasValue)
+            {
+                bool sameCollege = await _context.Campuses.AsNoTracking()
+                    .AnyAsync(c => c.CampusId == linkedStaff.CampusId.Value && c.CollegeId == callerCollegeId.Value);
+                if (!sameCollege)
+                {
+                    throw new ForbiddenException("Access denied: Staff member belongs to another college.");
+                }
             }
 
             // Reject if Staff is inactive or deleted

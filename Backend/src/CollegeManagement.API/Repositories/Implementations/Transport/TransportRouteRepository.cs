@@ -24,20 +24,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _httpContextAccessor = httpContextAccessor;
         }
 
-        private int? ResolveCollegeId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            return null;
-        }
+        private int? ResolveCollegeId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+
+        private int? ResolveCampusId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
         public async Task<PagedResult<TransportRouteDto>> GetAllAsync(TransportRouteFilterDto filter)
         {
             var c = Connection;
-            var collegeId = ResolveCollegeId();
+            var collegeId = filter.CollegeId ?? ResolveCollegeId();
+            var campusId = filter.CampusId ?? ResolveCampusId();
             string? busTypeFilter = !string.IsNullOrWhiteSpace(filter.BusType)
                 ? filter.BusType
                 : (filter.IsAc.HasValue ? (filter.IsAc.Value ? "AC" : "Non-AC") : null);
@@ -49,8 +48,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Search = filter.Search ?? "",
                     p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
                     p_BusType = busTypeFilter,
-                    p_CampusId = filter.CampusId,
-                    p_CollegeId = filter.CollegeId ?? collegeId
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure)).ToList();
 
@@ -74,13 +73,14 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.QueryFirstOrDefaultAsync<TransportRouteDto>(
                 "sp_GetTransportRouteById",
-                new { p_Id = routeId },
+                new { p_Id = routeId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<long> CreateAsync(CreateTransportRouteDto dto, long? userId)
         {
             var c = Connection;
+            var effectiveCampusId = dto.CampusId ?? ResolveCampusId() ?? 0;
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreateTransportRoute",
                 new
@@ -100,7 +100,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Description = dto.Description,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_CreatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1,
+                    p_CampusId = effectiveCampusId,
                     p_StartLatitude = dto.StartLatitude,
                     p_StartLongitude = dto.StartLongitude,
                     p_EndLatitude = dto.EndLatitude,
@@ -113,6 +113,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long routeId, UpdateTransportRouteDto dto, long? userId)
         {
             var c = Connection;
+            var effectiveCampusId = dto.CampusId ?? ResolveCampusId() ?? 0;
             return await c.ExecuteAsync(
                 "sp_UpdateTransportRoute",
                 new
@@ -133,7 +134,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Description = dto.Description,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId ?? 1,
+                    p_CampusId = effectiveCampusId,
                     p_StartLatitude = dto.StartLatitude,
                     p_StartLongitude = dto.StartLongitude,
                     p_EndLatitude = dto.EndLatitude,
@@ -148,7 +149,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportRoute",
-                new { p_RouteId = routeId, p_UpdatedBy = userId },
+                new { p_RouteId = routeId, p_UpdatedBy = userId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -158,7 +159,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var count = await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportRouteExists",
-                new { p_RouteCode = routeCode.Trim(), p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId },
+                new { p_RouteCode = routeCode.Trim(), p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return count > 0;
         }
@@ -171,7 +172,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 new
                 {
                     p_Search = search ?? "",
-                    p_Limit = limit > 0 ? limit : 100
+                    p_Limit = limit > 0 ? limit : 100,
+                    p_CampusId = ResolveCampusId(),
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -190,7 +193,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var all = await c.QueryAsync<TransportRouteDto>(
                 "sp_GetTransportRoutes",
-                new { p_Search = search, p_Status = (byte?)null, p_BusType = (string?)null, p_CampusId = (int?)null, p_CollegeId = (int?)null },
+                new { p_Search = search, p_Status = (byte?)null, p_BusType = (string?)null, p_CampusId = ResolveCampusId(), p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
 
             return all.FirstOrDefault(r =>
@@ -203,7 +206,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportRouteCodeExists",
-                new { p_RouteCode = routeCode.Trim(), p_ExcludeId = excludeRouteId },
+                new { p_RouteCode = routeCode.Trim(), p_ExcludeId = excludeRouteId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure) > 0;
         }
 
@@ -212,7 +215,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.ExecuteScalarAsync<int>(
                 "sp_CheckTransportRouteNameExists",
-                new { p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId },
+                new { p_RouteName = routeName.Trim(), p_ExcludeId = excludeRouteId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure) > 0;
         }
 
@@ -225,7 +228,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 {
                     p_StartLocation = startLocation?.Trim() ?? string.Empty,
                     p_EndLocation = endLocation?.Trim() ?? string.Empty,
-                    p_CampusId = campusId ?? 0
+                    p_CampusId = campusId ?? ResolveCampusId() ?? 0,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 

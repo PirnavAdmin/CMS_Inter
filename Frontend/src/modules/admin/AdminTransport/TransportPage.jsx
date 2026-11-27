@@ -2732,6 +2732,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         }
       } else if (key === "attendants") {
         const payload = {
+          campusId: Number(selectedCampusId),
           staffId: record?.staffId ?? scopedRecords.current?.staff.find((staff) => String(staff.employeeId) === String(values.employeeId))?.staffId,
           attendantName: values.attendantName,
           employeeId: values.employeeId,
@@ -2746,6 +2747,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         }
       } else if (key === "vehicleAssignments") {
         const payload = {
+          campusId: Number(selectedCampusId),
           routeId: Number(values.routeId),
           vehicleId: Number(values.vehicleId),
           driverId: Number(values.driverId),
@@ -2764,6 +2766,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         }
       } else if (key === "studentAssignments") {
         const payload = {
+          campusId: Number(selectedCampusId),
           studentId: Number(values.studentId),
           studentName: values.studentName,
           admissionNo: values.admissionNo,
@@ -2782,6 +2785,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         }
       } else if (key === "trips") {
         const payload = {
+          campusId: Number(selectedCampusId),
           vehicleId: Number(values.vehicleId),
           routeId: Number(values.routeId),
           driverId: Number(values.driverId),
@@ -2798,6 +2802,7 @@ function TransportContextPage({ navigation, onNavigate }) {
         }
       } else if (key === "maintenance") {
         const payload = {
+          campusId: Number(selectedCampusId),
           vehicleId: Number(values.vehicleId),
           serviceType: values.category || "General Maintenance",
           serviceDate: values.serviceDate ? `${values.serviceDate}T00:00:00` : new Date().toISOString(),
