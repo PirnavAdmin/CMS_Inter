@@ -194,28 +194,7 @@ namespace CollegeManagement.API.Controllers
                     }
                 }
 
-                var createDto = new CreateTransportRouteDto
-                {
-                    RouteCode = !string.IsNullOrWhiteSpace(dto.RouteCode) ? dto.RouteCode : routeIdOrCode,
-                    RouteName = dto.RouteName,
-                    StartLocation = dto.StartLocation,
-                    EndLocation = dto.EndLocation,
-                    DistanceKm = dto.DistanceKm,
-                    EstimatedDurationMinutes = dto.EstimatedDurationMinutes,
-                    Description = dto.Description,
-                    Status = dto.Status,
-                    CampusId = dto.CampusId ?? 1
-                };
-
-                long createdId = await _service.CreateAsync(createDto, userId: null);
-                var createdDto = await _service.GetByIdAsync(createdId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Transport route updated successfully.",
-                    data = createdDto
-                });
+                return NotFound(new { success = false, message = "Transport route not found." });
             }
             catch (Exception ex)
             {

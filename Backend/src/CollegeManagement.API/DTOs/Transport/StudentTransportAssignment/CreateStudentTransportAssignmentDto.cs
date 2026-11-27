@@ -54,5 +54,11 @@ namespace CollegeManagement.API.Dtos.Transport.StudentTransportAssignment
         [JsonPropertyName("status")]
         [JsonConverter(typeof(FlexibleBoolConverter))]
         public bool Status { get; set; } = true;
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("collegeId")]
+        public int? CollegeId { get; set; }
     }
 }

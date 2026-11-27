@@ -23,13 +23,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             _httpContextAccessor = httpContextAccessor;
         }
 
-        private int? ResolveCollegeId()
-        {
-            var claim = _httpContextAccessor?.HttpContext?.User?.FindFirst("CollegeId")?.Value
-                     ?? _httpContextAccessor?.HttpContext?.User?.FindFirst("collegeId")?.Value;
-            if (int.TryParse(claim, out int cid) && cid > 0) return cid;
-            return null;
-        }
+        private int? ResolveCollegeId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+
+        private int? ResolveCampusId() =>
+            CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
@@ -37,6 +35,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         {
             var c = Connection;
             var collegeId = filter.CollegeId ?? ResolveCollegeId();
+            var campusId = filter.CampusId ?? ResolveCampusId();
             var all = await c.QueryAsync<TransportVehicleAssignmentDto>(
                 "sp_GetTransportVehicleAssignments",
                 new
@@ -46,7 +45,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_DriverId = filter.DriverId,
                     p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
                     p_Search = filter.Search ?? "",
-                    p_CampusId = filter.CampusId,
+                    p_CampusId = campusId,
                     p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
@@ -62,7 +61,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.QueryFirstOrDefaultAsync<TransportVehicleAssignmentDto>(
                 "sp_GetTransportVehicleAssignmentById",
-                new { p_Id = assignmentId },
+                new { p_Id = assignmentId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -87,8 +86,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_IsActive = (byte)1,
                     p_CreatedBy = userId,
                     p_UpdatedBy = userId,
-                    p_CampusId = dto.CampusId,
-                    p_CollegeId = dto.CollegeId
+                    p_CampusId = dto.CampusId ?? ResolveCampusId(),
+                    p_CollegeId = dto.CollegeId ?? ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -114,7 +113,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_IsActive = (byte)1,
                     p_CreatedBy = (long?)null,
-                    p_UpdatedBy = userId
+                    p_UpdatedBy = userId,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -125,7 +125,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteTransportVehicleAssignments",
-                new { p_Id = assignmentId, p_UpdatedBy = userId },
+                new { p_Id = assignmentId, p_UpdatedBy = userId, p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -155,6 +155,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             var c = Connection;
             return await c.QueryAsync<TransportVehicleAssignmentLookupDto>(
                 "sp_GetTransportVehicleAssignmentLookup",
+                new { p_CampusId = ResolveCampusId(), p_CollegeId = ResolveCollegeId() },
                 commandType: CommandType.StoredProcedure);
         }
     }

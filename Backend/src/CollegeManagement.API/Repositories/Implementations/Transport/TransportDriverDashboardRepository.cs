@@ -186,66 +186,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             }
             catch
             {
-                // Graceful fallback during remote DB connection timeouts
+                return null;
             }
-
-            return new
-            {
-                assignedVehicle = new
-                {
-                    vehicleId = 101L,
-                    vehicleNumber = "AP39AU2653",
-                    registrationNumber = "AP39AU2653",
-                    vehicleType = "Ashok Leyland 45-Seater",
-                    capacity = 45,
-                    assignedDate = DateTime.UtcNow
-                },
-                route = new
-                {
-                    routeId = 32L,
-                    routeName = "32 Habsiguda",
-                    routeCode = "HABSIGUDA_1",
-                    StartLocation = "Tarnaka",
-                    EndLocation = "Campus Main Gate"
-                },
-                attendant = new
-                {
-                    attendantId = 201L,
-                    attendantName = "Ramesh K",
-                    contactNumber = "+91 98480 22338"
-                },
-                assignment = new
-                {
-                    assignmentId = 501L,
-                    vehicleNumber = "AP39AU2653",
-                    registrationNumber = "AP39AU2653",
-                    vehicleName = "Ashok Leyland 45-Seater",
-                    vehicleCapacity = 45,
-                    routeName = "32 Habsiguda",
-                    attendantName = "Ramesh K",
-                    morningTripTime = "07:35 AM",
-                    eveningTripTime = "04:30 PM",
-                    shift = "Morning Pickup",
-                    assignedStudents = 2
-                },
-                assignmentId = 501L,
-                morningTripTime = "07:35 AM",
-                eveningTripTime = "04:30 PM",
-                shift = "Morning Pickup",
-                assignedStudents = 2
-            };
         }
 
         public async Task<object?> GetRouteDetailsAsync(int staffId, CancellationToken ct = default)
         {
-            var fallbackPickupPoints = new List<object>
-            {
-                new { pickupPointId = 1L, stopName = "Tarnaka Metro", name = "Tarnaka Metro", landmark = "Metro Pillar 1042 / St. Ann's", stopOrder = 1, sequenceNo = 1, pickupTime = "07:35 AM", dropTime = "04:35 PM", studentCount = 1 },
-                new { pickupPointId = 2L, stopName = "Habsiguda Crossroads", name = "Habsiguda Crossroads", landmark = "Opp. Indian Oil Petrol Pump", stopOrder = 2, sequenceNo = 2, pickupTime = "07:50 AM", dropTime = "04:20 PM", studentCount = 1 },
-                new { pickupPointId = 3L, stopName = "Nacharam IDA", name = "Nacharam IDA", landmark = "Industrial Area Entrance", stopOrder = 3, sequenceNo = 3, pickupTime = "08:05 AM", dropTime = "04:05 PM", studentCount = 0 },
-                new { pickupPointId = 4L, stopName = "Campus Main Gate", name = "Campus Main Gate", landmark = "College Arrival Bay", stopOrder = 4, sequenceNo = 4, pickupTime = "08:25 AM", dropTime = "03:45 PM", studentCount = 0 },
-            };
-
             try
             {
                 var c = Connection;
@@ -261,54 +207,38 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                 {
                     var routeData = new
                     {
-                        routeId = Convert.ToInt64(route.RouteId ?? 32L),
-                        routeName = (string)(route.RouteName ?? "32 Habsiguda"),
-                        routeCode = (string)(route.RouteCode ?? "HABSIGUDA_1"),
-                        StartLocation = (string)(route.StartLocation ?? "Tarnaka"),
-                        EndLocation = (string)(route.EndLocation ?? "Campus Main Gate"),
-                        DistanceKm = route.DistanceKm != null ? Convert.ToDecimal(route.DistanceKm) : 21.00m,
-                        EstimatedDurationMinutes = (int)(route.EstimatedDurationMinutes ?? 45)
+                        routeId = Convert.ToInt64(route.RouteId ?? 0L),
+                        routeName = (string)(route.RouteName ?? ""),
+                        routeCode = (string)(route.RouteCode ?? ""),
+                        StartLocation = (string)(route.StartLocation ?? ""),
+                        EndLocation = (string)(route.EndLocation ?? ""),
+                        DistanceKm = route.DistanceKm != null ? Convert.ToDecimal(route.DistanceKm) : 0m,
+                        EstimatedDurationMinutes = (int)(route.EstimatedDurationMinutes ?? 0)
                     };
 
                     var pickupRows = (await multi.ReadAsync<dynamic>()).ToList();
-                    var pickupPoints = pickupRows.Count > 0
-                        ? pickupRows.Select(p => (object)new
-                        {
-                            pickupPointId = Convert.ToInt64(p.PickupPointId ?? 0L),
-                            stopName = (string)(p.StopName ?? ""),
-                            name = (string)(p.StopName ?? ""),
-                            landmark = (string)(p.Landmark ?? "Scheduled Stop"),
-                            stopOrder = Convert.ToInt32(p.StopOrder ?? 1),
-                            sequenceNo = Convert.ToInt32(p.StopOrder ?? 1),
-                            pickupTime = p.PickupTime != null ? (p.PickupTime is TimeSpan ts ? ts.ToString(@"hh\:mm") : Convert.ToString(p.PickupTime)) : "07:30 AM",
-                            dropTime = p.DropTime != null ? (p.DropTime is TimeSpan dts ? dts.ToString(@"hh\:mm") : Convert.ToString(p.DropTime)) : "04:15 PM",
-                            studentCount = Convert.ToInt32(p.StudentCount ?? 0)
-                        }).ToList()
-                        : fallbackPickupPoints;
+                    var pickupPoints = pickupRows.Select(p => (object)new
+                    {
+                        pickupPointId = Convert.ToInt64(p.PickupPointId ?? 0L),
+                        stopName = (string)(p.StopName ?? ""),
+                        name = (string)(p.StopName ?? ""),
+                        landmark = (string)(p.Landmark ?? ""),
+                        stopOrder = Convert.ToInt32(p.StopOrder ?? 1),
+                        sequenceNo = Convert.ToInt32(p.StopOrder ?? 1),
+                        pickupTime = p.PickupTime != null ? (p.PickupTime is TimeSpan ts ? ts.ToString(@"hh\:mm") : Convert.ToString(p.PickupTime)) : "",
+                        dropTime = p.DropTime != null ? (p.DropTime is TimeSpan dts ? dts.ToString(@"hh\:mm") : Convert.ToString(p.DropTime)) : "",
+                        studentCount = Convert.ToInt32(p.StudentCount ?? 0)
+                    }).ToList();
 
                     return new { route = routeData, pickupPoints = pickupPoints, stops = pickupPoints };
                 }
             }
             catch
             {
-                // Graceful fallback during remote DB connection timeouts
+                return null;
             }
 
-            return new
-            {
-                route = new
-                {
-                    routeId = 32L,
-                    routeName = "32 Habsiguda",
-                    routeCode = "HABSIGUDA_1",
-                    StartLocation = "Tarnaka",
-                    EndLocation = "Campus Main Gate",
-                    DistanceKm = 21.00m,
-                    EstimatedDurationMinutes = 45
-                },
-                pickupPoints = fallbackPickupPoints,
-                stops = fallbackPickupPoints
-            };
+            return null;
         }
 
         public async Task<object?> GetProfileAsync(int staffId, CancellationToken ct = default)
@@ -370,24 +300,24 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                         {
                             morningTrip = morning == null ? null : new
                             {
-                                id = Convert.ToInt64(morning.TripId ?? 101L),
-                                time = $"{(string)(morning.StartTime ?? "07:15 AM")} - {(string)(morning.EndTime ?? "08:30 AM")}",
+                                id = Convert.ToInt64(morning.TripId ?? 0L),
+                                time = $"{(string)(morning.StartTime ?? "")} - {(string)(morning.EndTime ?? "")}",
                                 title = "Morning Pickup Operation",
                                 type = "Morning Pickup",
-                                route = (string)(morning.RouteName ?? "32 Habsiguda"),
-                                stops = $"{Convert.ToInt32(morning.StopsCount ?? 4)} Stops",
-                                students = Convert.ToInt32(morning.StudentsCount ?? 2),
+                                route = (string)(morning.RouteName ?? ""),
+                                stops = $"{Convert.ToInt32(morning.StopsCount ?? 0)} Stops",
+                                students = Convert.ToInt32(morning.StudentsCount ?? 0),
                                 status = (string)(morning.Status ?? "Scheduled")
                             },
                             eveningTrip = evening == null ? null : new
                             {
-                                id = Convert.ToInt64(evening.TripId ?? 102L),
-                                time = $"{(string)(evening.StartTime ?? "04:30 PM")} - {(string)(evening.EndTime ?? "05:30 PM")}",
+                                id = Convert.ToInt64(evening.TripId ?? 0L),
+                                time = $"{(string)(evening.StartTime ?? "")} - {(string)(evening.EndTime ?? "")}",
                                 title = "Evening Drop Operation",
                                 type = "Evening Drop",
-                                route = (string)(evening.RouteName ?? "32 Habsiguda"),
-                                stops = $"{Convert.ToInt32(evening.StopsCount ?? 4)} Stops",
-                                students = Convert.ToInt32(evening.StudentsCount ?? 2),
+                                route = (string)(evening.RouteName ?? ""),
+                                stops = $"{Convert.ToInt32(evening.StopsCount ?? 0)} Stops",
+                                students = Convert.ToInt32(evening.StudentsCount ?? 0),
                                 status = (string)(evening.Status ?? "Scheduled")
                             }
                         }
@@ -396,115 +326,47 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             }
             catch
             {
-                // Graceful fallback during remote DB connection timeouts
+                // No trips available on error
             }
 
             return new
             {
                 trips = new
                 {
-                    morningTrip = new
-                    {
-                        id = 101L,
-                        time = "07:15 AM - 08:30 AM",
-                        title = "Morning Pickup Operation",
-                        type = "Morning Pickup",
-                        route = "32 Habsiguda",
-                        stops = "4 Stops",
-                        students = 2,
-                        status = "Scheduled"
-                    },
-                    eveningTrip = new
-                    {
-                        id = 102L,
-                        time = "04:30 PM - 05:30 PM",
-                        title = "Evening Drop Operation",
-                        type = "Evening Drop",
-                        route = "32 Habsiguda",
-                        stops = "4 Stops",
-                        students = 2,
-                        status = "Scheduled"
-                    }
+                    morningTrip = (object?)null,
+                    eveningTrip = (object?)null
                 }
             };
         }
 
         public async Task<bool> StartTripAsync(long tripId, int staffId, CancellationToken ct = default)
         {
-            try
-            {
-                var c = Connection;
-                var cmd = new CommandDefinition(
-                    "sp_StartDriverTrip",
-                    new { p_TripId = tripId, p_StaffId = staffId },
-                    commandType: CommandType.StoredProcedure,
-                    cancellationToken: ct);
+            var c = Connection;
+            var cmd = new CommandDefinition(
+                "sp_StartDriverTrip",
+                new { p_TripId = tripId, p_StaffId = staffId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct);
 
-                var rows = await c.ExecuteScalarAsync<int>(cmd);
-                return rows > 0;
-            }
-            catch
-            {
-                return true;
-            }
+            var rows = await c.ExecuteScalarAsync<int>(cmd);
+            return rows > 0;
         }
 
         public async Task<bool> EndTripAsync(long tripId, int staffId, CancellationToken ct = default)
         {
-            try
-            {
-                var c = Connection;
-                var cmd = new CommandDefinition(
-                    "sp_EndDriverTrip",
-                    new { p_TripId = tripId, p_StaffId = staffId },
-                    commandType: CommandType.StoredProcedure,
-                    cancellationToken: ct);
+            var c = Connection;
+            var cmd = new CommandDefinition(
+                "sp_EndDriverTrip",
+                new { p_TripId = tripId, p_StaffId = staffId },
+                commandType: CommandType.StoredProcedure,
+                cancellationToken: ct);
 
-                var rows = await c.ExecuteScalarAsync<int>(cmd);
-                return rows > 0;
-            }
-            catch
-            {
-                return true;
-            }
+            var rows = await c.ExecuteScalarAsync<int>(cmd);
+            return rows > 0;
         }
 
         public async Task<object> GetRouteStudentsAsync(int staffId, CancellationToken ct = default)
         {
-            var fallbackStudents = new List<object>
-            {
-                new
-                {
-                    id = 101L,
-                    name = "K. Sai Teja",
-                    rollNo = "CSE24-102",
-                    @class = "B.Tech CSE - II Year",
-                    academicClass = "B.Tech CSE - II Year",
-                    stop = "Tarnaka Metro",
-                    time = "07:35 AM",
-                    pickupTime = "07:35 AM",
-                    parentName = "K. Venkat Rao",
-                    parentPhone = "+91 98480 12345",
-                    contact = "+91 98480 12345",
-                    status = "Pending"
-                },
-                new
-                {
-                    id = 102L,
-                    name = "V. Sneha Reddy",
-                    rollNo = "ECE24-208",
-                    @class = "B.Tech ECE - II Year",
-                    academicClass = "B.Tech ECE - II Year",
-                    stop = "Habsiguda Crossroads",
-                    time = "07:50 AM",
-                    pickupTime = "07:50 AM",
-                    parentName = "V. Mohan Reddy",
-                    parentPhone = "+91 94401 54321",
-                    contact = "+91 94401 54321",
-                    status = "Pending"
-                }
-            };
-
             try
             {
                 var c = Connection;
@@ -515,33 +377,28 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     cancellationToken: ct);
 
                 var rows = (await c.QueryAsync<dynamic>(cmd)).ToList();
-                if (rows.Count > 0)
+                var students = rows.Select(r => (object)new
                 {
-                    var students = rows.Select(r => (object)new
-                    {
-                        id = Convert.ToInt64(r.StudentId ?? 0L),
-                        name = (string)(r.StudentName ?? "Student"),
-                        rollNo = Convert.ToString(r.AdmissionNo ?? $"STU-{r.StudentId}"),
-                        @class = (string)(r.AcademicClass ?? "B.Tech CSE - II Year"),
-                        academicClass = (string)(r.AcademicClass ?? "B.Tech CSE - II Year"),
-                        stop = (string)(r.StopName ?? "Campus Gate"),
-                        time = (string)(r.PickupTime ?? "07:35 AM"),
-                        pickupTime = (string)(r.PickupTime ?? "07:35 AM"),
-                        parentName = (string)(r.ParentName ?? "Guardian"),
-                        parentPhone = (string)(r.ParentPhone ?? r.ContactNumber ?? "+91 98480 12345"),
-                        contact = (string)(r.ContactNumber ?? r.ParentPhone ?? "+91 98480 12345"),
-                        status = (string)(r.AttendanceStatus ?? "Pending")
-                    }).ToList();
+                    id = Convert.ToInt64(r.StudentId ?? 0L),
+                    name = (string)(r.StudentName ?? "Student"),
+                    rollNo = Convert.ToString(r.AdmissionNo ?? $"STU-{r.StudentId}"),
+                    @class = (string)(r.AcademicClass ?? ""),
+                    academicClass = (string)(r.AcademicClass ?? ""),
+                    stop = (string)(r.StopName ?? ""),
+                    time = (string)(r.PickupTime ?? ""),
+                    pickupTime = (string)(r.PickupTime ?? ""),
+                    parentName = (string)(r.ParentName ?? "Guardian"),
+                    parentPhone = (string)(r.ParentPhone ?? r.ContactNumber ?? ""),
+                    contact = (string)(r.ContactNumber ?? r.ParentPhone ?? ""),
+                    status = (string)(r.AttendanceStatus ?? "Pending")
+                }).ToList();
 
-                    return new { students = students };
-                }
+                return new { students = students };
             }
             catch
             {
-                // Graceful fallback during remote DB connection timeouts
+                return new { students = Array.Empty<object>() };
             }
-
-            return new { students = fallbackStudents };
         }
 
         public async Task<bool> UpdateStudentAttendanceAsync(long studentId, long tripId, string status, CancellationToken ct = default)

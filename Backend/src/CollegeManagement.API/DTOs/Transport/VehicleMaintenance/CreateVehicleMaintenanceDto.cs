@@ -12,7 +12,13 @@ namespace CollegeManagement.API.Dtos.Transport.VehicleMaintenance
 
         [JsonPropertyName("vehicleId")]
         [JsonConverter(typeof(FlexibleLongConverter))]
-        public long VehicleId { get; set; } = 1;
+        public long VehicleId { get; set; } = 0;
+
+        [JsonPropertyName("campusId")]
+        public int? CampusId { get; set; }
+
+        [JsonPropertyName("collegeId")]
+        public int? CollegeId { get; set; }
 
         [JsonPropertyName("selectFleetVehicle")]
         public string? SelectFleetVehicle

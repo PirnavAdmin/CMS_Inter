@@ -22,11 +22,11 @@ namespace CollegeManagement.API.Controllers
         {
             if (!filter.CampusId.HasValue || filter.CampusId.Value <= 0)
             {
-                var resolved = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request);
-                if (resolved.HasValue && resolved.Value > 0)
-                {
-                    filter.CampusId = resolved.Value;
-                }
+                filter.CampusId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCampusId(User, Request, filter.CampusId.HasValue ? (int)filter.CampusId.Value : null);
+            }
+            if (!filter.CollegeId.HasValue || filter.CollegeId.Value <= 0)
+            {
+                filter.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
             }
 
             var result = await _service.GetAllAsync(filter);
@@ -139,22 +139,7 @@ namespace CollegeManagement.API.Controllers
                 }
             }
 
-            var createDto = new CreatePickupPointDto
-            {
-                RouteId = dto.RouteId > 0 ? dto.RouteId : 0,
-                CampusId = dto.CampusId,
-                PickupPointName = !string.IsNullOrWhiteSpace(dto.PickupPointName) ? dto.PickupPointName : id,
-                Landmark = dto.Landmark ?? "",
-                Description = dto.Description,
-                SequenceNo = dto.SequenceNo > 0 ? dto.SequenceNo : 1,
-                PickupTime = dto.PickupTime,
-                DistanceFromStart = dto.DistanceFromStart,
-                Status = dto.Status
-            };
-
-            var newId = await _service.CreateAsync(createDto, null);
-            var newDto = await _service.GetByIdAsync(newId);
-            return Ok(new { success = true, message = "Pickup Point updated successfully.", data = newDto });
+            return NotFound(new { success = false, message = "Pickup point not found." });
         }
 
         [HttpDelete("{id}")]

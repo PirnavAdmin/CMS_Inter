@@ -318,6 +318,57 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
+        public async Task ValidateTransportResourceOwnershipAsync(string resourceType, long entityId, int collegeId, bool throwIfMissing = true)
+        {
+            if (entityId <= 0)
+            {
+                if (throwIfMissing) throw new NotFoundException("Transport resource not found.");
+                return;
+            }
+            if (collegeId <= 0) throw new ForbiddenException("Tenant context required.");
+
+            string key = (resourceType ?? string.Empty).Trim().ToLowerInvariant();
+            string? sql = key switch
+            {
+                "routes" => "SELECT CollegeId FROM TransportRoutes WHERE RouteId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "pickup-points" => "SELECT CollegeId FROM PickupPoints WHERE PickupPointId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "vehicles" => "SELECT CollegeId FROM TransportVehicles WHERE VehicleId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "drivers" => @"SELECT COALESCE(
+                                    (SELECT CollegeId FROM TransportDrivers WHERE DriverId = @Id AND IsDeleted = 0 LIMIT 1),
+                                    (SELECT c.CollegeId FROM Staff s INNER JOIN Campuses c ON c.CampusId = s.CampusId WHERE s.Id = @Id AND (s.IsDeleted = 0 OR s.IsDeleted IS NULL) LIMIT 1)
+                               ) LIMIT 1;",
+                "attendants" => @"SELECT COALESCE(
+                                    (SELECT CollegeId FROM TransportAttendants WHERE AttendantId = @Id AND IsDeleted = 0 LIMIT 1),
+                                    (SELECT c.CollegeId FROM Staff s INNER JOIN Campuses c ON c.CampusId = s.CampusId WHERE s.Id = @Id AND (s.IsDeleted = 0 OR s.IsDeleted IS NULL) LIMIT 1)
+                               ) LIMIT 1;",
+                "vehicle-assignments" => "SELECT CollegeId FROM TransportVehicleAssignments WHERE AssignmentId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "student-assignments" => "SELECT CollegeId FROM StudentTransportAssignments WHERE StudentTransportAssignmentId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "trips" => "SELECT CollegeId FROM TransportTrips WHERE TripId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "maintenance" => "SELECT CollegeId FROM VehicleMaintenances WHERE MaintenanceId = @Id AND IsDeleted = 0 LIMIT 1;",
+                "documents" => "SELECT CollegeId FROM TransportDriverDocuments WHERE DocumentId = @Id AND IsDeleted = 0 LIMIT 1;",
+                _ => null
+            };
+
+            if (sql == null) return;
+
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+
+            var ownerCollegeId = await conn.QueryFirstOrDefaultAsync<int?>(sql, new { Id = entityId });
+            if (!ownerCollegeId.HasValue)
+            {
+                if (throwIfMissing) throw new NotFoundException("Transport resource not found.");
+                return;
+            }
+
+            if (ownerCollegeId.Value != collegeId)
+            {
+                _logger.LogWarning("IDOR Block: CollegeId {CollegeId} attempted to access Transport {Resource} ID {EntityId} belonging to CollegeId {OwnerCollegeId}",
+                    collegeId, resourceType, entityId, ownerCollegeId.Value);
+                throw new ForbiddenException("Access denied: You do not have permission to view or manage transport resources of another college.");
+            }
+        }
+
         public async Task ValidateEntityOwnershipAsync<T>(int entityId, int collegeId) where T : class
         {
             if (entityId <= 0) throw new NotFoundException("Resource not found.");

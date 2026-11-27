@@ -212,6 +212,7 @@ apiClient.interceptors.request.use(
               window.localStorage.getItem("cms_selected_campus_id")
             );
       if (selectedCampusId) config.headers["X-Campus-Id"] = selectedCampusId;
+      if (u?.collegeId) config.headers["X-College-Id"] = String(u.collegeId);
       const clientIp = window.localStorage.getItem("cms_client_ip") || window.sessionStorage.getItem("cms_client_ip");
       if (clientIp) config.headers["X-Client-IP"] = clientIp;
     } catch {

@@ -1,8 +1,10 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 using CollegeManagement.API.Models;
@@ -15,17 +17,29 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
     public class VehicleMaintenanceRepository : IVehicleMaintenanceRepository
     {
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public VehicleMaintenanceRepository(AppDbContext context)
+        public VehicleMaintenanceRepository(AppDbContext context, IHttpContextAccessor? httpContextAccessor = null)
         {
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
+        private (int? collegeId, int? campusId) ResolveTenant(int? collegeOverride = null, int? campusOverride = null)
+        {
+            var user = _httpContextAccessor?.HttpContext?.User;
+            var req = _httpContextAccessor?.HttpContext?.Request;
+            int? collegeId = (collegeOverride > 0) ? collegeOverride : CampusContextResolver.ResolveCollegeId(user, req);
+            int? campusId = (campusOverride > 0) ? campusOverride : CampusContextResolver.ResolveCampusId(user, req);
+            return (collegeId, campusId);
+        }
+
         public async Task<(IEnumerable<VehicleMaintenanceDto> Items, int TotalCount)> GetAllAsync(VehicleMaintenanceFilterDto filter)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(filter.CollegeId, filter.CampusId);
             var all = await c.QueryAsync<VehicleMaintenanceDto>(
                 "sp_GetVehicleMaintenances",
                 new
@@ -34,7 +48,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_FromDate = filter.FromDate?.Date,
                     p_ToDate = filter.ToDate?.Date,
                     p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
-                    p_Search = filter.Search ?? ""
+                    p_Search = filter.Search ?? "",
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -47,15 +63,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<VehicleMaintenanceDto?> GetByIdAsync(long maintenanceId)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             return await c.QueryFirstOrDefaultAsync<VehicleMaintenanceDto>(
                 "sp_GetVehicleMaintenanceById",
-                new { p_Id = maintenanceId },
+                new { p_Id = maintenanceId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<long> CreateAsync(CreateVehicleMaintenanceDto dto, long createdBy)
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant(dto.CollegeId, dto.CampusId);
             return await c.ExecuteScalarAsync<long>(
                 "sp_CreateVehicleMaintenances",
                 new
@@ -69,7 +87,9 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_CreatedBy = createdBy,
-                    p_UpdatedBy = createdBy
+                    p_UpdatedBy = createdBy,
+                    p_CampusId = campusId,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -77,6 +97,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> UpdateAsync(long maintenanceId, UpdateVehicleMaintenanceDto dto, long updatedBy)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant(dto.CollegeId, dto.CampusId);
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_UpdateVehicleMaintenances",
                 new
@@ -91,7 +112,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_Remarks = dto.Remarks,
                     p_Status = dto.Status ? (byte)1 : (byte)0,
                     p_CreatedBy = (long?)null,
-                    p_UpdatedBy = updatedBy
+                    p_UpdatedBy = updatedBy,
+                    p_CollegeId = collegeId
                 },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
@@ -100,9 +122,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<bool> DeleteAsync(long maintenanceId, long updatedBy)
         {
             var c = Connection;
+            var (collegeId, _) = ResolveTenant();
             var rows = await c.QueryFirstOrDefaultAsync<int>(
                 "sp_DeleteVehicleMaintenances",
-                new { p_Id = maintenanceId, p_UpdatedBy = updatedBy },
+                new { p_Id = maintenanceId, p_UpdatedBy = updatedBy, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
             return rows > 0;
         }
@@ -110,8 +133,10 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<IEnumerable<VehicleMaintenanceLookupDto>> GetLookupAsync()
         {
             var c = Connection;
+            var (collegeId, campusId) = ResolveTenant();
             return await c.QueryAsync<VehicleMaintenanceLookupDto>(
                 "sp_GetVehicleMaintenanceLookup",
+                new { p_CampusId = campusId, p_CollegeId = collegeId },
                 commandType: CommandType.StoredProcedure);
         }
     }

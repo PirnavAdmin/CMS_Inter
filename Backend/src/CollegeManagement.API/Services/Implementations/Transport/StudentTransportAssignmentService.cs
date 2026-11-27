@@ -1,7 +1,9 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Common;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.StudentTransportAssignment;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
 
@@ -12,6 +14,7 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly IStudentTransportAssignmentRepository _repository;
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
         private static readonly string[] AllowedTransportTypes =
         {
@@ -22,10 +25,24 @@ namespace CollegeManagement.API.Services.Implementations
 
         public StudentTransportAssignmentService(
             IStudentTransportAssignmentRepository repository,
-            AppDbContext context)
+            AppDbContext context,
+            IHttpContextAccessor? httpContextAccessor = null)
         {
             _repository = repository;
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private async Task<List<int>?> GetTenantCampusIdsAsync(int? collegeOverride = null)
+        {
+            int? collegeId = (collegeOverride > 0)
+                ? collegeOverride
+                : CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+            if (!collegeId.HasValue || collegeId.Value <= 0) return null;
+            return await _context.Campuses.AsNoTracking()
+                .Where(c => c.CollegeId == collegeId.Value)
+                .Select(c => c.CampusId)
+                .ToListAsync();
         }
 
         // ---------------------------------------------------------
@@ -72,20 +89,30 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new ArgumentException("Admission number is required and must correspond to an active registered student.");
             }
 
-            var student = await _context.Students.AsNoTracking()
-                .FirstOrDefaultAsync(s => s.AdmissionNo == dto.AdmissionNo.Trim() && s.IsActive);
+            var tenantCampusIds = await GetTenantCampusIdsAsync(dto.CollegeId);
+            var trimmedAdm = dto.AdmissionNo.Trim();
+            var studentQuery = _context.Students.AsNoTracking()
+                .Where(s => s.AdmissionNo == trimmedAdm && s.IsActive);
+            if (tenantCampusIds != null)
+            {
+                studentQuery = studentQuery.Where(s => s.CampusId.HasValue && tenantCampusIds.Contains(s.CampusId.Value));
+            }
+            var student = await studentQuery.FirstOrDefaultAsync();
 
             if (student == null)
             {
-                throw new InvalidOperationException($"Student with admission number '{dto.AdmissionNo}' was not found or is not active in the CMS.");
+                throw new InvalidOperationException($"Student with admission number '{dto.AdmissionNo}' was not found or is not active in your college.");
             }
 
             dto.AdmissionNo = student.AdmissionNo;
+            if (!dto.CampusId.HasValue || dto.CampusId.Value <= 0) dto.CampusId = student.CampusId;
 
-            // Validate Route
-            if (dto.RouteId <= 0 || !await _context.TransportRoutes.AnyAsync(r => r.RouteId == dto.RouteId && !r.IsDeleted))
+            // Validate Route (must exist within same tenant campus if scoped)
+            var route = await _context.TransportRoutes.AsNoTracking()
+                .FirstOrDefaultAsync(r => r.RouteId == dto.RouteId && !r.IsDeleted);
+            if (route == null || (tenantCampusIds != null && route.CampusId.HasValue && !tenantCampusIds.Contains(route.CampusId.Value)))
             {
-                throw new InvalidOperationException($"Invalid or non-existent Route ID {dto.RouteId}.");
+                throw new InvalidOperationException($"Invalid or unauthorized Route ID {dto.RouteId}.");
             }
 
             // Resolve PickupPointId if missing or 0

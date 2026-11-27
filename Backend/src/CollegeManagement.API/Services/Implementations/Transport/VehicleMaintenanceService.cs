@@ -1,8 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.VehicleMaintenance;
+using CollegeManagement.API.Exceptions;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Services.Interfaces;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Services.Implementations
 {
@@ -10,13 +13,16 @@ namespace CollegeManagement.API.Services.Implementations
     {
         private readonly IVehicleMaintenanceRepository _repository;
         private readonly AppDbContext _context;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
         public VehicleMaintenanceService(
             IVehicleMaintenanceRepository repository,
-            AppDbContext context)
+            AppDbContext context,
+            IHttpContextAccessor? httpContextAccessor = null)
         {
             _repository = repository;
             _context = context;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         // ----------------------------------------------------
@@ -78,14 +84,23 @@ namespace CollegeManagement.API.Services.Implementations
         {
             ArgumentNullException.ThrowIfNull(dto);
 
-            if (createdBy <= 0)
-                createdBy = 1;
-
-            if (dto.VehicleId <= 0 || !await _context.TransportVehicles.AnyAsync(x => x.VehicleId == dto.VehicleId && !x.IsDeleted))
+            if (dto.VehicleId <= 0)
             {
-                var activeVehicle = await _context.TransportVehicles.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted && x.Status)
-                    ?? await _context.TransportVehicles.AsNoTracking().FirstOrDefaultAsync(x => !x.IsDeleted);
-                if (activeVehicle != null) dto.VehicleId = activeVehicle.VehicleId;
+                throw new ArgumentException("A valid VehicleId is required.");
+            }
+
+            var collegeId = dto.CollegeId ?? CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User, _httpContextAccessor?.HttpContext?.Request);
+            if (collegeId.HasValue && collegeId.Value > 0)
+            {
+                var vehicleOwned = await _context.TransportVehicles.AsNoTracking()
+                    .Join(_context.Campuses, v => v.CampusId, c => c.CampusId, (v, c) => new { v, c.CollegeId })
+                    .AnyAsync(x => x.v.VehicleId == dto.VehicleId && !x.v.IsDeleted && x.CollegeId == collegeId.Value)
+                    || (collegeId.Value == 1 && await _context.TransportVehicles.AsNoTracking().AnyAsync(v => v.VehicleId == dto.VehicleId && !v.IsDeleted && v.CampusId == null));
+
+                if (!vehicleOwned)
+                {
+                    throw new ForbiddenException("Access denied: Vehicle does not belong to your college.");
+                }
             }
 
             NormalizeCreateDto(dto);

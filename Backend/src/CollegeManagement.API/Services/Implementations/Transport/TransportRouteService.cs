@@ -107,9 +107,9 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            if (!dto.CampusId.HasValue)
+            if (!dto.CampusId.HasValue && existingRoute.CampusId.HasValue && existingRoute.CampusId.Value > 0)
             {
-                dto.CampusId = existingRoute.CampusId ?? 1;
+                dto.CampusId = existingRoute.CampusId.Value;
             }
 
             return await _repository.UpdateAsync(routeId, dto, userId);
