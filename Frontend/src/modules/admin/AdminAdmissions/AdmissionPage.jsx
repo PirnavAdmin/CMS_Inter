@@ -1838,10 +1838,6 @@ const readStudentFeeAssignmentId = (payload) => {
       "StudentFeeId",
       "feeAccountId",
       "FeeAccountId",
-      "assignmentId",
-      "AssignmentId",
-      "id",
-      "Id",
     );
     if (numericId(id)) return id;
   }
@@ -3102,6 +3098,8 @@ export default function AdmissionPage() {
   const clearToast = useCallback(() => setToastState({ message: "", type: "success" }), []);
   const [saving, setSaving] = useState(false);
   const [admissions, setAdmissions] = useState([]);
+  const [admissionsCampus, setAdmissionsCampus] = useState(null);
+  const [listRefreshError, setListRefreshError] = useState(null);
   const [listLoading, setListLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState({ year: "", group: "", status: "" });
@@ -3233,6 +3231,8 @@ export default function AdmissionPage() {
       .filter(Boolean)
   ), [campuses]);
   const selectedCampusValue = selectedCampusId || selectedCampus?.campusId || selectedCampus?.id || "";
+  const currentAdmissionsCampusRef = useRef(String(selectedCampusValue));
+  currentAdmissionsCampusRef.current = String(selectedCampusValue);
   const selectedCampusLabel = useMemo(() => (
     campusOptions.find((option) => String(option.value) === String(selectedCampusValue || values.campus || ""))?.label
     || (!isPlaceholderOption(selectedCampus?.name || selectedCampus?.campusName) ? String(selectedCampus?.name || selectedCampus?.campusName || "") : "")
@@ -3452,7 +3452,7 @@ export default function AdmissionPage() {
   const contextScopedAdmissions = useMemo(() => {
     const contextBoardValue = selectedContextBoardValue || selectedBoardId;
     const contextYearValue = selectedContextYearValue || selectedAcademicYearId;
-    return admissions.filter((row) => (
+    return (admissionsCampus === String(selectedCampusValue) ? admissions : []).filter((row) => (
       optionMatchesRecord(
         selectedCampusValue,
         campusOptions,
@@ -3480,6 +3480,7 @@ export default function AdmissionPage() {
     ));
   }, [
     admissions,
+    admissionsCampus,
     boardOptions,
     campusOptions,
     selectedAcademicYearId,
@@ -3831,22 +3832,29 @@ export default function AdmissionPage() {
   };
 
   const refreshAdmissions = useCallback(async ({ reportError = true } = {}) => {
+    const requestedCampus = String(admissionListParams.campusId || "");
+    if (currentAdmissionsCampusRef.current !== requestedCampus) return null;
     const requestId = admissionsRequestRef.current + 1;
     admissionsRequestRef.current = requestId;
     setListLoading(true);
     try {
       const response = await apiClient.get(apiEndpoints.admissions.getAll, { params: admissionListParams });
       const apiRows = getCollection(response.data).map(normalizeAdmissionRow);
-      if (admissionsRequestRef.current !== requestId) return apiRows;
+      if (admissionsRequestRef.current !== requestId || currentAdmissionsCampusRef.current !== requestedCampus) return null;
       setAdmissions(apiRows);
+      setAdmissionsCampus(requestedCampus);
+      setListRefreshError(null);
       return apiRows;
     } catch (err) {
-      if (reportError && admissionsRequestRef.current === requestId) {
+      if (admissionsRequestRef.current === requestId && currentAdmissionsCampusRef.current === requestedCampus) {
+        setListRefreshError({ campus: requestedCampus, message: getApiErrorMessage(err) });
+      }
+      if (reportError && admissionsRequestRef.current === requestId && currentAdmissionsCampusRef.current === requestedCampus) {
         setToast(`Unable to refresh admissions. Previously loaded records have been kept. ${getApiErrorMessage(err)}`, "error");
       }
       return null;
     } finally {
-      if (admissionsRequestRef.current === requestId) setListLoading(false);
+      if (admissionsRequestRef.current === requestId && currentAdmissionsCampusRef.current === requestedCampus) setListLoading(false);
     }
   }, [admissionListParams, setToast]);
 
@@ -5275,7 +5283,8 @@ export default function AdmissionPage() {
 
       let studentId = resolveApprovedStudentId(detail, detailRow.raw, detailRow, record.raw, record);
       let studentFeeId = readStudentFeeAssignmentId(detail) || readStudentFeeAssignmentId(record.raw || record);
-      if (!studentId && !studentFeeId && detailRow.admissionNo) {
+      const pendingWithoutFeeAccount = ["Pending", "Verified"].includes(normalizeAdmissionStatus(detailRow.status)) && !studentFeeId;
+      if (!pendingWithoutFeeAccount && !studentId && !studentFeeId && detailRow.admissionNo) {
         try {
           const ledgerResponse = await apiClient.get(apiEndpoints.fee.ledger);
           const matchingAccount = getCollection(ledgerResponse.data).find((account) => {
@@ -5294,7 +5303,7 @@ export default function AdmissionPage() {
           }
         }
       }
-      const feeDetailsEndpoint = studentId
+      const feeDetailsEndpoint = pendingWithoutFeeAccount ? "" : studentId
         ? apiEndpoints.fee.studentFeeDetailsByStudent(studentId)
         : studentFeeId ? apiEndpoints.fee.studentFeeDetails(studentFeeId) : "";
 
@@ -5597,13 +5606,29 @@ export default function AdmissionPage() {
     verifiedInFlightRef.current.add(admissionKey);
     setActionBusy(`Verified-${record.id}`);
     try {
-      await apiClient.post(apiEndpoints.admissions.verify(admissionId), admissionStatusBody(admissionId));
-      await refreshAdmissions();
-      setToast(`Admission ${record.admissionNo} verified successfully.`);
+      await apiClient.post(apiEndpoints.admissions.verify(admissionId), admissionStatusBody(admissionId), { skipNetworkRetry: true });
+      const refreshed = await refreshAdmissions({ reportError: false });
+      setToast(refreshed === null ? `Admission ${record.admissionNo} was verified, but the admission list could not be refreshed. Please refresh the list.` : `Admission ${record.admissionNo} verified successfully.`, refreshed === null ? "warning" : "success");
       setViewMode("list");
       setPage(1);
     } catch (err) {
-      setToast(`Admission verification failed: ${getApiErrorMessage(err)}`, "error");
+      const message = getApiErrorMessage(err);
+      try {
+        const response = await apiClient.get(apiEndpoints.admissions.getById(admissionId));
+        const latest = getObject(response.data);
+        const latestId = readId(latest, "admissionId", "AdmissionId", "id", "Id");
+        const latestStatus = readText(latest, "status", "Status", "admissionStatus", "AdmissionStatus");
+        if (String(latestId) === String(admissionId) && normalizeAdmissionStatus(latestStatus) === "Verified") {
+          const refreshed = await refreshAdmissions({ reportError: false });
+          setToast(`Admission ${record.admissionNo} is confirmed Verified, but the verification API returned an error: ${message}.${refreshed === null ? " The admission list could not be refreshed." : ""}`, "warning");
+          setViewMode("list");
+          setPage(1);
+        } else {
+          setToast(`Admission verification failed: ${message}`, "error");
+        }
+      } catch {
+        setToast(`Admission verification failed: ${message}. The current status could not be confirmed; check the admission before retrying.`, "error");
+      }
     } finally {
       verifiedInFlightRef.current.delete(admissionKey);
       setActionBusy("");
@@ -5828,6 +5853,7 @@ export default function AdmissionPage() {
             </div>
           </div>
 
+          {listRefreshError?.campus === String(selectedCampusValue) ? <p className="cms-error" role="status">Unable to refresh admissions. {admissionsCampus === String(selectedCampusValue) ? "Previously loaded records may be out of date." : "No records have been loaded for this campus."} {listRefreshError.message}</p> : null}
           <div className="cms-table-wrap">
             <table className="cms-table cms-admission-table">
               <colgroup>
