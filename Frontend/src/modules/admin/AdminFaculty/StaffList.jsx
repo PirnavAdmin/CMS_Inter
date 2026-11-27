@@ -291,7 +291,7 @@ const StaffList = () => {
   // Fetch Auto Employee ID
   const fetchNextId = async (staffType) => {
     try {
-      const res = await getNextEmployeeId(staffType);
+      const res = await getNextEmployeeId(staffType, activeCampusId);
       if (res.data?.nextEmployeeId) {
         return res.data.nextEmployeeId;
       }

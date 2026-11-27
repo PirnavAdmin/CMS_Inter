@@ -34,6 +34,14 @@ namespace CollegeManagement.API.Controllers.V1
             _realtimeEventService = realtimeEventService;
         }
 
+        private int? GetCollegeIdFromUser()
+        {
+            var val = User?.FindFirst("CollegeId")?.Value ?? User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(val, out var cid) && cid > 0)
+                return cid;
+            return null;
+        }
+
         /// <summary>
         /// 1. GET /api/v1/settings/templates
         /// Fetch all templates with pagination, keyword search, category filter, and active status filter.
@@ -49,7 +57,8 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] int? campusId = null,
             CancellationToken ct = default)
         {
-            var result = await _templateService.GetAllTemplatesAsync(pageNumber, pageSize, search, category, isActive, campusId, ct);
+            var collegeId = GetCollegeIdFromUser();
+            var result = await _templateService.GetAllTemplatesAsync(pageNumber, pageSize, search, category, isActive, campusId, ct, collegeId);
             return Ok(result);
         }
 
@@ -78,7 +87,8 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
 
-            var result = await _templateService.GetTemplateByIdAsync(id, campusId, ct);
+            var collegeId = GetCollegeIdFromUser();
+            var result = await _templateService.GetTemplateByIdAsync(id, campusId, ct, collegeId);
             if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
             return Ok(result);
@@ -97,7 +107,8 @@ namespace CollegeManagement.API.Controllers.V1
             if (string.IsNullOrWhiteSpace(templateCode))
                 return BadRequest(new { message = "Template code is required." });
 
-            var result = await _templateService.GetTemplateByCodeAsync(templateCode, campusId, ct);
+            var collegeId = GetCollegeIdFromUser();
+            var result = await _templateService.GetTemplateByCodeAsync(templateCode, campusId, ct, collegeId);
             if (result == null) return NotFound(new { message = $"Template with code '{templateCode}' not found." });
 
             return Ok(result);
@@ -118,7 +129,9 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
-                var result = await _templateService.CreateTemplateAsync(dto, campusId, ct);
+                var collegeId = GetCollegeIdFromUser();
+                if (collegeId.HasValue && (!dto.CollegeId.HasValue || dto.CollegeId.Value <= 0)) dto.CollegeId = collegeId.Value;
+            var result = await _templateService.CreateTemplateAsync(dto, campusId, ct, collegeId);
                 if (_realtimeEventService != null)
                 {
                     await _realtimeEventService.PublishDomainChangeAsync("Templates", "Created", campusId, result.Id.ToString());
@@ -151,6 +164,10 @@ namespace CollegeManagement.API.Controllers.V1
 
             try
             {
+                var collegeId = GetCollegeIdFromUser();
+                var existing = await _templateService.GetTemplateByIdAsync(id, campusId, ct, collegeId);
+                if (existing == null) return NotFound(new { message = $"Template with ID {id} not found." });
+
                 var result = await _templateService.UpdateTemplateAsync(id, dto, campusId, ct);
                 if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
@@ -183,6 +200,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
 
+            var collegeId = GetCollegeIdFromUser();
+            var existing = await _templateService.GetTemplateByIdAsync(id, campusId, ct, collegeId);
+            if (existing == null) return NotFound(new { message = $"Template with ID {id} not found." });
+
             var success = await _templateService.DeleteTemplateAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
 
@@ -205,6 +226,10 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> ToggleActive(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
+
+            var collegeId = GetCollegeIdFromUser();
+            var existing = await _templateService.GetTemplateByIdAsync(id, campusId, ct, collegeId);
+            if (existing == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
             var success = await _templateService.ToggleTemplateActiveAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
@@ -229,6 +254,10 @@ namespace CollegeManagement.API.Controllers.V1
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
 
+            var collegeId = GetCollegeIdFromUser();
+            var existing = await _templateService.GetTemplateByIdAsync(id, campusId, ct, collegeId);
+            if (existing == null) return NotFound(new { message = $"Template with ID {id} not found." });
+
             var result = await _templateService.DuplicateTemplateAsync(id, campusId, ct);
             if (result == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
@@ -252,6 +281,10 @@ namespace CollegeManagement.API.Controllers.V1
         public async Task<IActionResult> SetDefault(int id, [FromQuery] int? campusId = null, CancellationToken ct = default)
         {
             if (id <= 0) return BadRequest(new { message = "Invalid template ID." });
+
+            var collegeId = GetCollegeIdFromUser();
+            var existing = await _templateService.GetTemplateByIdAsync(id, campusId, ct, collegeId);
+            if (existing == null) return NotFound(new { message = $"Template with ID {id} not found." });
 
             var success = await _templateService.SetDefaultTemplateAsync(id, campusId, ct);
             if (!success) return NotFound(new { message = $"Template with ID {id} not found." });
@@ -304,7 +337,8 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
-                var result = await _templateService.RenderTemplateAsync(request, campusId, ct);
+                var collegeId = GetCollegeIdFromUser();
+            var result = await _templateService.RenderTemplateAsync(request, campusId, ct, collegeId);
                 return Ok(result);
             }
             catch (ValidationException ex)

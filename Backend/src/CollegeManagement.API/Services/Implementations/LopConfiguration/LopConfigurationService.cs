@@ -22,17 +22,17 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             _logger = logger;
         }
 
-        public async Task<LopPolicyDto> GetPolicyAsync(int? campusId = null, string? staffType = null, CancellationToken ct = default)
+        public async Task<LopPolicyDto?> GetPolicyAsync(int? campusId = null, string? staffType = null, CancellationToken ct = default, int? collegeId = null)
         {
-            return await _repository.GetPolicyAsync(campusId, staffType, ct);
+            return await _repository.GetPolicyAsync(campusId, staffType, ct, collegeId);
         }
 
-        public async Task<IEnumerable<LopPolicyDto>> GetAllPoliciesAsync(CancellationToken ct = default)
+        public async Task<IEnumerable<LopPolicyDto>> GetAllPoliciesAsync(CancellationToken ct = default, int? collegeId = null)
         {
-            return await _repository.GetAllPoliciesAsync(ct);
+            return await _repository.GetAllPoliciesAsync(ct, collegeId);
         }
 
-        public async Task<LopPolicyDto> SavePolicyAsync(SaveLopPolicyRequest request, int? userId = null, CancellationToken ct = default)
+        public async Task<LopPolicyDto> SavePolicyAsync(SaveLopPolicyRequest request, int? updatedByUserId = null, CancellationToken ct = default, int? collegeId = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
@@ -86,7 +86,7 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             request.DeductionComponent = string.Equals(request.DeductionComponent, "Basic", StringComparison.OrdinalIgnoreCase) ? "Basic" : "Gross";
             request.RoundingMode = NormalizeRoundingMode(request.RoundingMode);
 
-            return await _repository.SavePolicyAsync(request, userId, ct);
+            return await _repository.SavePolicyAsync(request, updatedByUserId, ct, collegeId);
         }
 
         public async Task<bool> DeletePolicyOverrideAsync(int policyId, CancellationToken ct = default)
@@ -94,10 +94,10 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             return await _repository.DeletePolicyOverrideAsync(policyId, ct);
         }
 
-        public async Task<LopRecordsResponseDto> GetRecordsWithKpisAsync(string? month = null, string? searchTerm = null, int? campusId = null, string? source = null, CancellationToken ct = default)
+        public async Task<LopRecordsResponseDto> GetRecordsWithKpisAsync(string? month = null, string? searchTerm = null, int? campusId = null, string? source = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
-            var records = (await _repository.GetStaffRecordsAsync(month, searchTerm, campusId, source, ct)).ToList();
-            var kpis = await _repository.GetKpisAsync(month, campusId, ct);
+            var records = (await _repository.GetStaffRecordsAsync(month, searchTerm, campusId, source, ct, collegeId, boardId, academicYearId)).ToList();
+            var kpis = await _repository.GetKpisAsync(month, campusId, ct, collegeId, boardId, academicYearId);
 
             if (records.Count > 0 && kpis.StaffWithLop == 0)
             {
@@ -119,9 +119,9 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             return await _repository.GetStaffRecordByIdAsync(id, ct);
         }
 
-        public async Task<LopKpisDto> GetKpisAsync(string? month = null, int? campusId = null, CancellationToken ct = default)
+        public async Task<LopKpisDto> GetKpisAsync(string? month = null, int? campusId = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _repository.GetKpisAsync(month, campusId, ct);
+            return await _repository.GetKpisAsync(month, campusId, ct, collegeId, boardId, academicYearId);
         }
 
         public async Task<LopStaffRecordDto> CreateRecordAsync(SaveLopStaffRecordRequest request, int? userId = null, CancellationToken ct = default)
@@ -223,9 +223,9 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             return await _repository.DeleteStaffRecordAsync(id, userId, ct);
         }
 
-        public async Task<IEnumerable<LopStaffDropdownDto>> GetStaffListAsync(int? campusId = null, CancellationToken ct = default)
+        public async Task<IEnumerable<LopStaffDropdownDto>> GetStaffListAsync(int? campusId = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
-            return await _repository.GetStaffListForLopAsync(campusId, ct);
+            return await _repository.GetStaffListForLopAsync(campusId, ct, collegeId, boardId, academicYearId);
         }
 
         // Backward-compatible signature used by StaffAttendanceRepository.GetMyAttendanceHistoryAsync
@@ -294,11 +294,14 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             string? staffType = null,
             int? departmentId = null,
             bool impactedOnly = false,
-            CancellationToken ct = default)
+            CancellationToken ct = default,
+            int? collegeId = null,
+            int? boardId = null,
+            int? academicYearId = null)
         {
             var targetMonth = string.IsNullOrWhiteSpace(month) ? DateTime.UtcNow.ToString("yyyy-MM") : month.Trim();
-            var policy = await _repository.GetPolicyAsync(campusId, staffType, ct);
-            var staffList = (await _repository.GetStaffListForLopAsync(campusId, ct)).ToList();
+            var policy = await _repository.GetPolicyAsync(campusId, staffType, ct, collegeId);
+            var staffList = (await _repository.GetStaffListForLopAsync(campusId, ct, collegeId, boardId, academicYearId)).ToList();
 
             if (!string.IsNullOrWhiteSpace(staffType) && !string.Equals(staffType, "All", StringComparison.OrdinalIgnoreCase))
             {
@@ -312,13 +315,15 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
                 staffList = staffList.Where(s => s.DepartmentId == departmentId.Value).ToList();
             }
 
-            var metricsMap = await _repository.GetMonthlyAttendanceMetricsAsync(targetMonth, policy, staffList, ct);
-            var savedRecords = (await _repository.GetStaffRecordsAsync(targetMonth, null, campusId, null, ct)).ToList();
+            var metricsMap = await _repository.GetMonthlyAttendanceMetricsAsync(targetMonth, policy, staffList, ct, collegeId);
+            var savedRecords = (await _repository.GetStaffRecordsAsync(targetMonth, null, campusId, null, ct, collegeId, boardId, academicYearId)).ToList();
             var recordsByStaff = savedRecords
                 .GroupBy(r => r.StaffId)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            var periodDays = GetPeriodDays(targetMonth, policy.Basis);
+            var effectiveBasis = policy?.Basis ?? "calendar";
+            var effectiveDeductionComponent = policy?.DeductionComponent ?? "Gross";
+            var periodDays = GetPeriodDays(targetMonth, effectiveBasis);
             var items = new List<LopDeductionPreviewDto>();
 
             foreach (var staff in staffList)
@@ -338,14 +343,16 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
                 metricsMap.TryGetValue(staffNumericId, out var m);
                 m ??= new StaffMonthlyAttendanceMetric { StaffId = staffNumericId, ShiftInfo = "Standard Shift" };
 
-                var (latePen, missedPen, absentLop, halfDayLop, policyLopDays) = CalculateFullAttendanceLop(
-                    policy,
-                    m.LateCount,
-                    m.MissedCheckoutCount,
-                    m.AbsentCount,
-                    m.HalfDayCount,
-                    targetMonth,
-                    periodDays);
+                var (latePen, missedPen, absentLop, halfDayLop, policyLopDays) = policy == null
+                    ? (0m, 0m, 0m, 0m, 0m)
+                    : CalculateFullAttendanceLop(
+                        policy,
+                        m.LateCount,
+                        m.MissedCheckoutCount,
+                        m.AbsentCount,
+                        m.HalfDayCount,
+                        targetMonth,
+                        periodDays);
 
                 recordsByStaff.TryGetValue(staff.StaffId, out var staffRecs);
                 staffRecs ??= new List<LopStaffRecordDto>();
@@ -368,7 +375,7 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
                     ? Math.Min(periodDays, overrideRec.LopDays)
                     : Math.Min(periodDays, effectivePolicyDays + manualAdded);
 
-                decimal baseSalary = string.Equals(policy.DeductionComponent, "Basic", StringComparison.OrdinalIgnoreCase)
+                decimal baseSalary = string.Equals(effectiveDeductionComponent, "Basic", StringComparison.OrdinalIgnoreCase)
                     ? staff.BasicPay
                     : staff.Salary;
 
@@ -410,8 +417,8 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
                     IsOverridden = overrideRec != null,
                     IsWaived = hasWaivedAuto,
                     LopDays = finalLopDays,
-                    DeductionComponent = policy.DeductionComponent,
-                    Basis = policy.Basis,
+                    DeductionComponent = effectiveDeductionComponent,
+                    Basis = effectiveBasis,
                     PeriodDays = periodDays,
                     PerDayRate = perDayRate,
                     Deduction = deduction,
@@ -443,11 +450,11 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             };
         }
 
-        public async Task<LopSyncRecordsResponseDto> SyncMonthlyRecordsAsync(LopSyncRecordsRequest request, int? userId = null, CancellationToken ct = default)
+        public async Task<LopSyncRecordsResponseDto> SyncMonthlyRecordsAsync(LopSyncRecordsRequest request, int? userId = null, CancellationToken ct = default, int? collegeId = null, int? boardId = null, int? academicYearId = null)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             var targetMonth = string.IsNullOrWhiteSpace(request.Month) ? DateTime.UtcNow.ToString("yyyy-MM") : request.Month.Trim();
-            var preview = await GetPreviewAsync(targetMonth, null, request.CampusId, null, null, false, ct);
+            var preview = await GetPreviewAsync(targetMonth, null, request.CampusId, null, null, false, ct, collegeId, boardId, academicYearId);
 
             int syncedCount = 0;
             decimal totalDays = 0m;
@@ -515,6 +522,7 @@ namespace CollegeManagement.API.Services.Implementations.LopConfiguration
             if (staff == null) return (0m, 0m);
 
             var policy = await _repository.GetPolicyAsync(staff.CampusId, staff.StaffType, ct);
+            if (policy == null) return (0m, 0m);
             var metricsMap = await _repository.GetMonthlyAttendanceMetricsAsync(targetMonth, policy, new[] { staff }, ct);
             metricsMap.TryGetValue(staffId, out var m);
 

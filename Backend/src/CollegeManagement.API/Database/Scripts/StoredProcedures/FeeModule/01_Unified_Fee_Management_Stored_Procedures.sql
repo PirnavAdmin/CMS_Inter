@@ -944,19 +944,8 @@ BEGIN
                 SET v_PairId = NULL;
             END IF;
 
-            -- Safety guard: do not modify 2nd-year amounts if students/admissions are already assigned to v_PairId
-            IF v_PairId IS NOT NULL THEN
-                SELECT
-                    (SELECT COUNT(*) FROM StudentFees WHERE FeeStructureId = v_PairId) +
-                    (SELECT COUNT(*) FROM Students WHERE FeeStructureId = v_PairId) +
-                    (SELECT COUNT(*) FROM StudentAdmissions WHERE FeeStructureId = v_PairId) +
-                    (SELECT COUNT(*) FROM AdmissionFeeAssignments WHERE FeeStructureId = v_PairId)
-                INTO v_PairRefs;
-
-                IF v_PairRefs > 0 THEN
-                    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'CONFLICT: Cannot update year configuration because students or admissions are already assigned to the 2nd-year fee structure.';
-                END IF;
-            END IF;
+            -- Note: Existing student fees have independent snapshots captured at admission,
+            -- so updating the fee structure template does not mutate historical student ledger records.
 
             -- Compute base total & target increment component from active 1st-year items
             SELECT COALESCE(SUM(Amount), 0.00) INTO v_BaseTotal

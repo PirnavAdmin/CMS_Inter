@@ -934,7 +934,7 @@ export default function ReportsPage() {
       const boardId = positiveId(selectedBoardId || selectedBoard?.id);
       const [boardsRes, yearsRes] = await Promise.allSettled([
         getReportBoards(campusId ? { campusId } : {}, { signal: controller.signal, skipGlobalLoader: true }),
-        getReportAcademicYears(boardId ? { boardId } : {}, { signal: controller.signal, skipGlobalLoader: true }),
+        getReportAcademicYears({ ...(boardId ? { boardId } : {}), ...(campusId ? { campusId } : {}) }, { signal: controller.signal, skipGlobalLoader: true }),
       ]);
       if (!mountedRef.current || controller.signal.aborted) return;
 

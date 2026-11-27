@@ -41,6 +41,8 @@ public class TransportService : ITransportService
             VehicleType = dto.VehicleType,
             Capacity = dto.Capacity,
             IsAC = dto.IsAC,
+            CampusId = dto.CampusId,
+            CollegeId = dto.CollegeId ?? 1,
             Status = dto.Status.Equals("Active", System.StringComparison.OrdinalIgnoreCase)
         };
 
@@ -59,6 +61,8 @@ public class TransportService : ITransportService
         vehicle.VehicleType = dto.VehicleType;
         vehicle.Capacity = dto.Capacity;
         vehicle.IsAC = dto.IsAC;
+        if (dto.CampusId.HasValue) vehicle.CampusId = dto.CampusId;
+        if (dto.CollegeId.HasValue && dto.CollegeId.Value > 0) vehicle.CollegeId = dto.CollegeId.Value;
         vehicle.Status = dto.Status.Equals("Active", System.StringComparison.OrdinalIgnoreCase);
 
         await _repository.SaveChangesAsync();
@@ -78,6 +82,7 @@ public class TransportService : ITransportService
     private static TransportVehicleDto MapToVehicleDto(TransportVehicle v) => new()
     {
         VehicleId = v.VehicleId,
+        CampusId = v.CampusId,
         VehicleNumber = v.VehicleNumber ?? string.Empty,
         RegistrationNumber = v.RegistrationNumber ?? string.Empty,
         VehicleType = v.VehicleType ?? "Bus",

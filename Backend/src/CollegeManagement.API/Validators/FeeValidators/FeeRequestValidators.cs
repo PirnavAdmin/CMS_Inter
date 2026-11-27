@@ -47,6 +47,29 @@ namespace CollegeManagement.API.Validators.FeeValidators
         }
     }
 
+    public class UpdateBothYearsFeeStructureRequestValidator : AbstractValidator<UpdateBothYearsFeeStructureRequest>
+    {
+        public UpdateBothYearsFeeStructureRequestValidator()
+        {
+            RuleFor(x => x.Items)
+                .NotEmpty().WithMessage("At least one fee structure item is required.");
+
+            RuleForEach(x => x.Items).SetValidator(new CreateFeeStructureItemRequestValidator());
+
+            RuleFor(x => x.YearFeeMode)
+                .Must(m => string.IsNullOrEmpty(m) || string.Equals(m.Trim(), "same", StringComparison.OrdinalIgnoreCase) || string.Equals(m.Trim(), "different", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("YearFeeMode must be 'same' or 'different'.");
+
+            RuleFor(x => x.IncrementType)
+                .Must(t => string.IsNullOrEmpty(t) || string.Equals(t.Trim(), "percentage", StringComparison.OrdinalIgnoreCase) || string.Equals(t.Trim(), "fixed", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("IncrementType must be 'percentage' or 'fixed'.");
+
+            RuleFor(x => x.IncrementValue)
+                .GreaterThanOrEqualTo(0).When(x => x.IncrementValue.HasValue)
+                .WithMessage("IncrementValue cannot be negative.");
+        }
+    }
+
     public class CreateFeeStructureItemRequestValidator : AbstractValidator<CreateFeeStructureItemRequest>
     {
         public CreateFeeStructureItemRequestValidator()

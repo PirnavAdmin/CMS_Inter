@@ -9,6 +9,7 @@ public class TransportVehicle
     [Key]
     public long VehicleId { get; set; }
 
+    public int CollegeId { get; set; } = 1;
     public int? CampusId { get; set; }
 
     public string? VehicleNumber { get; set; }

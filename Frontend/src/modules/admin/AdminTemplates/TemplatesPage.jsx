@@ -1348,12 +1348,12 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
             borderWidth: '2px',
           }}
         >
-          <div className="thumb-watermark-logo">PIRNAV</div>
+          <div className="thumb-watermark-logo">{template.collegeName || "COLLEGE"}</div>
 
           {/* Mini College Header */}
           <div className="thumb-header-area">
             <div className="thumb-college-title" style={{ color: template.borderColor || '#1e3a8a' }}>
-              PIRNAV COLLEGE
+              {template.collegeName || "COLLEGE NAME"}
             </div>
             <div className="thumb-college-sub">
               (Intermediate / Junior College)
@@ -1379,7 +1379,7 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
 
           {/* Mini Document Content Body */}
           <div className="thumb-mini-body-text">
-            This is to certify that <strong>Rahul Kumar</strong> (ADM-2026-0017) is a bonafide student of Pirnav College.
+            This is to certify that <strong>Rahul Kumar</strong> (ADM-2026-0017) is a bonafide student of {template.collegeName || "the College"}.
           </div>
 
           {/* Mini Footer: Place, QR, Seal, Signature */}
@@ -1395,7 +1395,7 @@ function TemplateCard({ template, onEdit, onPreview, onDownload, onDuplicate, on
             </div>
             <div className="thumb-footer-right">
               <span className="thumb-mini-sig-script">{template.signatureType || "Principal"}</span>
-              <span className="thumb-mini-sig-label">Pirnav College</span>
+              <span className="thumb-mini-sig-label">{template.collegeName || "College"}</span>
             </div>
           </div>
         </div>

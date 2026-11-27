@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -342,37 +342,9 @@ namespace CollegeManagement.API.Services.Implementations
             var targetCampusId = dto.CampusId.Value;
 
             var staffType = string.IsNullOrWhiteSpace(dto.StaffType) ? "Teaching" : dto.StaffType.Trim();
-
-            // Auto generate Employee ID if not supplied, or advance series sequence if supplied ID matches series
             string employeeId = dto.EmployeeId?.Trim() ?? string.Empty;
             var isTeachingStaff = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
             var activeSeriesCode = isTeachingStaff ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-
-            if (string.IsNullOrWhiteSpace(employeeId))
-            {
-                var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
-                if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
-                {
-                    employeeId = generatedDto.GeneratedNumber;
-                }
-                else
-                {
-                    employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, targetCampusId);
-                }
-            }
-            else
-            {
-                // Advance series sequence in database so subsequent staff creation increments properly
-                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(activeSeriesCode, targetCampusId);
-                if (seriesConfig != null && (!string.IsNullOrWhiteSpace(seriesConfig.Prefix) && employeeId.StartsWith(seriesConfig.Prefix, StringComparison.OrdinalIgnoreCase)))
-                {
-                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
-                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
-                    {
-                        employeeId = generatedDto.GeneratedNumber;
-                    }
-                }
-            }
 
             // Department resolution
             int? resolvedDepartmentId = dto.DepartmentId;
@@ -480,8 +452,8 @@ namespace CollegeManagement.API.Services.Implementations
                     string.Equals(staffType, "NonTeaching", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(staffType, "Non Teaching", StringComparison.OrdinalIgnoreCase))
                 {
-                    var cleanEmp = Regex.Replace(employeeId.ToLowerInvariant(), @"[^a-z0-9]", "");
-                    dto.Email = $"{cleanEmp}@college.local";
+                    var cleanName = Regex.Replace((dto.FirstName + dto.LastName).ToLowerInvariant(), @"[^a-z0-9]", "");
+                    dto.Email = $"{cleanName}_{Guid.NewGuid().ToString("N").Substring(0, 4)}@college.local";
                 }
                 else
                 {
@@ -489,31 +461,15 @@ namespace CollegeManagement.API.Services.Implementations
                 }
             }
 
-            if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
+            if (!string.IsNullOrWhiteSpace(employeeId))
             {
-                var isTeaching = !string.Equals(staffType?.Replace("-", ""), "NonTeaching", StringComparison.OrdinalIgnoreCase);
-                var seriesCode = isTeaching ? "TEACHING_STAFF_ID" : "NON_TEACHING_STAFF_ID";
-                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(seriesCode, dto.CampusId ?? 1);
-                var prefix = seriesConfig?.Prefix ?? (isTeaching ? "MTCH" : "MNT");
-
-                // If this matches the auto-generated series format and was taken concurrently, safely fetch the next fresh ID
-                if (employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-                    employeeId.StartsWith("PCTCH", StringComparison.OrdinalIgnoreCase) ||
-                    employeeId.StartsWith("PCNT", StringComparison.OrdinalIgnoreCase))
+                var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(activeSeriesCode, targetCampusId);
+                var prefix = seriesConfig?.Prefix ?? (isTeachingStaff ? "MTCH" : "MNT");
+                // If supplied employeeId does not match series prefix and already exists, fail early
+                if (!employeeId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && !await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
                 {
-                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(seriesCode, null, dto.CampusId ?? 1);
-                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber) && await _staffRepository.IsEmployeeIdUniqueAsync(generatedDto.GeneratedNumber))
-                    {
-                        employeeId = generatedDto.GeneratedNumber;
-                    }
-                    else
-                    {
-                        employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, dto.CampusId ?? 1);
-                    }
-                }
-
-                if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
                     throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(dto.Email))
@@ -728,7 +684,42 @@ namespace CollegeManagement.API.Services.Implementations
                     throw new ValidationException($"Role '{assignedRole.RoleName}' (RoleId: {assignedRole.RoleId}) cannot be assigned to a Staff account. Please select a valid Staff/Faculty role.");
                 }
 
-                // 2. Insert Staff domain record via EF Core inside this transaction
+                // 2. Auto generate Employee ID if not supplied, or advance series sequence if supplied ID matches series
+                if (string.IsNullOrWhiteSpace(employeeId))
+                {
+                    var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
+                    if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                    {
+                        employeeId = generatedDto.GeneratedNumber;
+                    }
+                    else
+                    {
+                        employeeId = await _staffRepository.GenerateNextEmployeeIdAsync(staffType, targetCampusId);
+                    }
+                }
+                else
+                {
+                    // Advance series sequence in database so subsequent staff creation increments properly
+                    var seriesConfig = await _numberSeriesService.GetSeriesByCodeAsync(activeSeriesCode, targetCampusId);
+                    if (seriesConfig != null && (!string.IsNullOrWhiteSpace(seriesConfig.Prefix) && employeeId.StartsWith(seriesConfig.Prefix, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        var generatedDto = await _numberSeriesService.GenerateNextNumberAsync(activeSeriesCode, null, targetCampusId);
+                        if (generatedDto != null && !string.IsNullOrWhiteSpace(generatedDto.GeneratedNumber))
+                        {
+                            employeeId = generatedDto.GeneratedNumber;
+                        }
+                    }
+                }
+
+                if (!await _staffRepository.IsEmployeeIdUniqueAsync(employeeId))
+                {
+                    await transaction.RollbackAsync();
+                    throw new ConflictException($"Employee ID '{employeeId}' is already registered.");
+                }
+
+                staff.EmployeeId = employeeId;
+
+                // 3. Insert Staff domain record via EF Core inside this transaction
                 staff.IsDriver = string.Equals(assignedRole?.RoleName?.Trim(), "Driver", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(assignedRole?.RoleName?.Trim(), "Bus Driver", StringComparison.OrdinalIgnoreCase);
                 await _staffRepository.AddAsync(staff);
@@ -1378,7 +1369,7 @@ namespace CollegeManagement.API.Services.Implementations
 
             var staffFullName = string.IsNullOrWhiteSpace(staff.MiddleName) ? $"{staff.FirstName} {staff.LastName}".Trim() : $"{staff.FirstName} {staff.MiddleName} {staff.LastName}".Trim();
 
-            var institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? (!string.IsNullOrWhiteSpace(staff.BoardName) ? staff.BoardName : "Pirnav College");
+            var institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? (!string.IsNullOrWhiteSpace(staff.BoardName) ? staff.BoardName : "the College");
             var portalBase = _configuration["InstitutionSettings:PortalUrl"] ?? "http://localhost:5173";
             var profileUrl = $"{portalBase.TrimEnd('/')}/mock-staff-portal/{staff.Id}";
 
@@ -2642,6 +2633,7 @@ namespace CollegeManagement.API.Services.Implementations
                 : "Teaching Staff";
 
             // Intermediate College defaults tailored to role
+            string institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? (!string.IsNullOrWhiteSpace(profile.CampusName) ? profile.CampusName : "The Institution");
             string documentHeading = isPrincipal
                 ? "EXECUTIVE APPOINTMENT & PRINCIPAL COMMISSION – INTERMEDIATE COLLEGE"
                 : isHOD
@@ -2651,7 +2643,7 @@ namespace CollegeManagement.API.Services.Implementations
                 : "OFFICIAL APPOINTMENT ORDER – JUNIOR COLLEGE FACULTY";
 
             string departmentOffice = isPrincipal
-                ? "OFFICE OF THE SECRETARY & GOVERNING BODY – PIRNAV EDUCATIONAL SOCIETY"
+                ? $"OFFICE OF THE SECRETARY & GOVERNING BODY – {institutionName.ToUpperInvariant()}"
                 : isNonTeaching
                 ? "OFFICE OF HUMAN RESOURCES & CAMPUS ADMINISTRATION"
                 : "DIRECTORATE OF INTERMEDIATE ACADEMICS & HUMAN RESOURCES";
@@ -2662,11 +2654,10 @@ namespace CollegeManagement.API.Services.Implementations
                 ? "Campus Principal / Administrative Officer"
                 : "Campus Principal";
 
-            string signatoryName = isPrincipal ? "N. Venkateswara Rao" : (isNonTeaching ? "P. R. Mohan" : "Dr. K. V. Ramanamurthy");
+            string signatoryName = _configuration["InstitutionSettings:SignatoryName"] ?? "Principal";
             string signatoryRole = isPrincipal ? "Secretary & Managing Trustee" : (isNonTeaching ? "Registrar / Administrative Officer" : "Director of Human Resources");
             string boardName = !string.IsNullOrWhiteSpace(profile.BoardName) ? profile.BoardName : "Board of Intermediate Education, Andhra Pradesh (BIEAP)";
             string primaryCampus = !string.IsNullOrWhiteSpace(profile.CampusName) ? profile.CampusName : "Main Campus (HQ)";
-            string institutionName = _configuration["InstitutionSettings:InstitutionName"] ?? "PIRNAV EDUCATIONAL SOCIETY";
 
             string openingStatement = isPrincipal
                 ? $"The Board of Governors is pleased to appoint you as Campus Principal & Executive Head of Institution for {primaryCampus}, with dual institutional purview over Intermediate academic instruction (BIEAP / TGBIE curriculum) and campus administrative operations."
@@ -4136,6 +4127,11 @@ namespace CollegeManagement.API.Services.Implementations
                     await conn.OpenAsync();
                 }
 
+                // Resolve CollegeId for this staff member from their campus
+                int? staffCollegeId = await conn.QueryFirstOrDefaultAsync<int?>(
+                    "SELECT CollegeId FROM `Campuses` WHERE `CampusId` = @CampusId LIMIT 1;",
+                    new { CampusId = staff.CampusId });
+
                 // Check if staff already has an active salary assignment
                 var existingAssignment = await conn.QueryFirstOrDefaultAsync<int?>(
                     "SELECT Id FROM `payroll_staff_salaries` WHERE `StaffId` = @StaffId AND `Status` = 'Active' LIMIT 1;",
@@ -4146,26 +4142,34 @@ namespace CollegeManagement.API.Services.Implementations
                     return; // Already provisioned
                 }
 
-                // Look for default structure for staff's designation or staff type
+                // Look for default structure scoped to this college (CollegeId isolation)
                 int? structureId = null;
+                string collegeFilter = staffCollegeId.HasValue ? " AND `CollegeId` = @CollegeId" : "";
+                object? collegeParam = staffCollegeId.HasValue ? (object)new { CollegeId = staffCollegeId.Value } : null;
+
                 if (staff.DesignationId.HasValue && staff.DesignationId.Value > 0)
                 {
                     structureId = await conn.QueryFirstOrDefaultAsync<int?>(
-                        "SELECT Id FROM `payroll_salary_structures` WHERE `DesignationId` = @DesignationId AND `Status` = 'Active' ORDER BY Id ASC LIMIT 1;",
-                        new { DesignationId = staff.DesignationId.Value });
+                        $"SELECT Id FROM `payroll_salary_structures` WHERE `DesignationId` = @DesignationId AND `Status` = 'Active'{collegeFilter} ORDER BY Id ASC LIMIT 1;",
+                        staffCollegeId.HasValue
+                            ? (object)new { DesignationId = staff.DesignationId.Value, CollegeId = staffCollegeId.Value }
+                            : new { DesignationId = staff.DesignationId.Value });
                 }
 
                 if (!structureId.HasValue && !string.IsNullOrWhiteSpace(staff.StaffType))
                 {
                     structureId = await conn.QueryFirstOrDefaultAsync<int?>(
-                        "SELECT Id FROM `payroll_salary_structures` WHERE `StaffType` = @StaffType AND `Status` = 'Active' ORDER BY Id ASC LIMIT 1;",
-                        new { StaffType = staff.StaffType });
+                        $"SELECT Id FROM `payroll_salary_structures` WHERE `StaffType` = @StaffType AND `Status` = 'Active'{collegeFilter} ORDER BY Id ASC LIMIT 1;",
+                        staffCollegeId.HasValue
+                            ? (object)new { StaffType = staff.StaffType, CollegeId = staffCollegeId.Value }
+                            : new { StaffType = staff.StaffType });
                 }
 
                 if (!structureId.HasValue)
                 {
                     structureId = await conn.QueryFirstOrDefaultAsync<int?>(
-                        "SELECT Id FROM `payroll_salary_structures` WHERE `Status` = 'Active' ORDER BY Id ASC LIMIT 1;");
+                        $"SELECT Id FROM `payroll_salary_structures` WHERE `Status` = 'Active'{collegeFilter} ORDER BY Id ASC LIMIT 1;",
+                        staffCollegeId.HasValue ? (object)new { CollegeId = staffCollegeId.Value } : null);
                 }
 
                 // If no structure exists at all in the database, auto-create a default base structure
@@ -4213,17 +4217,18 @@ namespace CollegeManagement.API.Services.Implementations
                     catch { }
                 }
 
-                // Assign to payroll_staff_salaries
+                // Assign to payroll_staff_salaries (CollegeId-scoped)
                 var assignSql = @"
                     INSERT INTO `payroll_staff_salaries`
-                    (`StaffId`, `SalaryStructureId`, `EffectiveFrom`, `Status`, `PaymentMode`, `BankName`, `AccountNumber`, `IFSCCode`, `PANNumber`, `UANNumber`, `CreatedAt`)
+                    (`StaffId`, `SalaryStructureId`, `CollegeId`, `EffectiveFrom`, `Status`, `PaymentMode`, `BankName`, `AccountNumber`, `IFSCCode`, `PANNumber`, `UANNumber`, `CreatedAt`)
                     VALUES
-                    (@StaffId, @SalaryStructureId, @EffectiveFrom, 'Active', 'Bank Transfer', @BankName, @AccountNumber, @IFSCCode, @PANNumber, @UANNumber, NOW());";
+                    (@StaffId, @SalaryStructureId, @CollegeId, @EffectiveFrom, 'Active', 'Bank Transfer', @BankName, @AccountNumber, @IFSCCode, @PANNumber, @UANNumber, NOW());";
 
                 await conn.ExecuteAsync(assignSql, new
                 {
                     StaffId = staff.Id,
                     SalaryStructureId = structureId.Value,
+                    CollegeId = staffCollegeId,
                     EffectiveFrom = staff.JoiningDate != default ? staff.JoiningDate.Date : DateTime.UtcNow.Date,
                     BankName = bankName,
                     AccountNumber = accountNo,
@@ -4339,8 +4344,9 @@ namespace CollegeManagement.API.Services.Implementations
         {
             try
             {
+                var callerCollegeId = ResolveCallerCollegeId();
                 var template = await _context.Templates.AsNoTracking()
-                    .FirstOrDefaultAsync(t => t.TemplateCode == "OFFER_LETTER_AUTOMATION_CONFIG");
+                    .FirstOrDefaultAsync(t => t.TemplateCode == "OFFER_LETTER_AUTOMATION_CONFIG" && (!callerCollegeId.HasValue || t.CollegeId == callerCollegeId.Value));
                 if (template != null && !string.IsNullOrWhiteSpace(template.ContentBody))
                 {
                     var config = JsonSerializer.Deserialize<OfferLetterWorkflowConfigDto>(template.ContentBody, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
@@ -4361,8 +4367,9 @@ namespace CollegeManagement.API.Services.Implementations
             dto.WorkflowPreference = string.Equals(dto.WorkflowPreference, "AdminApproval", StringComparison.OrdinalIgnoreCase)
                 ? "AdminApproval" : "Automatic";
 
+            var effectiveCollegeId = ResolveCallerCollegeId() ?? 1;
             var template = await _context.Templates
-                .FirstOrDefaultAsync(t => t.TemplateCode == "OFFER_LETTER_AUTOMATION_CONFIG");
+                .FirstOrDefaultAsync(t => t.TemplateCode == "OFFER_LETTER_AUTOMATION_CONFIG" && t.CollegeId == effectiveCollegeId);
 
             string json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
 
@@ -4373,6 +4380,7 @@ namespace CollegeManagement.API.Services.Implementations
                     TemplateCode = "OFFER_LETTER_AUTOMATION_CONFIG",
                     Title = "Offer Letter Automation & Workflow Preference",
                     Category = "OfferLetterConfig",
+                    CollegeId = effectiveCollegeId,
                     ContentBody = json,
                     PlaceholdersJson = "[]",
                     IsActive = true,
@@ -4402,12 +4410,18 @@ namespace CollegeManagement.API.Services.Implementations
 
         public async Task<List<StaffOnboardingRequestDto>> GetOfferLetterOnboardingRequestsAsync(string? status, int? campusId)
         {
+            var callerCollegeId = ResolveCallerCollegeId();
             var query = _context.Staffs.AsNoTracking()
                 .Include(s => s.DepartmentRef)
                 .Include(s => s.DesignationRef)
                 .Include(s => s.Campus)
                 .Include(s => s.BoardRef)
                 .Where(s => !s.IsDeleted);
+
+            if (callerCollegeId.HasValue && callerCollegeId.Value > 0)
+            {
+                query = query.Where(s => s.Campus != null && s.Campus.CollegeId == callerCollegeId.Value);
+            }
 
             if (campusId.HasValue && campusId.Value > 0)
             {

@@ -47,6 +47,14 @@ public class ReportsController : ControllerBase
         return resolvedCampusId > 0 ? resolvedCampusId : null;
     }
 
+    private int? GetCollegeIdFromUser()
+    {
+        var val = User?.FindFirst("CollegeId")?.Value ?? User?.FindFirst("collegeId")?.Value;
+        if (int.TryParse(val, out var cid) && cid > 0)
+            return cid;
+        return null;
+    }
+
     private ReportFilterDto PrepareFilter(ReportFilterDto? filter)
     {
         filter ??= new ReportFilterDto();
@@ -67,9 +75,11 @@ public class ReportsController : ControllerBase
     }
 
     [HttpGet("filters/academic-years")]
-    public async Task<IActionResult> GetAcademicYears([FromQuery] int? boardId = null, CancellationToken ct = default)
+    public async Task<IActionResult> GetAcademicYears([FromQuery] int? boardId = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
     {
-        var result = await _reportService.GetFilterAcademicYearsAsync(boardId, ct);
+        campusId = GetCampusIdFromRequest(campusId);
+        var collegeId = GetCollegeIdFromUser();
+        var result = await _reportService.GetFilterAcademicYearsAsync(boardId, campusId, collegeId, ct);
         return Ok(result);
     }
 

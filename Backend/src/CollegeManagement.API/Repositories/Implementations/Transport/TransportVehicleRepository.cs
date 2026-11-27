@@ -1,9 +1,11 @@
 using CollegeManagement.API.Data;
 using CollegeManagement.API.Dtos.Transport.Vehicle;
+using CollegeManagement.API.Exceptions;
 using CollegeManagement.API.Repositories.Interfaces;
 using CollegeManagement.API.Common;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using MySqlConnector;
 using System.Data;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,6 +34,28 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
 
         private IDbConnection Connection => _context.Database.GetDbConnection();
 
+        private async Task<int> ResolveVehicleCollegeIdAsync(IDbConnection c, int? campusId, int? requestedCollegeId)
+        {
+            if (campusId.HasValue && campusId.Value > 0)
+            {
+                var fromCampus = await c.ExecuteScalarAsync<int?>(
+                    "SELECT CollegeId FROM Campuses WHERE CampusId = @CampusId LIMIT 1;",
+                    new { CampusId = campusId.Value });
+                if (fromCampus.HasValue && fromCampus.Value > 0)
+                    return fromCampus.Value;
+            }
+            return requestedCollegeId ?? ResolveCollegeId() ?? 1;
+        }
+
+        private static Exception TranslateVehicleDbException(MySqlException ex, string vehicleNumber)
+        {
+            if (ex.Number == 1062)
+                return new ConflictException($"Vehicle number '{vehicleNumber}' already exists.");
+            if (ex.Number == 1452)
+                return new ValidationException("Referenced CampusId or foreign key does not exist.");
+            return ex;
+        }
+
         public async Task<PagedResult<TransportVehicleDto>> GetAllAsync(TransportVehicleFilterDto filter)
         {
             var c = Connection;
@@ -39,15 +63,17 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
             IEnumerable<TransportVehicleDto> items;
             try
             {
+                // Pass p_CampusId = NULL to SP so college-scoped records with CampusId IS NULL are also retrieved,
+                // then enforce (v.CampusId == filter.CampusId || v.CampusId == null) below.
                 const string sql5 = @"CALL sp_GetTransportVehicles(@p_Search, @p_VehicleType, @p_Status, @p_CampusId, @p_CollegeId);";
                 items = await c.QueryAsync<TransportVehicleDto>(
                     sql5,
                     new
                     {
                         p_Search = filter.Search ?? "",
-                        p_VehicleType = (string?)null,
+                        p_VehicleType = filter.VehicleType,
                         p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
-                        p_CampusId = filter.CampusId,
+                        p_CampusId = (int?)null,
                         p_CollegeId = collegeId
                     },
                     commandType: CommandType.Text);
@@ -60,17 +86,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     new
                     {
                         p_Search = filter.Search ?? "",
-                        p_VehicleType = (string?)null,
+                        p_VehicleType = filter.VehicleType,
                         p_Status = filter.Status.HasValue ? (filter.Status.Value ? (byte)1 : (byte)0) : (byte?)null,
-                        p_CampusId = filter.CampusId
+                        p_CampusId = (int?)null
                     },
                     commandType: CommandType.Text);
             }
 
             var list = items.AsQueryable();
+            if (collegeId.HasValue && collegeId.Value > 0)
+                list = list.Where(v => v.CollegeId == collegeId.Value || v.CollegeId == 0);
             if (filter.Status.HasValue) list = list.Where(x => x.Status == (filter.Status.Value ? "Active" : "Inactive"));
             if (filter.CampusId.HasValue && filter.CampusId.Value > 0)
-                list = list.Where(x => x.CampusId == filter.CampusId.Value);
+                list = list.Where(v => v.CampusId == filter.CampusId.Value || v.CampusId == null);
 
             var totalCount = list.Count();
             var paged = list.Skip((filter.PageNumber - 1) * filter.PageSize).Take(filter.PageSize).ToList();
@@ -80,16 +108,45 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
         public async Task<TransportVehicleDto?> GetByIdAsync(long vehicleId)
         {
             var c = Connection;
-            const string sql = "CALL sp_GetTransportVehiclesById(@p_Id);";
+            const string sql = @"
+                SELECT 
+                    v.VehicleId,
+                    v.CollegeId,
+                    v.VehicleNumber,
+                    COALESCE(v.VehicleRegistrationNo, v.RegistrationNumber, v.VehicleNumber) AS RegistrationNumber,
+                    COALESCE(v.VehicleName, v.VehicleNumber) AS VehicleName,
+                    v.VehicleType,
+                    COALESCE(v.Make, v.Manufacturer) AS Manufacturer,
+                    v.Model,
+                    v.ChassisNumber,
+                    v.EngineNumber,
+                    v.GpsDeviceId,
+                    v.InsuranceNumber,
+                    v.InsuranceExpiry,
+                    v.PollutionExpiry,
+                    v.FitnessExpiry,
+                    v.Capacity,
+                    v.IsAC,
+                    CASE WHEN v.Status = 1 THEN 'Active' ELSE 'Inactive' END AS Status,
+                    v.CreatedAt,
+                    v.CampusId,
+                    c.CampusName
+                FROM TransportVehicles v
+                LEFT JOIN Campuses c ON v.CampusId = c.CampusId
+                WHERE v.VehicleId = @Id AND v.IsDeleted = 0
+                LIMIT 1;";
             return await c.QueryFirstOrDefaultAsync<TransportVehicleDto>(
                 sql,
-                new { p_Id = vehicleId },
+                new { Id = vehicleId },
                 commandType: CommandType.Text);
         }
 
         public async Task<long> CreateAsync(CreateTransportVehicleDto dto, long? userId)
         {
             var c = Connection;
+            var collegeId = await ResolveVehicleCollegeIdAsync(c, dto.CampusId, dto.CollegeId);
+            long newId = 0;
+
             try
             {
                 const string sql20 = @"CALL sp_CreateTransportVehicles(
@@ -99,7 +156,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy, @p_CampusId
                 );";
 
-                var newId = await c.ExecuteScalarAsync<long>(sql20, new
+                newId = await c.ExecuteScalarAsync<long>(sql20, new
                 {
                     p_VehicleNumber = dto.VehicleNumber,
                     p_VehicleType = dto.VehicleType,
@@ -122,60 +179,80 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_UpdatedBy = userId,
                     p_CampusId = dto.CampusId
                 }, commandType: CommandType.Text);
-
-                if (newId > 0 && dto.CampusId.HasValue && dto.CampusId.Value > 0)
-                {
-                    await c.ExecuteAsync("UPDATE TransportVehicles SET CampusId = @CampusId WHERE VehicleId = @VehicleId AND (CampusId IS NULL OR CampusId != @CampusId);",
-                        new { CampusId = dto.CampusId.Value, VehicleId = newId });
-                }
-
-                return newId;
+            }
+            catch (MySqlException ex)
+            {
+                throw TranslateVehicleDbException(ex, dto.VehicleNumber);
             }
             catch (Exception ex) when (ex.Message.Contains("Incorrect number of arguments") || ex.Message.Contains("p_CampusId") || ex.Message.Contains("not found in the collection"))
             {
-                const string sql19 = @"CALL sp_CreateTransportVehicles(
-                    @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
-                    @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
-                    @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
-                    @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy
-                );";
-
-                var newId = await c.ExecuteScalarAsync<long>(sql19, new
+                try
                 {
-                    p_VehicleNumber = dto.VehicleNumber,
-                    p_VehicleType = dto.VehicleType,
-                    p_Capacity = dto.Capacity,
-                    p_IsActive = dto.Status ? (byte)1 : (byte)0,
-                    p_VehicleRegistrationNo = dto.RegistrationNumber,
-                    p_MaximumCapacity = dto.Capacity,
-                    p_Make = dto.Manufacturer,
-                    p_Model = dto.Model,
-                    p_YearOfManufacture = 0,
-                    p_ChassisNumber = dto.ChassisNumber,
-                    p_EngineNumber = dto.EngineNumber,
-                    p_InsuranceExpiry = dto.InsuranceExpiry,
-                    p_FitnessExpiry = dto.FitnessExpiry,
-                    p_PollutionExpiry = dto.PollutionExpiry,
-                    p_GpsDeviceId = dto.GpsDeviceId,
-                    p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
-                    p_InsuranceNumber = dto.InsuranceNumber,
-                    p_CreatedBy = userId,
-                    p_UpdatedBy = userId
-                }, commandType: CommandType.Text);
+                    const string sql19 = @"CALL sp_CreateTransportVehicles(
+                        @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
+                        @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
+                        @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
+                        @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy
+                    );";
 
-                if (newId > 0 && dto.CampusId.HasValue && dto.CampusId.Value > 0)
-                {
-                    await c.ExecuteAsync("UPDATE TransportVehicles SET CampusId = @CampusId WHERE VehicleId = @VehicleId;",
-                        new { CampusId = dto.CampusId.Value, VehicleId = newId });
+                    newId = await c.ExecuteScalarAsync<long>(sql19, new
+                    {
+                        p_VehicleNumber = dto.VehicleNumber,
+                        p_VehicleType = dto.VehicleType,
+                        p_Capacity = dto.Capacity,
+                        p_IsActive = dto.Status ? (byte)1 : (byte)0,
+                        p_VehicleRegistrationNo = dto.RegistrationNumber,
+                        p_MaximumCapacity = dto.Capacity,
+                        p_Make = dto.Manufacturer,
+                        p_Model = dto.Model,
+                        p_YearOfManufacture = 0,
+                        p_ChassisNumber = dto.ChassisNumber,
+                        p_EngineNumber = dto.EngineNumber,
+                        p_InsuranceExpiry = dto.InsuranceExpiry,
+                        p_FitnessExpiry = dto.FitnessExpiry,
+                        p_PollutionExpiry = dto.PollutionExpiry,
+                        p_GpsDeviceId = dto.GpsDeviceId,
+                        p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
+                        p_InsuranceNumber = dto.InsuranceNumber,
+                        p_CreatedBy = userId,
+                        p_UpdatedBy = userId
+                    }, commandType: CommandType.Text);
                 }
-
-                return newId;
+                catch (MySqlException sqlEx)
+                {
+                    throw TranslateVehicleDbException(sqlEx, dto.VehicleNumber);
+                }
             }
+
+            if (newId > 0)
+            {
+                await c.ExecuteAsync(@"
+                    UPDATE TransportVehicles
+                    SET CampusId = @CampusId,
+                        CollegeId = @CollegeId,
+                        RegistrationNumber = @RegNo,
+                        VehicleRegistrationNo = @RegNo,
+                        VehicleName = @VehicleName
+                    WHERE VehicleId = @VehicleId;",
+                    new
+                    {
+                        CampusId = dto.CampusId,
+                        CollegeId = collegeId,
+                        RegNo = dto.RegistrationNumber,
+                        VehicleName = dto.VehicleName,
+                        VehicleId = newId
+                    });
+            }
+
+            return newId;
         }
 
         public async Task<bool> UpdateAsync(long vehicleId, UpdateTransportVehicleDto dto, long? userId)
         {
             var c = Connection;
+            var collegeId = await ResolveVehicleCollegeIdAsync(c, dto.CampusId, dto.CollegeId);
+            int rows = 0;
+
             try
             {
                 const string sql20 = @"CALL sp_UpdateTransportVehicles(
@@ -185,7 +262,7 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy, @p_CampusId
                 );";
 
-                var rows = await c.QueryFirstOrDefaultAsync<int>(sql20, new
+                rows = await c.QueryFirstOrDefaultAsync<int>(sql20, new
                 {
                     p_Id = vehicleId,
                     p_VehicleNumber = dto.VehicleNumber,
@@ -209,56 +286,70 @@ namespace CollegeManagement.API.Repositories.Implementations.Transport
                     p_UpdatedBy = userId,
                     p_CampusId = dto.CampusId
                 }, commandType: CommandType.Text);
-
-                if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
-                {
-                    await c.ExecuteAsync("UPDATE TransportVehicles SET CampusId = @CampusId WHERE VehicleId = @VehicleId;",
-                        new { CampusId = dto.CampusId.Value, VehicleId = vehicleId });
-                }
-
-                return rows > 0;
+            }
+            catch (MySqlException ex)
+            {
+                throw TranslateVehicleDbException(ex, dto.VehicleNumber);
             }
             catch (Exception ex) when (ex.Message.Contains("Incorrect number of arguments") || ex.Message.Contains("p_CampusId") || ex.Message.Contains("not found in the collection"))
             {
-                const string sql19 = @"CALL sp_UpdateTransportVehicles(
-                    @p_Id, @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
-                    @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
-                    @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
-                    @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy
-                );";
-
-                var rows = await c.QueryFirstOrDefaultAsync<int>(sql19, new
+                try
                 {
-                    p_Id = vehicleId,
-                    p_VehicleNumber = dto.VehicleNumber,
-                    p_VehicleType = dto.VehicleType,
-                    p_Capacity = dto.Capacity,
-                    p_IsActive = dto.Status ? (byte)1 : (byte)0,
-                    p_VehicleRegistrationNo = dto.RegistrationNumber,
-                    p_MaximumCapacity = dto.Capacity,
-                    p_Make = dto.Manufacturer,
-                    p_Model = dto.Model,
-                    p_YearOfManufacture = 0,
-                    p_ChassisNumber = dto.ChassisNumber,
-                    p_EngineNumber = dto.EngineNumber,
-                    p_InsuranceExpiry = dto.InsuranceExpiry,
-                    p_FitnessExpiry = dto.FitnessExpiry,
-                    p_PollutionExpiry = dto.PollutionExpiry,
-                    p_GpsDeviceId = dto.GpsDeviceId,
-                    p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
-                    p_InsuranceNumber = dto.InsuranceNumber,
-                    p_CreatedBy = (long?)null,
-                    p_UpdatedBy = userId
-                }, commandType: CommandType.Text);
+                    const string sql19 = @"CALL sp_UpdateTransportVehicles(
+                        @p_Id, @p_VehicleNumber, @p_VehicleType, @p_Capacity, @p_IsActive, @p_VehicleRegistrationNo,
+                        @p_MaximumCapacity, @p_Make, @p_Model, @p_YearOfManufacture, @p_ChassisNumber,
+                        @p_EngineNumber, @p_InsuranceExpiry, @p_FitnessExpiry, @p_PollutionExpiry,
+                        @p_GpsDeviceId, @p_IsAC, @p_InsuranceNumber, @p_CreatedBy, @p_UpdatedBy
+                    );";
 
-                if (dto.CampusId.HasValue && dto.CampusId.Value > 0)
-                {
-                    await c.ExecuteAsync("UPDATE TransportVehicles SET CampusId = @CampusId WHERE VehicleId = @VehicleId;",
-                        new { CampusId = dto.CampusId.Value, VehicleId = vehicleId });
+                    rows = await c.QueryFirstOrDefaultAsync<int>(sql19, new
+                    {
+                        p_Id = vehicleId,
+                        p_VehicleNumber = dto.VehicleNumber,
+                        p_VehicleType = dto.VehicleType,
+                        p_Capacity = dto.Capacity,
+                        p_IsActive = dto.Status ? (byte)1 : (byte)0,
+                        p_VehicleRegistrationNo = dto.RegistrationNumber,
+                        p_MaximumCapacity = dto.Capacity,
+                        p_Make = dto.Manufacturer,
+                        p_Model = dto.Model,
+                        p_YearOfManufacture = 0,
+                        p_ChassisNumber = dto.ChassisNumber,
+                        p_EngineNumber = dto.EngineNumber,
+                        p_InsuranceExpiry = dto.InsuranceExpiry,
+                        p_FitnessExpiry = dto.FitnessExpiry,
+                        p_PollutionExpiry = dto.PollutionExpiry,
+                        p_GpsDeviceId = dto.GpsDeviceId,
+                        p_IsAC = dto.IsAC ? (byte)1 : (byte)0,
+                        p_InsuranceNumber = dto.InsuranceNumber,
+                        p_CreatedBy = (long?)null,
+                        p_UpdatedBy = userId
+                    }, commandType: CommandType.Text);
                 }
-
-                return rows > 0;
+                catch (MySqlException sqlEx)
+                {
+                    throw TranslateVehicleDbException(sqlEx, dto.VehicleNumber);
+                }
             }
+
+            var directRows = await c.ExecuteAsync(@"
+                UPDATE TransportVehicles
+                SET CampusId = COALESCE(@CampusId, CampusId),
+                    CollegeId = @CollegeId,
+                    RegistrationNumber = @RegNo,
+                    VehicleRegistrationNo = @RegNo,
+                    VehicleName = @VehicleName
+                WHERE VehicleId = @VehicleId;",
+                new
+                {
+                    CampusId = dto.CampusId,
+                    CollegeId = collegeId,
+                    RegNo = dto.RegistrationNumber,
+                    VehicleName = dto.VehicleName,
+                    VehicleId = vehicleId
+                });
+
+            return rows > 0 || directRows > 0;
         }
 
         public async Task<bool> DeleteAsync(long vehicleId, long? userId)

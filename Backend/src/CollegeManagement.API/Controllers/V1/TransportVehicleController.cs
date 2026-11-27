@@ -78,11 +78,11 @@ namespace CollegeManagement.API.Controllers
                 var result = await _service.GetByIdOrNumberAsync(id);
                 if (result != null) return Ok(result);
 
-                return Ok(new { success = false, message = "Vehicle not found." });
+                return NotFound(new { success = false, message = "Vehicle not found." });
             }
-            catch
+            catch (Exception ex)
             {
-                return Ok(new { success = false, message = "Vehicle not found." });
+                return BadRequest(new { success = false, message = ex.Message });
             }
         }
 
@@ -115,12 +115,27 @@ namespace CollegeManagement.API.Controllers
                     return BadRequest(new { success = false, message = "CampusId is required to create a vehicle. Please select a valid campus." });
                 }
 
+                if (!dto.CollegeId.HasValue || dto.CollegeId.Value <= 0)
+                {
+                    dto.CollegeId = CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+                }
+
                 var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
                 var id = await _service.CreateAsync(dto, userId);
-                _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "create", dto.CampusId, id.ToString());
-                var result = await _service.GetByIdAsync(id);
+                if (id <= 0)
+                {
+                    return BadRequest(new { success = false, message = "Vehicle creation failed. No vehicle ID was generated." });
+                }
 
-                return Ok(new
+                var result = await _service.GetByIdAsync(id);
+                if (result == null)
+                {
+                    return BadRequest(new { success = false, message = "Vehicle creation failed or created record could not be loaded." });
+                }
+
+                _ = _realtimeEventService?.PublishDomainChangeAsync("Transport", "create", dto.CampusId, id.ToString());
+
+                return StatusCode(StatusCodes.Status201Created, new
                 {
                     success = true,
                     message = "Vehicle created successfully.",
@@ -131,7 +146,15 @@ namespace CollegeManagement.API.Controllers
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
             }
+            catch (CollegeManagement.API.Exceptions.ConflictException ex)
+            {
+                return Conflict(new { success = false, message = ex.Message });
+            }
             catch (CollegeManagement.API.Exceptions.ValidationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (ArgumentException ex)
             {
                 return BadRequest(new { success = false, message = ex.Message });
             }
@@ -174,6 +197,13 @@ namespace CollegeManagement.API.Controllers
                         dto.CampusId = existing.CampusId;
                     }
 
+                    if (!dto.CollegeId.HasValue || dto.CollegeId.Value <= 0)
+                    {
+                        dto.CollegeId = existing.CollegeId > 0
+                            ? existing.CollegeId
+                            : CollegeManagement.API.Helpers.CampusContextResolver.ResolveCollegeId(User, Request);
+                    }
+
                     var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value is string s && long.TryParse(s, out var u) ? u : (long?)null;
                     var updated = await _service.UpdateAsync(existing.VehicleId, dto, userId);
                     if (updated)
@@ -190,7 +220,15 @@ namespace CollegeManagement.API.Controllers
             {
                 return StatusCode(StatusCodes.Status403Forbidden, new { success = false, message = ex.Message });
             }
+            catch (CollegeManagement.API.Exceptions.ConflictException ex)
+            {
+                return Conflict(new { success = false, message = ex.Message });
+            }
             catch (CollegeManagement.API.Exceptions.ValidationException ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+            catch (ArgumentException ex)
             {
                 return BadRequest(new { success = false, message = ex.Message });
             }

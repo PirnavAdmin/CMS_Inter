@@ -44,6 +44,22 @@ namespace CollegeManagement.API.Controllers.V1
             return null;
         }
 
+        private int? GetCollegeIdFromUser()
+        {
+            var val = User?.FindFirst("CollegeId")?.Value ?? User?.FindFirst("collegeId")?.Value;
+            if (int.TryParse(val, out var cid) && cid > 0)
+                return cid;
+            return null;
+        }
+
+        private int? ResolveIntParam(int? explicitVal, string headerName, string queryName)
+        {
+            if (explicitVal.HasValue && explicitVal.Value > 0) return explicitVal.Value;
+            if (Request.Headers.TryGetValue(headerName, out var hVal) && int.TryParse(hVal, out var hId) && hId > 0) return hId;
+            if (Request.Query.TryGetValue(queryName, out var qVal) && int.TryParse(qVal, out var qId) && qId > 0) return qId;
+            return null;
+        }
+
         private int? ResolveCampusId(int? explicitlyProvided = null)
         {
             if (explicitlyProvided.HasValue && explicitlyProvided.Value > 0)
@@ -68,8 +84,9 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
-                var policy = await _service.GetPolicyAsync(campusId, staffType, ct);
-                return Ok(new { success = true, data = policy });
+                var collegeId = GetCollegeIdFromUser();
+                var policy = await _service.GetPolicyAsync(campusId, staffType, ct, collegeId);
+                return Ok(new { success = true, data = policy, isConfigured = policy != null });
             }
             catch (Exception ex)
             {
@@ -86,7 +103,8 @@ namespace CollegeManagement.API.Controllers.V1
         {
             try
             {
-                var list = await _service.GetAllPoliciesAsync(ct);
+                var collegeId = GetCollegeIdFromUser();
+                var list = await _service.GetAllPoliciesAsync(ct, collegeId);
                 return Ok(new { success = true, data = list });
             }
             catch (Exception ex)
@@ -168,12 +186,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? staffType = null,
             [FromQuery] int? departmentId = null,
             [FromQuery] bool impactedOnly = false,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
             CancellationToken ct = default)
         {
             try
             {
+                var collegeId = GetCollegeIdFromUser();
                 var resolvedCampusId = campusId == 0 ? null : ResolveCampusId(campusId);
-                var preview = await _service.GetPreviewAsync(month, search, resolvedCampusId, staffType, departmentId, impactedOnly, ct);
+                var resolvedBoardId = ResolveIntParam(boardId, "X-Board-Id", "boardId");
+                var resolvedAcademicYearId = ResolveIntParam(academicYearId, "X-Academic-Year-Id", "academicYearId");
+                var preview = await _service.GetPreviewAsync(month, search, resolvedCampusId, staffType, departmentId, impactedOnly, ct, collegeId, resolvedBoardId, resolvedAcademicYearId);
                 return Ok(new { success = true, data = preview });
             }
             catch (Exception ex)
@@ -187,7 +210,7 @@ namespace CollegeManagement.API.Controllers.V1
         /// 3b. Sync Attendance-Calculated LOP into Persistent LOP Staff Records
         /// </summary>
         [HttpPost("sync-records")]
-        public async Task<IActionResult> SyncMonthlyRecords([FromBody] LopSyncRecordsRequest request, CancellationToken ct = default)
+        public async Task<IActionResult> SyncMonthlyRecords([FromBody] LopSyncRecordsRequest request, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null, CancellationToken ct = default)
         {
             try
             {
@@ -196,8 +219,11 @@ namespace CollegeManagement.API.Controllers.V1
                 {
                     request.CampusId = ResolveCampusId();
                 }
+                var collegeId = GetCollegeIdFromUser();
+                var resolvedBoardId = ResolveIntParam(boardId, "X-Board-Id", "boardId");
+                var resolvedAcademicYearId = ResolveIntParam(academicYearId, "X-Academic-Year-Id", "academicYearId");
                 var userId = GetCurrentUserId();
-                var result = await _service.SyncMonthlyRecordsAsync(request, userId, ct);
+                var result = await _service.SyncMonthlyRecordsAsync(request, userId, ct, collegeId, resolvedBoardId, resolvedAcademicYearId);
                 if (_realtimeEventService != null)
                 {
                     await _realtimeEventService.PublishDomainChangeAsync("LopConfiguration", "RecordsSynced", request.CampusId);
@@ -220,12 +246,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// 4. Staff Dropdown List with Active Salary Structure Details
         /// </summary>
         [HttpGet("staff")]
-        public async Task<IActionResult> GetStaffList([FromQuery] int? campusId = null, CancellationToken ct = default)
+        public async Task<IActionResult> GetStaffList([FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null, CancellationToken ct = default)
         {
             try
             {
+                var collegeId = GetCollegeIdFromUser();
                 var resolvedCampusId = campusId == 0 ? null : ResolveCampusId(campusId);
-                var staff = await _service.GetStaffListAsync(resolvedCampusId, ct);
+                var resolvedBoardId = ResolveIntParam(boardId, "X-Board-Id", "boardId");
+                var resolvedAcademicYearId = ResolveIntParam(academicYearId, "X-Academic-Year-Id", "academicYearId");
+                var staff = await _service.GetStaffListAsync(resolvedCampusId, ct, collegeId, resolvedBoardId, resolvedAcademicYearId);
                 return Ok(new { success = true, data = staff });
             }
             catch (Exception ex)
@@ -244,12 +273,17 @@ namespace CollegeManagement.API.Controllers.V1
             [FromQuery] string? search = null,
             [FromQuery] int? campusId = null,
             [FromQuery] string? source = null,
+            [FromQuery] int? boardId = null,
+            [FromQuery] int? academicYearId = null,
             CancellationToken ct = default)
         {
             try
             {
+                var collegeId = GetCollegeIdFromUser();
                 var resolvedCampusId = campusId == 0 ? null : ResolveCampusId(campusId);
-                var result = await _service.GetRecordsWithKpisAsync(month, search, resolvedCampusId, source, ct);
+                var resolvedBoardId = ResolveIntParam(boardId, "X-Board-Id", "boardId");
+                var resolvedAcademicYearId = ResolveIntParam(academicYearId, "X-Academic-Year-Id", "academicYearId");
+                var result = await _service.GetRecordsWithKpisAsync(month, search, resolvedCampusId, source, ct, collegeId, resolvedBoardId, resolvedAcademicYearId);
                 return Ok(new { success = true, data = result });
             }
             catch (Exception ex)
@@ -263,12 +297,15 @@ namespace CollegeManagement.API.Controllers.V1
         /// 6. Standalone KPI Cards
         /// </summary>
         [HttpGet("kpis")]
-        public async Task<IActionResult> GetKpis([FromQuery] string? month = null, [FromQuery] int? campusId = null, CancellationToken ct = default)
+        public async Task<IActionResult> GetKpis([FromQuery] string? month = null, [FromQuery] int? campusId = null, [FromQuery] int? boardId = null, [FromQuery] int? academicYearId = null, CancellationToken ct = default)
         {
             try
             {
+                var collegeId = GetCollegeIdFromUser();
                 var resolvedCampusId = campusId == 0 ? null : ResolveCampusId(campusId);
-                var kpis = await _service.GetKpisAsync(month, resolvedCampusId, ct);
+                var resolvedBoardId = ResolveIntParam(boardId, "X-Board-Id", "boardId");
+                var resolvedAcademicYearId = ResolveIntParam(academicYearId, "X-Academic-Year-Id", "academicYearId");
+                var kpis = await _service.GetKpisAsync(month, resolvedCampusId, ct, collegeId, resolvedBoardId, resolvedAcademicYearId);
                 return Ok(new { success = true, data = kpis });
             }
             catch (Exception ex)

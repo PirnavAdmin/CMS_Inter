@@ -160,10 +160,12 @@ public class ReportRepository : IReportRepository
         return QuerySpAsync<ReportFilterBoardDto>("sp_Report_Filter_Boards", p, ct);
     }
 
-    public Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, CancellationToken ct = default)
+    public Task<IReadOnlyList<ReportFilterAcademicYearDto>> GetFilterAcademicYearsAsync(int? boardId, int? campusId = null, int? collegeId = null, CancellationToken ct = default)
     {
         var p = new DynamicParameters();
         p.Add("p_BoardId", boardId.HasValue && boardId.Value > 0 ? boardId.Value : null, DbType.Int32);
+        p.Add("p_CampusId", campusId.HasValue && campusId.Value > 0 ? campusId.Value : null, DbType.Int32);
+        p.Add("p_CollegeId", collegeId.HasValue && collegeId.Value > 0 ? collegeId.Value : null, DbType.Int32);
         return QuerySpAsync<ReportFilterAcademicYearDto>("sp_Report_Filter_AcademicYears", p, ct);
     }
 

@@ -154,6 +154,8 @@ export default function CommonLOPPolicy({
   const [saved, setSaved] = useState(null);
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isConfigured, setIsConfigured] = useState(false);
+  const [isEditingNew, setIsEditingNew] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadTick, setReloadTick] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -191,7 +193,14 @@ export default function CommonLOPPolicy({
       controller.signal,
     )
       .then((policyData) => {
-        if (!policyData) throw new Error("No policy configuration returned by the server.");
+        if (!policyData) {
+          setIsConfigured(false);
+          setIsEditingNew(false);
+          setSaved(null);
+          setDraft(null);
+          return;
+        }
+        setIsConfigured(true);
         const normalized = {
           ...policyData,
           campusId: scopeCampusId ? Number(scopeCampusId) : (policyData.campusId ?? null),
@@ -324,6 +333,8 @@ export default function CommonLOPPolicy({
         maxLopDaysPerMonth: result?.maxLopDaysPerMonth ?? "",
       };
       setSaved(nextSaved);
+      setIsConfigured(true);
+      setIsEditingNew(false);
       setDraft(nextSaved);
       setActivePresetId("");
       setTouchedFields({});

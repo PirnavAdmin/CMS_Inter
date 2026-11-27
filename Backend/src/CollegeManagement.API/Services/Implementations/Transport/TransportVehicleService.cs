@@ -42,14 +42,19 @@ namespace CollegeManagement.API.Services.Implementations
                 throw new CollegeManagement.API.Exceptions.ValidationException("CampusId is required to create a vehicle. Please select a valid campus.");
             }
 
+            if (string.IsNullOrWhiteSpace(dto.VehicleNumber))
+            {
+                throw new CollegeManagement.API.Exceptions.ValidationException("Vehicle number is required.");
+            }
+
             var exists = await _repository.ExistsAsync(
                 dto.VehicleNumber,
                 dto.RegistrationNumber);
 
             if (exists)
             {
-                dto.VehicleNumber = $"{dto.VehicleNumber}-{Random.Shared.Next(10, 99)}";
-                dto.RegistrationNumber = $"{dto.RegistrationNumber}-{Random.Shared.Next(10, 99)}";
+                throw new CollegeManagement.API.Exceptions.ConflictException(
+                    $"Vehicle number '{dto.VehicleNumber}' or registration number '{dto.RegistrationNumber}' already exists.");
             }
 
             return await _repository.CreateAsync(dto, userId);
@@ -67,6 +72,22 @@ namespace CollegeManagement.API.Services.Implementations
                 {
                     throw new CollegeManagement.API.Exceptions.ValidationException($"Campus with ID {dto.CampusId.Value} does not exist or is inactive.");
                 }
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.VehicleNumber))
+            {
+                throw new CollegeManagement.API.Exceptions.ValidationException("Vehicle number is required.");
+            }
+
+            var exists = await _repository.ExistsAsync(
+                dto.VehicleNumber,
+                dto.RegistrationNumber,
+                vehicleId);
+
+            if (exists)
+            {
+                throw new CollegeManagement.API.Exceptions.ConflictException(
+                    $"Vehicle number '{dto.VehicleNumber}' or registration number '{dto.RegistrationNumber}' already exists.");
             }
 
             return await _repository.UpdateAsync(

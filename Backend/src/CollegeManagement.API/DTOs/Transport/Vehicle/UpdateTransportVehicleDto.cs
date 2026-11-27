@@ -7,48 +7,59 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
     public class UpdateTransportVehicleDto
     {
         private string _vehicleNumber = string.Empty;
-        private string _registrationNumber = string.Empty;
+        private string? _registrationNumber;
+        private string? _regNumber;
         private string _vehicleName = string.Empty;
+        private int? _capacity;
+        private int? _seatingCapacity;
 
         [JsonPropertyName("vehicleNumber")]
         public string VehicleNumber
         {
-            get => !string.IsNullOrWhiteSpace(_vehicleNumber) ? _vehicleNumber : $"BUS-{Random.Shared.Next(100, 999)}";
-            set => _vehicleNumber = value ?? string.Empty;
+            get => _vehicleNumber;
+            set => _vehicleNumber = value?.Trim() ?? string.Empty;
         }
 
         [JsonPropertyName("registrationNumber")]
         public string RegistrationNumber
         {
-            get => !string.IsNullOrWhiteSpace(_registrationNumber) ? _registrationNumber : $"REG-{Random.Shared.Next(1000, 9999)}";
-            set => _registrationNumber = value ?? string.Empty;
+            get => !string.IsNullOrWhiteSpace(_registrationNumber) ? _registrationNumber!
+                 : !string.IsNullOrWhiteSpace(_regNumber) ? _regNumber!
+                 : _vehicleNumber;
+            set => _registrationNumber = value?.Trim();
         }
 
         [JsonPropertyName("regNumber")]
         public string? RegNumber
         {
             get => RegistrationNumber;
-            set { if (!string.IsNullOrWhiteSpace(value)) RegistrationNumber = value; }
+            set => _regNumber = value?.Trim();
         }
 
         [JsonPropertyName("vehicleName")]
         public string VehicleName
         {
             get => !string.IsNullOrWhiteSpace(_vehicleName) ? _vehicleName : (!string.IsNullOrWhiteSpace(_vehicleNumber) ? _vehicleNumber : "College Bus");
-            set => _vehicleName = value ?? string.Empty;
+            set => _vehicleName = value?.Trim() ?? string.Empty;
         }
 
         [JsonPropertyName("vehicleType")]
         public string VehicleType { get; set; } = "Bus";
 
         [JsonPropertyName("capacity")]
-        public int Capacity { get; set; } = 40;
+        public int Capacity
+        {
+            get => (_capacity.HasValue && _capacity.Value > 0) ? _capacity.Value
+                 : (_seatingCapacity.HasValue && _seatingCapacity.Value > 0) ? _seatingCapacity.Value
+                 : (_capacity ?? _seatingCapacity ?? 40);
+            set => _capacity = value;
+        }
 
         [JsonPropertyName("seatingCapacity")]
         public int? SeatingCapacity
         {
             get => Capacity;
-            set { if (value.HasValue && value.Value > 0) Capacity = value.Value; }
+            set => _seatingCapacity = value;
         }
 
         [JsonPropertyName("isAC")]
@@ -106,6 +117,9 @@ namespace CollegeManagement.API.Dtos.Transport.Vehicle
 
         [JsonPropertyName("campusId")]
         public int? CampusId { get; set; }
+
+        [JsonPropertyName("collegeId")]
+        public int? CollegeId { get; set; }
     }
 }
 
