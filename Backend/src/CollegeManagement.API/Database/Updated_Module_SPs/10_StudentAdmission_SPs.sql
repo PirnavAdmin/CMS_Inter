@@ -723,15 +723,37 @@ CREATE PROCEDURE `sp_VerifyStudentAdmission`
     IN p_AdmissionId INT
 )
 BEGIN
-    UPDATE `StudentAdmissions`
-    SET `IsVerified` = 1,
-        `Status` = 'Verified',
-        `UpdatedAt` = CURRENT_TIMESTAMP(6)
-    WHERE `AdmissionId` = p_AdmissionId
-      AND `IsActive` = 1
-      AND `IsRejected` = 0;
+    DECLARE v_CurrentStatus VARCHAR(30);
+    DECLARE v_IsVerified TINYINT(1);
+    DECLARE v_IsRejected TINYINT(1);
+    DECLARE v_IsApproved TINYINT(1);
 
-    SELECT ROW_COUNT() AS AffectedRows;
+    SELECT Status, IsVerified, IsRejected, IsApproved
+    INTO v_CurrentStatus, v_IsVerified, v_IsRejected, v_IsApproved
+    FROM `StudentAdmissions`
+    WHERE `AdmissionId` = p_AdmissionId AND `IsActive` = 1
+    LIMIT 1;
+
+    IF v_CurrentStatus IS NULL THEN
+        SELECT 0 AS AffectedRows;
+    ELSEIF v_IsRejected = 1 OR v_CurrentStatus = 'Rejected' THEN
+        SELECT 0 AS AffectedRows;
+    ELSEIF v_IsApproved = 1 OR v_CurrentStatus = 'Approved' OR v_IsVerified = 1 OR v_CurrentStatus = 'Verified' THEN
+        -- Already verified or approved: idempotent success
+        SELECT 1 AS AffectedRows;
+    ELSEIF v_CurrentStatus IN ('Pending', 'Submitted', 'Request Approved') THEN
+        UPDATE `StudentAdmissions`
+        SET `IsVerified` = 1,
+            `Status` = 'Verified',
+            `UpdatedAt` = CURRENT_TIMESTAMP(6)
+        WHERE `AdmissionId` = p_AdmissionId
+          AND `IsActive` = 1
+          AND `IsRejected` = 0;
+
+        SELECT ROW_COUNT() AS AffectedRows;
+    ELSE
+        SELECT 0 AS AffectedRows;
+    END IF;
 END //
 
 -- =============================================================================

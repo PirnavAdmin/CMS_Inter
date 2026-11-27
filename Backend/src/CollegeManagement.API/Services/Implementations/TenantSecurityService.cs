@@ -86,6 +86,38 @@ namespace CollegeManagement.API.Services.Implementations
             }
         }
 
+        public async Task ValidateAdmissionOwnershipAsync(int admissionId, int collegeId)
+        {
+            if (admissionId <= 0) throw new NotFoundException("Admission not found.");
+            if (collegeId <= 0) throw new ForbiddenException("Tenant context required.");
+
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != ConnectionState.Open) await conn.OpenAsync();
+
+            var admission = await conn.QueryFirstOrDefaultAsync<dynamic>(
+                "SELECT CampusId, SourceCampusId, IsReferral FROM StudentAdmissions WHERE AdmissionId = @AdmissionId AND IsActive = 1;",
+                new { AdmissionId = admissionId });
+
+            if (admission == null)
+            {
+                throw new NotFoundException($"Student admission with ID {admissionId} not found.");
+            }
+
+            var campuses = await GetCampusesForCollegeAsync(collegeId);
+            int? campusId = (int?)admission.CampusId;
+            int? sourceCampusId = (int?)admission.SourceCampusId;
+
+            bool isOwned = (campusId.HasValue && campuses.Contains(campusId.Value)) ||
+                           (sourceCampusId.HasValue && campuses.Contains(sourceCampusId.Value));
+
+            if (!isOwned)
+            {
+                _logger.LogWarning("IDOR Block: CollegeId {CollegeId} attempted to access AdmissionId {AdmissionId} belonging to CampusId {CampusId}/SourceCampusId {SourceCampusId}",
+                    collegeId, admissionId, campusId, sourceCampusId);
+                throw new ForbiddenException("Access denied: You do not have permission to view or manage student admissions of another college.");
+            }
+        }
+
         public async Task ValidateStaffOwnershipAsync(int staffId, int collegeId)
         {
             if (staffId <= 0) throw new NotFoundException("Staff member not found.");
