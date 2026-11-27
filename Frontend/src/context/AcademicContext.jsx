@@ -214,13 +214,13 @@ export function AcademicProvider({ children }) {
     const pool = boards.length ? boards : allBoards;
     const board = typeof boardOrId === "object" && boardOrId !== null 
       ? boardOrId 
-      : pool.find((item) => String(item.id) === String(boardOrId) || String(item.code) === String(boardOrId) || String(item.name) === String(boardOrId)) ?? null;
+      : pool.find((item) => item && (String(item.id) === String(boardOrId) || String(item.code) === String(boardOrId) || String(item.name) === String(boardOrId))) ?? null;
     setSelectedBoardState(board);
     persist(getTenantKey(BOARD_STORAGE_KEY), board);
   }, [boards, allBoards]);
 
   const setSelectedAcademicYear = useCallback((yearOrId) => {
-    const year = typeof yearOrId === "object" && yearOrId !== null ? yearOrId : academicYears.find((item) => String(item.id) === String(yearOrId) || normalize(item.code) === normalize(yearOrId) || normalize(item.name) === normalize(yearOrId)) ?? null;
+    const year = typeof yearOrId === "object" && yearOrId !== null ? yearOrId : academicYears.find((item) => item && (String(item.id) === String(yearOrId) || normalize(item.code) === normalize(yearOrId) || normalize(item.name) === normalize(yearOrId))) ?? null;
     setSelectedAcademicYearState(year);
     persist(getTenantKey(YEAR_STORAGE_KEY), year);
   }, [academicYears]);
