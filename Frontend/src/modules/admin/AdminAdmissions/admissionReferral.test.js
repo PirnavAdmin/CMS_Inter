@@ -59,6 +59,136 @@ const admissionSource = (await readFile(new URL("./AdmissionPage.jsx", import.me
 const clientSource = await readFile(new URL("../../../api/apiClient.js", import.meta.url), "utf8");
 const section = (source, start, end) => source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
 
+function pincodeFixture(initial = {}) {
+  let effect;
+  let timer;
+  const requests = [];
+  const toasts = [];
+  const context = vm.createContext({
+    values: { ...initial }, viewMode: "form", pincodeRequestRef: { current: 0 },
+    lastLocationLookupRef: { current: initial.restored ? { pincode: initial.pincode, restored: true } : null },
+    useEffect: (callback) => { effect = callback; },
+    window: { setTimeout: (callback, delay) => { assert.equal(delay, 450); timer = callback; return 1; }, clearTimeout() { timer = null; } },
+    apiEndpoints: { location: { byPincode: (pin) => `/pincode/${pin}` } },
+    apiClient: { get: (url) => new Promise((resolve, reject) => requests.push({ url, resolve, reject })) },
+    readText: (data, ...keys) => String(keys.map((key) => data?.[key]).find(Boolean) || ""),
+    setToast: (message) => toasts.push(message),
+    setValues(updater) {
+      const before = context.values;
+      const first = updater(before);
+      const second = updater(before);
+      assert.deepEqual(first, second, "React updater must remain pure under replay");
+      context.values = second;
+    },
+    setErrors() {}, fieldByName: { pincode: {} },
+    sanitizeValue: (_, value) => String(value).replace(/\D/g, "").slice(0, 6),
+  });
+  const start = admissionSource.indexOf("const INDIAN_ADDRESS_STATES =");
+  const end = admissionSource.indexOf("\nconst ", admissionSource.indexOf("};", start) + 2);
+  vm.runInContext(admissionSource.slice(start, end), context);
+  const lookup = section(admissionSource, '  useEffect(() => {\n    if (viewMode !== "form") return undefined;\n    const pincode =', "\n  const fee = deriveAdmissionFee(values);");
+  vm.runInContext(lookup, context);
+  const changeStart = admissionSource.indexOf('    if (name === "pincode") {', admissionSource.indexOf("  const setValue ="));
+  const changeEnd = admissionSource.indexOf('    if (name === "campus"', changeStart);
+  vm.runInContext(`globalThis.changePincode = (val) => { const name = "pincode"; ${admissionSource.slice(changeStart, changeEnd)} };`, context);
+  return { context, requests, toasts, runEffect: () => effect(), fire: async () => { const callback = timer; timer = null; if (callback) await callback(); }, hasTimer: () => Boolean(timer) };
+}
+
+test("pincode changes replace location, preserve other address fields and use pure state updates", async () => {
+  const f = pincodeFixture({ houseDoorNumber: "12", streetVillage: "Main Road" });
+  f.context.changePincode("500001");
+  let cleanup = f.runEffect();
+  let pending = f.fire();
+  assert.equal(f.requests[0].url, "/pincode/500001");
+  f.requests[0].resolve({ data: { city: "Hyderabad City", district: "Hyderabad", state: "Telangana" } });
+  await pending;
+  assert.equal(f.context.values.city, "Hyderabad City");
+  cleanup();
+  f.context.changePincode("110001");
+  assert.equal(f.context.values.city, "");
+  cleanup = f.runEffect();
+  pending = f.fire();
+  f.requests[1].resolve({ data: { city: "New Delhi Central", district: "Central Delhi", state: "Delhi" } });
+  await pending;
+  assert.deepEqual([f.context.values.city, f.context.values.district, f.context.values.state], ["New Delhi Central", "Central Delhi", "Delhi"]);
+  assert.equal(f.context.values.houseDoorNumber, "12");
+  assert.equal(f.context.values.streetVillage, "Main Road");
+  cleanup();
+});
+
+test("restored and manually corrected locations persist until pincode changes", async () => {
+  const f = pincodeFixture({ restored: true, pincode: "500001", city: "Custom", district: "Hyderabad", state: "Telangana" });
+  f.runEffect();
+  assert.equal(f.hasTimer(), false);
+  f.context.changePincode("110001");
+  f.runEffect();
+  const pending = f.fire();
+  f.requests[0].resolve({ data: { city: "New Delhi Central", district: "Central Delhi", state: "Delhi" } });
+  await pending;
+  f.context.values.city = "Manual correction";
+  f.runEffect();
+  assert.equal(f.hasTimer(), false);
+  assert.equal(f.context.values.city, "Manual correction");
+});
+
+test("invalid pincodes, failed lookup and stale responses do not retain an old verified location", async () => {
+  const f = pincodeFixture({ restored: true, pincode: "500001", city: "Old", district: "Old", state: "Telangana" });
+  f.context.changePincode("");
+  f.runEffect();
+  assert.equal(f.context.values.city, "");
+  f.context.changePincode("012345");
+  f.runEffect();
+  assert.equal(f.hasTimer(), false);
+  f.context.changePincode("500001");
+  const cleanup = f.runEffect();
+  const old = f.fire();
+  f.context.changePincode("110001");
+  cleanup();
+  f.runEffect();
+  const latest = f.fire();
+  f.requests[1].reject(new Error("offline"));
+  await latest;
+  f.requests[0].resolve({ data: { city: "Old", district: "Old", state: "Telangana" } });
+  await old;
+  assert.equal(f.context.values.city, "");
+  assert.match(f.toasts[0], /manually/);
+});
+
+test("clear and re-enter performs a new lookup, including another district in the same state", async () => {
+  const f = pincodeFixture({ pincode: "500001", city: "Hyderabad City", district: "Hyderabad", state: "Telangana", restored: true });
+  f.context.changePincode("");
+  f.runEffect();
+  f.context.changePincode("506001");
+  f.runEffect();
+  const pending = f.fire();
+  f.requests[0].resolve({ data: { city: "Warangal", district: "Warangal", state: "Telangana" } });
+  await pending;
+  assert.equal(f.context.values.district, "Warangal");
+  assert.equal(f.context.values.state, "Telangana");
+});
+
+test("successful pincode state is used in the actual admission payload", async () => {
+  const f = pincodeFixture({ houseDoorNumber: "12", streetVillage: "Main Road" });
+  f.context.changePincode("110001");
+  f.runEffect();
+  const pending = f.fire();
+  f.requests[0].resolve({ data: { city: "New Delhi Central", district: "Central Delhi", state: "Delhi" } });
+  await pending;
+  const payloadContext = vm.createContext({ FormData, File: globalThis.File, appendReferralFields() {},
+    appendIfPresent: (form, key, value) => { if (value != null && value !== "") form.append(key, String(value)); },
+    toDateTime: () => "", studentMobileValue: () => "", numericId: () => "", toAdmissionPaymentPlan: () => "",
+    transportRequiredPayloadValue: () => "", console });
+  const source = section(admissionSource, "const buildAdmissionFormData =", "const debugAdmissionSubmitPayload =")
+    .replace("const buildAdmissionFormData =", "globalThis.buildAdmissionFormData =").replace("import.meta.env.DEV", "false");
+  vm.runInContext(source, payloadContext);
+  const data = payloadContext.buildAdmissionFormData(f.context.values, { includeFee: false });
+  assert.equal(data.get("City"), "New Delhi Central");
+  assert.equal(data.get("District"), "Central Delhi");
+  assert.equal(data.get("State"), "Delhi");
+  assert.equal(data.get("Pincode"), "110001");
+  assert.equal(data.get("Address"), "12, Main Road, New Delhi Central, Central Delhi, Delhi, 110001");
+});
+
 function submissionFixture(overrides = {}) {
   const calls = { creates: [], updates: [], fees: [], toasts: [], refreshes: 0, persisted: [] };
   const context = vm.createContext({

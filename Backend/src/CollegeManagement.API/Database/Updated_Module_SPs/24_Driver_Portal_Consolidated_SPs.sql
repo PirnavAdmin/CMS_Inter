@@ -368,38 +368,86 @@ DELIMITER ;
 DROP PROCEDURE IF EXISTS `sp_GetDriverDashboardData`;
 DELIMITER //
 CREATE PROCEDURE `sp_GetDriverDashboardData`(
-    IN p_StaffId INT
+    IN p_StaffId INT,
+    IN p_CampusId INT
 )
 BEGIN
     DECLARE v_DriverId BIGINT;
-    SELECT DriverId INTO v_DriverId FROM TransportDrivers WHERE StaffId = p_StaffId AND IsDeleted = 0 LIMIT 1;
+
+    -- Resolve DriverId from TransportDrivers using StaffId
+    SELECT DriverId INTO v_DriverId
+    FROM TransportDrivers
+    WHERE StaffId = p_StaffId AND IsDeleted = 0
+    LIMIT 1;
+
+    -- Fallback: treat p_StaffId as DriverId directly (legacy compat)
     IF v_DriverId IS NULL THEN
-        SELECT DriverId INTO v_DriverId FROM TransportDrivers WHERE DriverId = p_StaffId AND IsDeleted = 0 LIMIT 1;
+        SELECT DriverId INTO v_DriverId
+        FROM TransportDrivers
+        WHERE DriverId = p_StaffId AND IsDeleted = 0
+        LIMIT 1;
     END IF;
 
-    SELECT 
+    -- Return the driver's active assignment with full vehicle, route, attendant and student count
+    SELECT
         tva.AssignmentId,
+        tva.DriverId,
         v.VehicleId,
         v.VehicleNumber,
-        COALESCE(v.VehicleRegistrationNo, v.VehicleNumber) AS RegistrationNumber,
+        COALESCE(v.VehicleName, v.VehicleNumber)                AS VehicleName,
+        COALESCE(v.VehicleRegistrationNo, v.VehicleNumber)      AS RegistrationNumber,
         v.VehicleType,
-        v.Capacity,
-        tva.EffectiveFrom AS AssignedDate,
-        r.RouteId,
+        COALESCE(v.Capacity, 0)                                 AS VehicleCapacity,
+        tva.RouteId,
         r.RouteName,
         r.RouteCode,
         r.StartLocation,
         r.EndLocation,
         att.AttendantId,
-        att.AttendantName,
-        att.MobileNumber AS ContactNumber
+        COALESCE(att.AttendantName,
+            CONCAT(COALESCE(att_s.FirstName,''), ' ', COALESCE(att_s.LastName,'')))
+                                                                AS AttendantName,
+        COALESCE(att.MobileNumber, att_s.Mobile)                AS AttendantContact,
+        COALESCE(tva.MorningTripTime, '07:00 AM')               AS MorningTripTime,
+        COALESCE(tva.EveningTripTime, '03:45 PM')               AS EveningTripTime,
+        tva.EffectiveFrom,
+        tva.EffectiveTo,
+        tva.Shift,
+        tva.AcademicYear,
+        (
+            SELECT COUNT(*)
+            FROM StudentTransportAssignments sta
+            WHERE sta.RouteId = tva.RouteId
+              AND sta.Status = 1
+              AND sta.IsDeleted = 0
+        )                                                        AS AssignedStudents,
+        s.FirstName                                             AS DriverFirstName,
+        s.LastName                                              AS DriverLastName,
+        s.EmployeeId                                            AS EmployeeId,
+        s.Email                                                 AS DriverEmail
     FROM TransportVehicleAssignments tva
-    JOIN TransportVehicles v ON tva.VehicleId = v.VehicleId AND v.IsDeleted = 0
-    JOIN TransportRoutes r ON tva.RouteId = r.RouteId AND r.IsDeleted = 0
-    LEFT JOIN TransportAttendants att ON tva.AttendantId = att.AttendantId AND att.IsDeleted = 0
-    WHERE (tva.DriverId = v_DriverId OR tva.DriverId = p_StaffId)
-      AND tva.Status = 1 
+    JOIN TransportVehicles v
+        ON tva.VehicleId = v.VehicleId AND v.IsDeleted = 0
+    JOIN TransportRoutes r
+        ON tva.RouteId = r.RouteId AND r.IsDeleted = 0
+    LEFT JOIN TransportAttendants att
+        ON tva.AttendantId = att.AttendantId AND att.IsDeleted = 0
+    LEFT JOIN Staff att_s
+        ON att.StaffId = att_s.Id AND att_s.IsDeleted = 0
+    LEFT JOIN TransportDrivers td
+        ON td.DriverId = COALESCE(v_DriverId, p_StaffId) AND td.IsDeleted = 0
+    LEFT JOIN Staff s
+        ON s.Id = td.StaffId AND s.IsDeleted = 0
+    WHERE (tva.DriverId = COALESCE(v_DriverId, p_StaffId))
+      AND tva.Status = 1
       AND tva.IsDeleted = 0
+      AND tva.EffectiveFrom <= CURDATE()
+      AND (tva.EffectiveTo IS NULL OR tva.EffectiveTo >= CURDATE())
+      AND (p_CampusId IS NULL OR p_CampusId <= 0
+           OR EXISTS (
+               SELECT 1 FROM Campuses cam
+               WHERE cam.CampusId = p_CampusId
+           ))
     ORDER BY tva.AssignmentId DESC
     LIMIT 1;
 END //
@@ -421,32 +469,40 @@ BEGIN
 
     SELECT RouteId INTO v_RouteId
     FROM TransportVehicleAssignments
-    WHERE (DriverId = v_DriverId OR DriverId = p_StaffId) AND Status = 1 AND IsDeleted = 0
+    WHERE (DriverId = v_DriverId OR DriverId = p_StaffId)
+      AND Status = 1 AND IsDeleted = 0
+      AND EffectiveFrom <= CURDATE()
+      AND (EffectiveTo IS NULL OR EffectiveTo >= CURDATE())
     ORDER BY AssignmentId DESC LIMIT 1;
 
-    -- Resultset 1: Route details
-    SELECT 
-        r.RouteId,
-        r.RouteName,
-        r.RouteCode,
-        r.StartLocation,
-        r.EndLocation,
-        r.Distance AS DistanceKm,
-        r.EstimatedDurationMinutes
-    FROM TransportRoutes r
-    WHERE r.RouteId = v_RouteId AND r.IsDeleted = 0;
+    IF v_RouteId IS NOT NULL THEN
+        -- Resultset 1: Route details
+        SELECT 
+            r.RouteId,
+            r.RouteName,
+            r.RouteCode,
+            r.StartLocation,
+            r.EndLocation,
+            r.Distance AS DistanceKm,
+            r.EstimatedDurationMinutes
+        FROM TransportRoutes r
+        WHERE r.RouteId = v_RouteId AND r.IsDeleted = 0;
 
-    -- Resultset 2: Route pickup stops
-    SELECT 
-        p.PickupPointId,
-        COALESCE(p.PickupPointName, 'Campus Gate') AS StopName,
-        p.PickupTime,
-        p.DropTime,
-        p.SequenceNo AS StopOrder,
-        p.DistanceFromStart AS DistanceKm
-    FROM PickupPoints p
-    WHERE (v_RouteId IS NULL OR p.RouteId = v_RouteId) AND p.IsDeleted = 0
-    ORDER BY p.SequenceNo ASC, p.PickupPointId ASC;
+        -- Resultset 2: Route pickup stops
+        SELECT 
+            p.PickupPointId,
+            COALESCE(p.PickupPointName, 'Campus Gate') AS StopName,
+            p.PickupTime,
+            p.DropTime,
+            p.SequenceNo AS StopOrder,
+            p.DistanceFromStart AS DistanceKm
+        FROM PickupPoints p
+        WHERE p.RouteId = v_RouteId AND p.IsDeleted = 0
+        ORDER BY p.SequenceNo ASC, p.PickupPointId ASC;
+    ELSE
+        SELECT NULL AS RouteId, NULL AS RouteName, NULL AS RouteCode, NULL AS StartLocation, NULL AS EndLocation, 0.0 AS DistanceKm, 0 AS EstimatedDurationMinutes WHERE 1 = 0;
+        SELECT NULL AS PickupPointId, NULL AS StopName, NULL AS PickupTime, NULL AS DropTime, 0 AS StopOrder, 0.0 AS DistanceKm WHERE 1 = 0;
+    END IF;
 END //
 DELIMITER ;
 
@@ -475,12 +531,14 @@ BEGIN
     SELECT DriverId INTO v_DriverId FROM TransportDrivers WHERE (StaffId = p_StaffId OR DriverId = p_StaffId) AND IsDeleted = 0 LIMIT 1;
     IF v_DriverId IS NULL THEN SET v_DriverId = p_StaffId; END IF;
 
-    -- Find active assignment
+    -- Find active assignment with effective date filter
     SELECT AssignmentId, VehicleId, RouteId, AttendantId, COALESCE(MorningTripTime, '07:00 AM'), COALESCE(EveningTripTime, '03:45 PM')
     INTO v_AssignmentId, v_VehicleId, v_RouteId, v_AttendantId, v_MorningTime, v_EveningTime
     FROM TransportVehicleAssignments
     WHERE (DriverId = v_DriverId OR DriverId = p_StaffId)
       AND Status = 1 AND IsDeleted = 0
+      AND EffectiveFrom <= CURDATE()
+      AND (EffectiveTo IS NULL OR EffectiveTo >= CURDATE())
     ORDER BY AssignmentId DESC LIMIT 1;
 
     -- Ensure Morning and Evening trip rows exist in TransportTrips for v_TargetDate
@@ -571,27 +629,44 @@ BEGIN
 
     SELECT RouteId INTO v_RouteId
     FROM TransportVehicleAssignments
-    WHERE (DriverId = v_DriverId OR DriverId = p_StaffId) AND Status = 1 AND IsDeleted = 0
+    WHERE (DriverId = v_DriverId OR DriverId = p_StaffId)
+      AND Status = 1 AND IsDeleted = 0
+      AND EffectiveFrom <= CURDATE()
+      AND (EffectiveTo IS NULL OR EffectiveTo >= CURDATE())
     ORDER BY AssignmentId DESC LIMIT 1;
 
-    SELECT 
-        sta.StudentId,
-        sta.StudentTransportAssignmentId AS AssignmentId,
-        COALESCE(st.StudentName, CONCAT('Student ', sta.StudentId)) AS StudentName,
-        sta.AdmissionNo,
-        COALESCE(pp.PickupPointName, 'Campus Gate') AS StopName,
-        pp.PickupPointId,
-        COALESCE(TIME_FORMAT(pp.PickupTime, '%h:%i %p'), '07:30 AM') AS PickupTime,
-        COALESCE(st.FatherMobile, st.MobileNumber, st.MotherMobile, 'N/A') AS ContactNumber,
-        COALESCE(sta_att.Status, 'Pending') AS AttendanceStatus
-    FROM StudentTransportAssignments sta
-    LEFT JOIN Students st ON (sta.AdmissionNo = st.AdmissionNo OR sta.StudentId = st.StudentId)
-    LEFT JOIN PickupPoints pp ON sta.PickupPointId = pp.PickupPointId
-    LEFT JOIN StudentTripAttendance sta_att ON sta.StudentId = sta_att.StudentId AND sta_att.AttendanceDate = CURRENT_DATE()
-    WHERE (v_RouteId IS NULL OR sta.RouteId = v_RouteId)
-      AND sta.Status = 1 
-      AND sta.IsDeleted = 0
-    ORDER BY pp.SequenceNo ASC, st.StudentName ASC;
+    IF v_RouteId IS NOT NULL THEN
+        SELECT 
+            sta.StudentId,
+            sta.StudentTransportAssignmentId AS AssignmentId,
+            COALESCE(st.StudentName, CONCAT('Student ', sta.StudentId)) AS StudentName,
+            sta.AdmissionNo,
+            COALESCE(pp.PickupPointName, 'Campus Gate') AS StopName,
+            pp.PickupPointId,
+            COALESCE(TIME_FORMAT(pp.PickupTime, '%h:%i %p'), '07:30 AM') AS PickupTime,
+            COALESCE(st.FatherMobile, st.MobileNumber, st.MotherMobile, 'N/A') AS ContactNumber,
+            COALESCE(sta_att.Status, 'Pending') AS AttendanceStatus
+        FROM StudentTransportAssignments sta
+        LEFT JOIN Students st ON (sta.AdmissionNo = st.AdmissionNo OR sta.StudentId = st.StudentId)
+        LEFT JOIN PickupPoints pp ON sta.PickupPointId = pp.PickupPointId
+        LEFT JOIN StudentTripAttendance sta_att ON sta.StudentId = sta_att.StudentId AND sta_att.AttendanceDate = CURRENT_DATE()
+        WHERE sta.RouteId = v_RouteId
+          AND sta.Status = 1 
+          AND sta.IsDeleted = 0
+        ORDER BY pp.SequenceNo ASC, st.StudentName ASC;
+    ELSE
+        SELECT 
+            NULL AS StudentId,
+            NULL AS AssignmentId,
+            NULL AS StudentName,
+            NULL AS AdmissionNo,
+            NULL AS StopName,
+            NULL AS PickupPointId,
+            NULL AS PickupTime,
+            NULL AS ContactNumber,
+            NULL AS AttendanceStatus
+        WHERE 1 = 0;
+    END IF;
 END //
 DELIMITER ;
 
@@ -863,6 +938,9 @@ CREATE PROCEDURE `sp_UpdateDriverProfile`(
     IN p_Address VARCHAR(500)
 )
 BEGIN
+    DECLARE v_StaffRows INT DEFAULT 0;
+    DECLARE v_DriverRows INT DEFAULT 0;
+
     UPDATE Staff
     SET FirstName = COALESCE(NULLIF(p_FirstName, ''), FirstName),
         LastName = COALESCE(NULLIF(p_LastName, ''), LastName),
@@ -871,13 +949,41 @@ BEGIN
         CurrentAddress = COALESCE(NULLIF(p_Address, ''), CurrentAddress),
         UpdatedAt = CURRENT_TIMESTAMP
     WHERE Id = p_StaffId AND IsDeleted = 0;
+    SET v_StaffRows = ROW_COUNT();
 
     UPDATE TransportDrivers
     SET MobileNo = COALESCE(NULLIF(p_Mobile, ''), MobileNo),
         Address = COALESCE(NULLIF(p_Address, ''), Address),
         UpdatedAt = CURRENT_TIMESTAMP
     WHERE (StaffId = p_StaffId OR DriverId = p_StaffId) AND IsDeleted = 0;
+    SET v_DriverRows = ROW_COUNT();
 
-    SELECT 1 AS AffectedRows;
+    SELECT IF(v_StaffRows > 0 OR v_DriverRows > 0, 1, 0) AS AffectedRows;
+END //
+DELIMITER ;
+
+-- =============================================================================
+-- DRIVER NOTIFICATION INSERT PROCEDURE (Phase 2 — Assignment Notification)
+-- =============================================================================
+
+DROP PROCEDURE IF EXISTS `sp_CreateDriverNotification`;
+DELIMITER //
+CREATE PROCEDURE `sp_CreateDriverNotification`(
+    IN p_StaffId       INT,
+    IN p_Type          VARCHAR(100),
+    IN p_Title         VARCHAR(200),
+    IN p_Message       TEXT,
+    IN p_AssignmentId  BIGINT,
+    IN p_EventKey      VARCHAR(255)
+)
+BEGIN
+    -- Insert notification; skip silently if duplicate EventKey exists
+    INSERT IGNORE INTO TransportDriverNotifications
+        (StaffId, Type, Title, Message, AssignmentId, EventKey, CreatedTime, IsDelivered)
+    VALUES
+        (p_StaffId, p_Type, p_Title, p_Message, p_AssignmentId,
+         COALESCE(p_EventKey, UUID()), UTC_TIMESTAMP(), 0);
+
+    SELECT ROW_COUNT() AS Inserted;
 END //
 DELIMITER ;
