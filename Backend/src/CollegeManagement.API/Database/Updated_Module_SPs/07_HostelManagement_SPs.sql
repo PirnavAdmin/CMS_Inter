@@ -87,11 +87,14 @@ CREATE PROCEDURE `sp_GetHostelBlocks`
 (
     IN p_Search VARCHAR(150),
     IN p_Status VARCHAR(50),
-    IN p_CampusId INT
+    IN p_CampusId INT,
+    IN p_CollegeId INT
 )
 BEGIN
     SELECT
         hb.`HostelId`,
+        hb.`CollegeId`,
+        hb.`CampusId`,
         hb.`HostelName`,
         hb.`HostelCode`,
         hb.`HostelType`,
@@ -115,8 +118,9 @@ BEGIN
            hb.`HostelCode` LIKE CONCAT('%', TRIM(p_Search), '%') OR
            hb.`HostelType` LIKE CONCAT('%', TRIM(p_Search), '%'))
       AND (p_Status IS NULL OR p_Status = '' OR hb.`Status` = TRIM(p_Status))
-      AND (p_CampusId IS NULL OR p_CampusId = 0 OR hb.`CampusId` = p_CampusId)
-    GROUP BY hb.`HostelId`, hb.`HostelName`, hb.`HostelCode`, hb.`HostelType`, hb.`TotalFloors`,
+      AND (p_CollegeId IS NULL OR p_CollegeId <= 0 OR hb.`CollegeId` = p_CollegeId)
+      AND (p_CampusId IS NULL OR p_CampusId <= 0 OR hb.`CampusId` = p_CampusId)
+    GROUP BY hb.`HostelId`, hb.`CollegeId`, hb.`CampusId`, hb.`HostelName`, hb.`HostelCode`, hb.`HostelType`, hb.`TotalFloors`,
              hb.`WardenName`, hb.`PrimaryMobileNumber`, hb.`AlternateMobileNumber`, hb.`Email`,
              hb.`Status`, hb.`Address`, hb.`CreatedAt`
     ORDER BY hb.`HostelName`;
@@ -126,6 +130,7 @@ DROP PROCEDURE IF EXISTS `sp_CreateHostelBlock`//
 CREATE PROCEDURE `sp_CreateHostelBlock`
 (
     IN p_CampusId INT,
+    IN p_CollegeId INT,
     IN p_HostelName VARCHAR(150),
     IN p_HostelCode VARCHAR(50),
     IN p_HostelType VARCHAR(50),
@@ -138,8 +143,22 @@ CREATE PROCEDURE `sp_CreateHostelBlock`
     IN p_Address VARCHAR(255)
 )
 BEGIN
+    DECLARE v_CollegeId INT DEFAULT NULL;
+    DECLARE v_CampusId INT DEFAULT NULL;
+
+    SET v_CampusId = NULLIF(p_CampusId, 0);
+    SET v_CollegeId = NULLIF(p_CollegeId, 0);
+
+    IF v_CollegeId IS NULL AND v_CampusId IS NOT NULL THEN
+        SELECT `CollegeId` INTO v_CollegeId FROM `Campuses` WHERE `CampusId` = v_CampusId LIMIT 1;
+    END IF;
+
+    SET v_CollegeId = COALESCE(v_CollegeId, 1);
+
     INSERT INTO `hostel_blocks`
     (
+        `CollegeId`,
+        `CampusId`,
         `HostelName`,
         `HostelCode`,
         `HostelType`,
@@ -154,6 +173,8 @@ BEGIN
     )
     VALUES
     (
+        v_CollegeId,
+        v_CampusId,
         p_HostelName,
         p_HostelCode,
         p_HostelType,

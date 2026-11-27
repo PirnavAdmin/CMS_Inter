@@ -287,6 +287,11 @@ namespace CollegeManagement.API.Filters
                         await _securityService.ValidateFeeStructureOwnershipAsync(targetFeeId.Value, collegeId.Value);
                     }
                 }
+                else if (string.Equals(ctrl, "Hostel", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ctrl, "HostelFee", StringComparison.OrdinalIgnoreCase))
+                {
+                    await ValidateHostelIsolationAsync(context, ctrl, idVal, collegeId.Value);
+                }
             }
             catch (ForbiddenException fex)
             {
@@ -306,6 +311,158 @@ namespace CollegeManagement.API.Filters
             }
 
             await next();
+        }
+
+        private async Task ValidateHostelIsolationAsync(ActionExecutingContext context, string ctrl, int? idVal, int collegeId)
+        {
+            if (string.Equals(ctrl, "HostelFee", StringComparison.OrdinalIgnoreCase))
+            {
+                if (idVal.HasValue && idVal.Value > 0)
+                {
+                    await _securityService.ValidateHostelResourceOwnershipAsync("fees", idVal.Value, collegeId, throwIfMissing: true);
+                }
+            }
+            else if (idVal.HasValue && idVal.Value > 0)
+            {
+                string path = (context.HttpContext.Request.Path.Value ?? string.Empty).ToLowerInvariant();
+                string? resource = null;
+                if (path.Contains("/blocks/")) resource = "blocks";
+                else if (path.Contains("/room-types/")) resource = "room-types";
+                else if (path.Contains("/rooms/")) resource = "rooms";
+                else if (path.Contains("/beds/")) resource = "beds";
+                else if (path.Contains("/wardens/")) resource = "wardens";
+                else if (path.Contains("/allocations/")) resource = "allocations";
+                else if (path.Contains("/attendance/")) resource = "attendance";
+                else if (path.Contains("/outpass-leave/")) resource = "outpass-leave";
+                else if (path.Contains("/transfer-vacate/")) resource = "transfer-vacate";
+
+                if (resource != null)
+                {
+                    await _securityService.ValidateHostelResourceOwnershipAsync(resource, idVal.Value, collegeId, throwIfMissing: true);
+                }
+            }
+
+            // Validate query and DTO reference IDs to block cross-tenant creation/filtering
+            var refChecks = new (string propName, string resourceType)[]
+            {
+                ("hostelId", "blocks"),
+                ("fromHostelId", "blocks"),
+                ("toHostelId", "blocks"),
+                ("roomTypeId", "room-types"),
+                ("roomId", "rooms"),
+                ("fromRoomId", "rooms"),
+                ("toRoomId", "rooms"),
+                ("bedId", "beds"),
+                ("fromBedId", "beds"),
+                ("toBedId", "beds"),
+                ("allocationId", "allocations"),
+                ("wardenAssignmentId", "wardens")
+            };
+
+            foreach (var (propName, resourceType) in refChecks)
+            {
+                int? qVal = TryExtractId(context, propName);
+                if (qVal.HasValue && qVal.Value > 0)
+                {
+                    await _securityService.ValidateHostelResourceOwnershipAsync(resourceType, qVal.Value, collegeId, throwIfMissing: false);
+                }
+            }
+
+            int? qStudentId = TryExtractId(context, "studentId");
+            if (qStudentId.HasValue && qStudentId.Value > 0)
+            {
+                try
+                {
+                    await _securityService.ValidateStudentOwnershipAsync(qStudentId.Value, collegeId);
+                }
+                catch (NotFoundException)
+                {
+                    // Allow service validation to handle missing reference IDs unless route-level
+                }
+            }
+
+            int? qStaffId = TryExtractId(context, "staffId");
+            if (qStaffId.HasValue && qStaffId.Value > 0)
+            {
+                try
+                {
+                    await _securityService.ValidateStaffOwnershipAsync(qStaffId.Value, collegeId);
+                }
+                catch (NotFoundException)
+                {
+                    // Allow service validation to handle missing reference IDs
+                }
+            }
+
+            foreach (var arg in context.ActionArguments.Values)
+            {
+                if (arg == null || arg.GetType().IsPrimitive || arg is string || arg is decimal || arg is DateTime)
+                    continue;
+
+                var type = arg.GetType();
+                foreach (var (propName, resourceType) in refChecks)
+                {
+                    var prop = type.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                    if (prop != null)
+                    {
+                        int? pVal = TryToInt(prop.GetValue(arg));
+                        if (pVal.HasValue && pVal.Value > 0)
+                        {
+                            await _securityService.ValidateHostelResourceOwnershipAsync(resourceType, pVal.Value, collegeId, throwIfMissing: false);
+                        }
+                    }
+                }
+
+                var stuProp = type.GetProperty("StudentId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (stuProp != null)
+                {
+                    int? sVal = TryToInt(stuProp.GetValue(arg));
+                    if (sVal.HasValue && sVal.Value > 0)
+                    {
+                        try { await _securityService.ValidateStudentOwnershipAsync(sVal.Value, collegeId); }
+                        catch (NotFoundException) { }
+                    }
+                }
+
+                var staffProp = type.GetProperty("StaffId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (staffProp != null)
+                {
+                    int? stVal = TryToInt(staffProp.GetValue(arg));
+                    if (stVal.HasValue && stVal.Value > 0)
+                    {
+                        try { await _securityService.ValidateStaffOwnershipAsync(stVal.Value, collegeId); }
+                        catch (NotFoundException) { }
+                    }
+                }
+
+                // Check nested Records collection (e.g., BulkHostelAttendanceDto.Records)
+                var recordsProp = type.GetProperty("Records", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (recordsProp?.GetValue(arg) is System.Collections.IEnumerable records)
+                {
+                    foreach (var item in records)
+                    {
+                        if (item == null) continue;
+                        var itemType = item.GetType();
+                        foreach (var (propName, resourceType) in refChecks)
+                        {
+                            var ip = itemType.GetProperty(propName, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                            int? iv = ip != null ? TryToInt(ip.GetValue(item)) : null;
+                            if (iv.HasValue && iv.Value > 0)
+                            {
+                                await _securityService.ValidateHostelResourceOwnershipAsync(resourceType, iv.Value, collegeId, throwIfMissing: false);
+                            }
+                        }
+
+                        var iStu = itemType.GetProperty("StudentId", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                        int? iStuVal = iStu != null ? TryToInt(iStu.GetValue(item)) : null;
+                        if (iStuVal.HasValue && iStuVal.Value > 0)
+                        {
+                            try { await _securityService.ValidateStudentOwnershipAsync(iStuVal.Value, collegeId); }
+                            catch (NotFoundException) { }
+                        }
+                    }
+                }
+            }
         }
 
         private static int? TryExtractId(ActionExecutingContext context, string key)

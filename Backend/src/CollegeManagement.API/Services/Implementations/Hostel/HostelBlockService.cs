@@ -1,17 +1,22 @@
 using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using CollegeManagement.API.Services.Interfaces.Hostel;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Services.Implementations.Hostel
 {
     public class HostelBlockService : IHostelBlockService
     {
         private readonly IHostelBlockRepository _repository;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public HostelBlockService(IHostelBlockRepository repository)
+        public HostelBlockService(IHostelBlockRepository repository, IHttpContextAccessor? httpContextAccessor = null)
         {
             _repository = repository;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         public async Task<IEnumerable<HostelBlockResponseDto>> GetAllAsync(
@@ -39,7 +44,28 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
         public async Task<(bool Success, string Message, HostelBlockResponseDto? Data)>
             CreateAsync(CreateHostelBlockDto dto)
         {
-            var existing = await _repository.GetByCodeAsync(dto.HostelCode.Trim());
+            var httpContext = _httpContextAccessor?.HttpContext;
+            int? resolvedCampusId = dto.CampusId;
+            if ((!resolvedCampusId.HasValue || resolvedCampusId.Value <= 0) && httpContext != null)
+            {
+                resolvedCampusId = CampusContextResolver.ResolveCampusId(httpContext.User, httpContext.Request, dto.CampusId);
+            }
+
+            if (resolvedCampusId == TenantIsolationActionFilter.NoCampusSentinel ||
+                (httpContext != null && (!resolvedCampusId.HasValue || resolvedCampusId.Value <= 0)))
+            {
+                return (
+                    false,
+                    "Please create or select a valid campus before adding a hostel block.",
+                    null
+                );
+            }
+
+            int? effectiveCampusId = resolvedCampusId.HasValue && resolvedCampusId.Value > 0
+                ? resolvedCampusId.Value
+                : null;
+
+            var existing = await _repository.GetByCodeAsync(dto.HostelCode.Trim(), effectiveCampusId);
 
             if (existing != null)
             {
@@ -50,9 +76,12 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 );
             }
 
+            int collegeId = CampusContextResolver.ResolveCollegeId(httpContext?.User, httpContext?.Request) ?? 0;
+
             var hostel = new HostelBlock
             {
-                CampusId = dto.CampusId ?? 1,
+                CollegeId = collegeId,
+                CampusId = effectiveCampusId,
                 HostelName = dto.HostelName.Trim(),
                 HostelCode = dto.HostelCode.Trim(),
                 HostelType = dto.HostelType.Trim(),
@@ -93,8 +122,14 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 );
             }
 
+            int? effectiveCampusId = dto.CampusId.HasValue
+                && dto.CampusId.Value > 0
+                && dto.CampusId.Value != TenantIsolationActionFilter.NoCampusSentinel
+                ? dto.CampusId.Value
+                : hostel.CampusId;
+
             var existingCode =
-                await _repository.GetByCodeAsync(dto.HostelCode.Trim());
+                await _repository.GetByCodeAsync(dto.HostelCode.Trim(), effectiveCampusId);
 
             if (existingCode != null &&
                 existingCode.HostelId != hostelId)
@@ -106,6 +141,7 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
                 );
             }
 
+            hostel.CampusId = effectiveCampusId;
             hostel.HostelName = dto.HostelName.Trim();
             hostel.HostelCode = dto.HostelCode.Trim();
             hostel.HostelType = dto.HostelType.Trim();
@@ -173,7 +209,7 @@ namespace CollegeManagement.API.Services.Implementations.Hostel
             return new HostelBlockResponseDto
             {
                 HostelId = hostel.HostelId,
-                CampusId = hostel.CampusId ?? 1,
+                CampusId = hostel.CampusId,
                 HostelName = hostel.HostelName,
                 HostelCode = hostel.HostelCode,
                 HostelType = hostel.HostelType,

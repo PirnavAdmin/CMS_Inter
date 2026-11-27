@@ -1,7 +1,10 @@
 ﻿using System.Data;
 using Dapper;
 using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations.Hostel
 {
@@ -9,11 +12,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         : IHostelReportRepository
     {
         private readonly IDbConnection _dbConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
         public HostelReportRepository(
-            IDbConnection dbConnection)
+            IDbConnection dbConnection,
+            IHttpContextAccessor? httpContextAccessor = null)
         {
             _dbConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            return CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User);
         }
 
         public async Task<IEnumerable<HostelOccupancyReportDto>>
@@ -21,13 +32,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 int? hostelId = null,
                 int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelOccupancyReportDto>();
+            }
+
             return await _dbConnection
                 .QueryAsync<HostelOccupancyReportDto>(
                     "sp_GetHostelOccupancyReport",
                     new
                     {
                         p_HostelId = hostelId,
-                        p_CampusId = campusId
+                        p_CampusId = campusId,
+                        p_CollegeId = ResolveCollegeId()
                     },
                     commandType: CommandType.StoredProcedure);
         }
@@ -39,6 +56,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 string? search = null,
                 int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelStudentReportDto>();
+            }
+
             return await _dbConnection
                 .QueryAsync<HostelStudentReportDto>(
                     "sp_GetHostelStudentReport",
@@ -53,7 +75,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                             string.IsNullOrWhiteSpace(search)
                                 ? null
                                 : search.Trim(),
-                        p_CampusId = campusId
+                        p_CampusId = campusId,
+                        p_CollegeId = ResolveCollegeId()
                     },
                     commandType: CommandType.StoredProcedure);
         }
@@ -68,6 +91,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 string? search = null,
                 int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelAttendanceReportDto>();
+            }
+
             return await _dbConnection
                 .QueryAsync<HostelAttendanceReportDto>(
                     "sp_GetHostelAttendanceReport",
@@ -91,7 +119,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                             string.IsNullOrWhiteSpace(search)
                                 ? null
                                 : search.Trim(),
-                        p_CampusId = campusId
+                        p_CampusId = campusId,
+                        p_CollegeId = ResolveCollegeId()
                     },
                     commandType: CommandType.StoredProcedure);
         }
@@ -106,6 +135,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 string? search = null,
                 int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelOutpassLeaveReportDto>();
+            }
+
             return await _dbConnection
                 .QueryAsync<HostelOutpassLeaveReportDto>(
                     "sp_GetHostelOutpassLeaveReport",
@@ -130,7 +164,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                             string.IsNullOrWhiteSpace(search)
                                 ? null
                                 : search.Trim(),
-                        p_CampusId = campusId
+                        p_CampusId = campusId,
+                        p_CollegeId = ResolveCollegeId()
                     },
                     commandType: CommandType.StoredProcedure);
         }
@@ -146,6 +181,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 string? search = null,
                 int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelTransferVacateReportDto>();
+            }
+
             return await _dbConnection
                 .QueryAsync<HostelTransferVacateReportDto>(
                     "sp_GetHostelTransferVacateReport",
@@ -158,7 +198,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                         p_ApprovalStatus = string.IsNullOrWhiteSpace(approvalStatus) ? null : approvalStatus.Trim(),
                         p_FeeSettlementStatus = string.IsNullOrWhiteSpace(feeSettlementStatus) ? null : feeSettlementStatus.Trim(),
                         p_Search = string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
-                        p_CampusId = campusId
+                        p_CampusId = campusId,
+                        p_CollegeId = ResolveCollegeId()
                     },
                     commandType: CommandType.StoredProcedure);
         }

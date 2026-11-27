@@ -1,17 +1,27 @@
 using System.Data;
 using Dapper;
+using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Models.Hostel;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations.Hostel
 {
     public class HostelOutpassLeaveRepository : IHostelOutpassLeaveRepository
     {
         private readonly IDbConnection _dbConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public HostelOutpassLeaveRepository(IDbConnection dbConnection)
+        public HostelOutpassLeaveRepository(IDbConnection dbConnection, IHttpContextAccessor? httpContextAccessor = null)
         {
             _dbConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            return CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User);
         }
 
         public async Task<IEnumerable<HostelOutpassLeave>> GetAllAsync(
@@ -24,6 +34,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
             string? search = null,
             int? campusId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelOutpassLeave>();
+            }
+
             var parameters = new
             {
                 p_HostelId = hostelId,
@@ -33,7 +48,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_FromDate = fromDate?.Date,
                 p_ToDate = toDate?.Date,
                 p_Search = search,
-                p_CampusId = campusId
+                p_CampusId = campusId,
+                p_CollegeId = ResolveCollegeId()
             };
 
             return await _dbConnection.QueryAsync<HostelOutpassLeave>(
@@ -46,7 +62,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QueryFirstOrDefaultAsync<HostelOutpassLeave>(
                 "sp_GetHostelOutpassLeaveById",
-                new { p_RequestId = requestId },
+                new
+                {
+                    p_RequestId = requestId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -63,7 +83,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_StudentId = studentId,
                     p_FromDateTime = fromDateTime,
                     p_ToDateTime = toDateTime,
-                    p_ExcludeRequestId = excludeRequestId
+                    p_ExcludeRequestId = excludeRequestId,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -107,7 +128,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                 p_FromDateTime = request.FromDateTime,
                 p_ToDateTime = request.ToDateTime,
                 p_Reason = request.Reason,
-                p_Destination = request.Destination
+                p_Destination = request.Destination,
+                p_CollegeId = ResolveCollegeId()
             };
 
             var result = await _dbConnection.ExecuteScalarAsync<int>(
@@ -131,7 +153,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_RequestId = requestId,
                     p_ApprovalStatus = approvalStatus,
                     p_ApprovalRemarks = approvalRemarks,
-                    p_ApprovedAt = approvedAt
+                    p_ApprovedAt = approvedAt,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
 
@@ -142,7 +165,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var result = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_DeleteHostelOutpassLeave",
-                new { p_RequestId = requestId },
+                new
+                {
+                    p_RequestId = requestId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return result == 1;
@@ -152,7 +179,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelOutpassLeaveExists",
-                new { p_RequestId = requestId },
+                new
+                {
+                    p_RequestId = requestId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -161,8 +192,12 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         public async Task<bool> StudentExistsAsync(int studentId)
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
-                "sp_CheckStudentExists",
-                new { p_StudentId = studentId },
+                "sp_CheckHostelStudentExists",
+                new
+                {
+                    p_StudentId = studentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -172,7 +207,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBlockExists",
-                new { p_HostelId = hostelId },
+                new
+                {
+                    p_HostelId = hostelId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -182,7 +221,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckRoomMasterExists",
-                new { p_RoomId = roomId },
+                new
+                {
+                    p_RoomId = roomId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -192,7 +235,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckHostelBedExists",
-                new { p_BedId = bedId },
+                new
+                {
+                    p_BedId = bedId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;
@@ -242,7 +289,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var count = await _dbConnection.ExecuteScalarAsync<int>(
                 "sp_CheckActiveHostelWardenAssignmentExists",
-                new { p_WardenAssignmentId = wardenAssignmentId },
+                new
+                {
+                    p_WardenAssignmentId = wardenAssignmentId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
 
             return count > 0;

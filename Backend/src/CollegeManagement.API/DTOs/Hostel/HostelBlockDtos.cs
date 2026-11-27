@@ -5,7 +5,7 @@ namespace CollegeManagement.API.DTOs.Hostel
 {
     public class CreateHostelBlockDto
     {
-        public int? CampusId { get; set; } = 1;
+        public int? CampusId { get; set; }
 
         [Required]
         [StringLength(150)]
@@ -41,7 +41,7 @@ namespace CollegeManagement.API.DTOs.Hostel
 
     public class UpdateHostelBlockDto
     {
-        public int? CampusId { get; set; } = 1;
+        public int? CampusId { get; set; }
 
         [Required]
         [StringLength(150)]
@@ -79,7 +79,7 @@ namespace CollegeManagement.API.DTOs.Hostel
     {
         public int HostelId { get; set; }
 
-        public int? CampusId { get; set; } = 1;
+        public int? CampusId { get; set; }
 
         public string HostelName { get; set; } = string.Empty;
 

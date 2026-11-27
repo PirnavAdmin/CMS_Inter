@@ -1,19 +1,30 @@
 using System.Collections.Generic;
 using System.Data;
+using System.Linq;
 using System.Threading.Tasks;
 using CollegeManagement.API.DTOs.Hostel;
+using CollegeManagement.API.Filters;
+using CollegeManagement.API.Helpers;
 using CollegeManagement.API.Repositories.Interfaces.Hostel;
 using Dapper;
+using Microsoft.AspNetCore.Http;
 
 namespace CollegeManagement.API.Repositories.Implementations.Hostel
 {
     public class HostelFeeConfigRepository : IHostelFeeConfigRepository
     {
         private readonly IDbConnection _dbConnection;
+        private readonly IHttpContextAccessor? _httpContextAccessor;
 
-        public HostelFeeConfigRepository(IDbConnection dbConnection)
+        public HostelFeeConfigRepository(IDbConnection dbConnection, IHttpContextAccessor? httpContextAccessor = null)
         {
             _dbConnection = dbConnection;
+            _httpContextAccessor = httpContextAccessor;
+        }
+
+        private int? ResolveCollegeId()
+        {
+            return CampusContextResolver.ResolveCollegeId(_httpContextAccessor?.HttpContext?.User);
         }
 
         public async Task<int> CreateAsync(CreateHostelFeeConfigRequest request)
@@ -28,13 +39,19 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_HostelFeeAmount = request.HostelFeeAmount,
                     p_SecurityDeposit = request.SecurityDeposit,
                     p_EffectiveDate = request.EffectiveDate,
-                    p_Status = request.Status
+                    p_Status = request.Status,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
 
         public async Task<IEnumerable<HostelFeeConfigDto>> GetAllAsync(int? hostelId, string? status, int? campusId = null, int? boardId = null, int? academicYearId = null)
         {
+            if (campusId == TenantIsolationActionFilter.NoCampusSentinel)
+            {
+                return Enumerable.Empty<HostelFeeConfigDto>();
+            }
+
             return await _dbConnection.QueryAsync<HostelFeeConfigDto>(
                 "sp_GetHostelFeeConfigs",
                 new
@@ -43,7 +60,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_Status = status,
                     p_CampusId = campusId,
                     p_BoardId = boardId,
-                    p_AcademicYearId = academicYearId
+                    p_AcademicYearId = academicYearId,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
         }
@@ -52,7 +70,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             return await _dbConnection.QuerySingleOrDefaultAsync<HostelFeeConfigDto>(
                 "sp_GetHostelFeeConfigById",
-                new { p_FeeConfigId = feeConfigId },
+                new
+                {
+                    p_FeeConfigId = feeConfigId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
         }
 
@@ -69,7 +91,8 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
                     p_HostelFeeAmount = request.HostelFeeAmount,
                     p_SecurityDeposit = request.SecurityDeposit,
                     p_EffectiveDate = request.EffectiveDate,
-                    p_Status = request.Status
+                    p_Status = request.Status,
+                    p_CollegeId = ResolveCollegeId()
                 },
                 commandType: CommandType.StoredProcedure);
             return affectedRows > 0;
@@ -79,7 +102,11 @@ namespace CollegeManagement.API.Repositories.Implementations.Hostel
         {
             var affectedRows = await _dbConnection.ExecuteAsync(
                 "sp_DeleteHostelFeeConfig",
-                new { p_FeeConfigId = feeConfigId },
+                new
+                {
+                    p_FeeConfigId = feeConfigId,
+                    p_CollegeId = ResolveCollegeId()
+                },
                 commandType: CommandType.StoredProcedure);
             return affectedRows > 0;
         }
