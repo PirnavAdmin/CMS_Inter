@@ -6,6 +6,7 @@ namespace CollegeManagement.API.Models.Fee;
 public class FeeType
 {
     [Key] public int FeeTypeId { get; set; }
+    public int CollegeId { get; set; } = 1;
     [Required, MaxLength(30)] public string FeeTypeCode { get; set; } = string.Empty;
     [Required, MaxLength(100)] public string FeeTypeName { get; set; } = string.Empty;
     [Required, MaxLength(50)] public string Category { get; set; } = string.Empty;
@@ -71,6 +72,7 @@ public class FeeStructureComponent
 public class Scholarship
 {
     [Key] public int ScholarshipId { get; set; }
+    public int CollegeId { get; set; } = 1;
     [Required, MaxLength(100)] public string ScholarshipName { get; set; } = string.Empty;
     [Required, MaxLength(20)] public string DiscountType { get; set; } = "Percentage";
     [Column(TypeName = "decimal(18,2)")] public decimal DiscountValue { get; set; }

@@ -199,7 +199,7 @@ namespace CollegeManagement.API.Services.Implementations
             if (conn.State != ConnectionState.Open) await conn.OpenAsync();
 
             var examCampusId = await conn.QueryFirstOrDefaultAsync<int?>(
-                "SELECT CampusId FROM Examinations WHERE ExaminationId = @ExamId;",
+                "SELECT CampusId FROM Examinations WHERE ExamId = @ExamId;",
                 new { ExamId = examId });
 
             if (!examCampusId.HasValue)

@@ -63,6 +63,18 @@ public class FeeRepository : IFeeRepository
         return ex;
     }
 
+    private static async Task<T> ExecuteWithMySqlTranslationAsync<T>(Func<Task<T>> action)
+    {
+        try
+        {
+            return await action();
+        }
+        catch (MySqlException ex)
+        {
+            throw TranslateMySqlException(ex);
+        }
+    }
+
     private static async Task<FeeStructureResponse?> ReadFeeStructureWithItemsAsync(SqlMapper.GridReader multi)
     {
         var structure = await multi.ReadFirstOrDefaultAsync<FeeStructureResponse>();
@@ -80,7 +92,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeTypeResponse?> CreateFeeTypeAsync(CreateFeeTypeRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
+        return await ExecuteWithMySqlTranslationAsync(() => c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
             "sp_FeeType_Create",
             new
             {
@@ -90,9 +102,9 @@ public class FeeRepository : IFeeRepository
                 p_BoardId = request.BoardId,
                 p_AcademicYearId = request.AcademicYearId,
                 p_IsActive = request.IsActive,
-                p_CollegeId = ResolveCollegeId()
+                p_CollegeId = ResolveCollegeId() ?? request.CollegeId
             },
-            commandType: CommandType.StoredProcedure);
+            commandType: CommandType.StoredProcedure));
     }
 
     public async Task<IEnumerable<FeeTypeResponse>> GetFeeTypesAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
@@ -123,7 +135,7 @@ public class FeeRepository : IFeeRepository
     public async Task<FeeTypeResponse?> UpdateFeeTypeAsync(int id, UpdateFeeTypeRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
+        return await ExecuteWithMySqlTranslationAsync(() => c.QueryFirstOrDefaultAsync<FeeTypeResponse>(
             "sp_FeeType_Update",
             new
             {
@@ -136,7 +148,7 @@ public class FeeRepository : IFeeRepository
                 p_IsActive = request.IsActive,
                 p_CollegeId = ResolveCollegeId()
             },
-            commandType: CommandType.StoredProcedure);
+            commandType: CommandType.StoredProcedure));
     }
 
     public async Task<bool> DeleteFeeTypeAsync(int id)
@@ -731,7 +743,7 @@ public class FeeRepository : IFeeRepository
     public async Task<ScholarshipResponse?> CreateScholarshipAsync(CreateScholarshipRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
+        return await ExecuteWithMySqlTranslationAsync(() => c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
             "sp_Scholarship_Create",
             new
             {
@@ -743,9 +755,9 @@ public class FeeRepository : IFeeRepository
                 p_BoardId = request.BoardId,
                 p_AcademicYearId = request.AcademicYearId,
                 p_IsActive = request.IsActive,
-                p_CollegeId = ResolveCollegeId()
+                p_CollegeId = ResolveCollegeId() ?? request.CollegeId
             },
-            commandType: CommandType.StoredProcedure);
+            commandType: CommandType.StoredProcedure));
     }
 
     public async Task<IEnumerable<ScholarshipResponse>> GetScholarshipsAsync(int? campusId = null, int? boardId = null, int? academicYearId = null)
@@ -775,7 +787,7 @@ public class FeeRepository : IFeeRepository
     public async Task<ScholarshipResponse?> UpdateScholarshipAsync(int id, UpdateScholarshipRequest request)
     {
         var c = Connection();
-        return await c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
+        return await ExecuteWithMySqlTranslationAsync(() => c.QueryFirstOrDefaultAsync<ScholarshipResponse>(
             "sp_Scholarship_Update",
             new
             {
@@ -790,7 +802,7 @@ public class FeeRepository : IFeeRepository
                 p_IsActive = request.IsActive,
                 p_CollegeId = ResolveCollegeId()
             },
-            commandType: CommandType.StoredProcedure);
+            commandType: CommandType.StoredProcedure));
     }
 
     public async Task<bool> DeleteScholarshipAsync(int id)

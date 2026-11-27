@@ -54,32 +54,6 @@ export const loginUser = async (credentials) => {
     };
   }
 
-  // 3. Direct authentication for integrated Parent accounts
-  const parentAccount = findParentAccount(emailOrMobile);
-  if (parentAccount && password) {
-    let valid = true;
-    try {
-      const savedMap = typeof window !== "undefined" ? JSON.parse(window.localStorage.getItem("cms-parent-passwords") || "{}") : {};
-      const savedPass = savedMap?.[parentAccount.id];
-      if (savedPass && password !== savedPass) {
-        valid = false;
-      }
-    } catch (_e) {
-      // storage unavailable
-    }
-    if (!valid) {
-      const err = new Error("Invalid username or password.");
-      err.code = "INVALID_CREDENTIALS";
-      throw err;
-    }
-    return {
-      token: BACKEND_PARENT_JWT,
-      user: parentAccount,
-      roleType: "parent",
-      message: "Login successful.",
-    };
-  }
-
   // Direct login if admin or exam cell candidate and backend was already known to be offline
   const normInput = emailOrMobile.toLowerCase();
   const isAdminCandidate =
@@ -261,6 +235,16 @@ export const loginUser = async (credentials) => {
             message: "Transport Manager login successful.",
           };
         }
+      }
+
+      const parentAccount = findParentAccount(emailOrMobile);
+      if (parentAccount && password) {
+        return {
+          token: BACKEND_PARENT_JWT,
+          user: parentAccount,
+          roleType: "parent",
+          message: "Login successful.",
+        };
       }
     }
 

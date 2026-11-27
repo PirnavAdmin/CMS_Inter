@@ -207,16 +207,19 @@ export default function ParentDashboard() {
           </div>
           <div className="parent-child-switch-buttons">
             <span style={{ fontSize: 12, fontWeight: 600, color: "var(--cms-muted)", marginRight: 4 }}>Switch Child:</span>
-            {availableChildren.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(c.id) ? "is-active" : ""}`}
-                onClick={() => handleSelectChild(c.id)}
-              >
-                <Users size={14} /> {c.name} ({c.group})
-              </button>
-            ))}
+            {(availableChildren || []).filter(Boolean).map((c) => {
+              const cid = c.id || c.studentId;
+              return (
+                <button
+                  key={cid}
+                  type="button"
+                  className={`parent-child-switch-btn ${String(activeChildId || child?.id) === String(cid) ? "is-active" : ""}`}
+                  onClick={() => handleSelectChild(cid)}
+                >
+                  <Users size={14} /> {c.name || "Student"} ({c.group || "MPC"})
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -414,19 +417,19 @@ export default function ParentDashboard() {
               <div className="parent-profile-meta-grid" style={{ marginBottom: 16 }}>
                 <div className="parent-meta-item">
                   <span className="parent-meta-label">Current Term SGPA</span>
-                  <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)", fontSize: 18 }}>{child.academics.sgpa} / 10.0</span>
+                  <span className="parent-meta-val" style={{ color: "var(--cms-primary-dark)", fontSize: 18 }}>{child?.academics?.sgpa ?? "—"} / 10.0</span>
                 </div>
                 <div className="parent-meta-item">
                   <span className="parent-meta-label">Cumulative CGPA</span>
-                  <span className="parent-meta-val" style={{ fontSize: 18 }}>{child.academics.cgpa}</span>
+                  <span className="parent-meta-val" style={{ fontSize: 18 }}>{child?.academics?.cgpa ?? "—"}</span>
                 </div>
                 <div className="parent-meta-item">
                   <span className="parent-meta-label">Overall Evaluation</span>
-                  <span className="parent-meta-val">Grade {child.academics.grade}</span>
+                  <span className="parent-meta-val">Grade {child?.academics?.grade ?? "—"}</span>
                 </div>
                 <div className="parent-meta-item">
                   <span className="parent-meta-label">Class Merit Rank</span>
-                  <span className="parent-meta-val">{child.academics.rank}</span>
+                  <span className="parent-meta-val">{child?.academics?.rank ?? "—"}</span>
                 </div>
               </div>
 
@@ -453,25 +456,25 @@ export default function ParentDashboard() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12, marginBottom: 16 }}>
                 <div style={{ padding: 12, background: "var(--cms-bg)", borderRadius: 8 }}>
                   <div style={{ fontSize: 11.5, color: "var(--cms-muted)", textTransform: "uppercase" }}>Total Fee</div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>₹{childFee.total.toLocaleString()}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>₹{(childFee?.total ?? 0).toLocaleString()}</div>
                 </div>
                 <div style={{ padding: 12, background: "var(--cms-green-soft)", borderRadius: 8 }}>
                   <div style={{ fontSize: 11.5, color: "var(--cms-green)", textTransform: "uppercase" }}>Paid Amount</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--cms-green)" }}>₹{childFee.paid.toLocaleString()}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--cms-green)" }}>₹{(childFee?.paid ?? 0).toLocaleString()}</div>
                 </div>
-                <div style={{ padding: 12, background: childFee.pending > 0 ? "var(--cms-red-soft)" : "var(--cms-bg)", borderRadius: 8 }}>
-                  <div style={{ fontSize: 11.5, color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-muted)", textTransform: "uppercase" }}>Pending Due</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: childFee.pending > 0 ? "var(--cms-red)" : "inherit" }}>₹{childFee.pending.toLocaleString()}</div>
+                <div style={{ padding: 12, background: (childFee?.pending ?? 0) > 0 ? "var(--cms-red-soft)" : "var(--cms-bg)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11.5, color: (childFee?.pending ?? 0) > 0 ? "var(--cms-red)" : "var(--cms-muted)", textTransform: "uppercase" }}>Pending Due</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: (childFee?.pending ?? 0) > 0 ? "var(--cms-red)" : "inherit" }}>₹{(childFee?.pending ?? 0).toLocaleString()}</div>
                 </div>
               </div>
 
               <div style={{ marginTop: "auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10, paddingTop: 12, borderTop: "1px solid var(--cms-border)" }}>
                 <span style={{ fontSize: 13, color: "var(--cms-muted)" }}>
-                  Payment Status: <strong style={{ color: childFee.pending > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{childFee.status}</strong>
-                  {childFee.pending > 0 && ` (Due: ${childFee.dueDate})`}
+                  Payment Status: <strong style={{ color: (childFee?.pending ?? 0) > 0 ? "var(--cms-red)" : "var(--cms-green)" }}>{childFee?.status || "—"}</strong>
+                  {(childFee?.pending ?? 0) > 0 && ` (Due: ${childFee?.dueDate || "—"})`}
                 </span>
-                <span className={`cms-badge ${childFee.pending > 0 ? (childFee.status === "Partial" ? "cms-badge-warn" : "cms-badge-danger") : "cms-badge-active"}`}>
-                  {childFee.pending > 0 ? childFee.status : "No Pending Dues"}
+                <span className={`cms-badge ${(childFee?.pending ?? 0) > 0 ? (childFee?.status === "Partial" ? "cms-badge-warn" : "cms-badge-danger") : "cms-badge-active"}`}>
+                  {(childFee?.pending ?? 0) > 0 ? childFee?.status : "No Pending Dues"}
                 </span>
               </div>
             </div>
@@ -490,9 +493,9 @@ export default function ParentDashboard() {
             <div className="parent-card-body">
               <div className="parent-list-stack">
                 {(contextAnnouncements && contextAnnouncements.length > 0) ? (
-                  contextAnnouncements.slice(0, 3).map((ann) => (
+                  contextAnnouncements.filter(Boolean).slice(0, 3).map((ann, idx) => (
                     <div
-                      key={ann.id}
+                      key={ann.id || `ann-${idx}`}
                       style={{ padding: 12, borderRadius: 10, background: "var(--cms-bg)", border: "1px solid var(--cms-border)", cursor: "pointer" }}
                       onClick={() => setSelectedAnnouncementModal(ann)}
                     >
@@ -537,7 +540,7 @@ export default function ParentDashboard() {
             <div className="parent-card-body">
               <div className="parent-list-stack">
                 {exams && exams.length > 0 ? (
-                  exams.slice(0, 3).map((ex, idx) => (
+                  exams.filter(Boolean).slice(0, 3).map((ex, idx) => (
                     <div key={ex.id ? `exam-${ex.id}-${idx}` : `ex-${idx}`} className="parent-list-row">
                       <div className="parent-list-info" style={{ minWidth: 0 }}>
                         <h4 style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{ex.subject} ({ex.code})</h4>

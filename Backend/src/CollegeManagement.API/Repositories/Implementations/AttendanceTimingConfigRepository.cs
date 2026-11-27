@@ -58,6 +58,7 @@ namespace CollegeManagement.API.Repositories.Implementations
             return await conn.QueryAsync<AttendanceTimingConfig>(
                 new CommandDefinition(
                     "sp_GetAttendanceTimingConfigs",
+                    new { p_CollegeId = ResolveCollegeId() },
                     commandType: CommandType.StoredProcedure,
                     cancellationToken: ct));
         }
@@ -83,7 +84,8 @@ namespace CollegeManagement.API.Repositories.Implementations
                     new
                     {
                         p_StaffType = staffTypeValue,
-                        p_DepartmentId = departmentId ?? 0
+                        p_DepartmentId = departmentId ?? 0,
+                        p_CollegeId = ResolveCollegeId()
                     },
                     commandType: CommandType.StoredProcedure,
                     cancellationToken: ct));

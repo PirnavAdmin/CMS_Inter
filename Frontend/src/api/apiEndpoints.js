@@ -226,6 +226,7 @@ export const apiEndpoints = {
     getStructures: "/api/v1/fees/structures",
     getStructureById: (id) => `/api/v1/fees/structures/${encodeURIComponent(id)}`,
     updateStructure: (id) => `/api/v1/fees/structures/${encodeURIComponent(id)}`,
+    updateStructureBothYears: (id) => `/api/v1/fees/structures/${encodeURIComponent(id)}/both-years`,
     deleteStructure: (id) => `/api/v1/fees/structures/${encodeURIComponent(id)}`,
     addStructureItem: (feeStructureId) => `/api/v1/fees/structures/${encodeURIComponent(feeStructureId)}/items`,
     getStructureItems: (feeStructureId) => `/api/v1/fees/structures/${encodeURIComponent(feeStructureId)}/items`,

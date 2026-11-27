@@ -436,14 +436,18 @@ namespace CollegeManagement.API.Services.Implementations
                     Role = user.Role?.RoleName ?? (await _userRepository.GetRoleByIdAsync(user.RoleId, connection))?.RoleName ?? string.Empty,
                     StaffType = (user.AdminId.HasValue && user.AdminId.Value > 0) || string.Equals(user.Role?.RoleName, "Admin", StringComparison.OrdinalIgnoreCase) || string.Equals(user.Role?.RoleName, "Super Admin", StringComparison.OrdinalIgnoreCase)
                         ? "Admin"
-                        : (user.StudentId.HasValue ? "Student" : (staffInfo?.StaffType ?? "Non-Teaching")),
+                        : (user.StudentId.HasValue
+                            ? "Student"
+                            : (string.Equals(user.Role?.RoleName, "Parent", StringComparison.OrdinalIgnoreCase)
+                                ? "Parent"
+                                : (staffInfo?.StaffType ?? "Non-Teaching"))),
                     AssignedCampusIds = assignedCampusIds,
                     AssignedBoardIds = assignedBoardIds,
                     PhotoPath = resolvedPhotoPath,
                     PhotoUrl = resolvedPhotoPath,
-                    ProfileStatus = (string?)staffInfo?.ProfileStatus ?? (user.AdminId.HasValue ? "Approved" : "PendingLink"),
+                    ProfileStatus = (string?)staffInfo?.ProfileStatus ?? (user.AdminId.HasValue || string.Equals(user.Role?.RoleName, "Parent", StringComparison.OrdinalIgnoreCase) ? "Approved" : "PendingLink"),
                     ProfileCompletionPercentage = staffInfo?.ProfileCompletionPercentage != null ? Convert.ToInt32(staffInfo.ProfileCompletionPercentage) : 0,
-                    IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue
+                    IsOnboarded = user.AdminId.HasValue || user.StudentId.HasValue || string.Equals(user.Role?.RoleName, "Parent", StringComparison.OrdinalIgnoreCase)
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Completed", StringComparison.OrdinalIgnoreCase)
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Approved", StringComparison.OrdinalIgnoreCase)
                         || string.Equals((string?)staffInfo?.ProfileStatus, "Submitted", StringComparison.OrdinalIgnoreCase)

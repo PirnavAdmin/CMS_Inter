@@ -32,7 +32,7 @@ import {
   resolveStudentPhotoUrl,
 } from "@/api/parentApi.js";
 import api from "@/api/axios.js";
-import { getLoggedInParent } from "../parentData.js";
+import { getLoggedInParent, initialChildren } from "../parentData.js";
 import holidayApi from "@/api/holidayApi.js";
 
 
@@ -365,49 +365,50 @@ export const deriveStudentAcademics = (raw, rawResults = [], rawMarks = [], base
 };
 
 export const transformStudentData = (raw, feeData, attendanceData, currentAcademicYear = "2026-2027", subjectsAttendance = [], rawResults = [], rawMarks = [], baseChild = null) => {
-  if (!raw) return null;
+  if (!raw && !baseChild) return null;
+  const src = raw || baseChild || {};
 
-  const id = String(raw.studentId || "");
-  const name = raw.studentName || "Student";
-  const roll = raw.rollNo || raw.rollNumber || "—";
-  const admissionNo = raw.admissionNo || raw.admissionNumber || "—";
-  const group = raw.groupName || raw.className || "MPC";
-  const program = raw.programName || "Regular";
+  const id = String(src.studentId || src.id || baseChild?.studentId || baseChild?.id || "");
+  const name = src.studentName || src.name || "Student";
+  const roll = src.rollNo || src.rollNumber || src.roll || "—";
+  const admissionNo = src.admissionNo || src.admissionNumber || "—";
+  const group = src.groupName || src.className || src.group || "MPC";
+  const program = src.programName || src.program || "Regular";
   const programme = group ? (program && program !== "Regular" ? `${group} (${program})` : `${group} (Maths, Physics, Chemistry)`) : "Intermediate";
-  const level = raw.academicLevelName || "Intermediate 1st Year";
-  const section = raw.sectionName ? `Section ${raw.sectionName}` : "Section A";
-  const board = raw.boardName || "Board of Intermediate Education, Andhra Pradesh";
-  const academicYear = raw.academicYearName || currentAcademicYear || "2026-2027";
+  const level = src.academicLevelName || src.level || "Intermediate 1st Year";
+  const section = src.sectionName ? (String(src.sectionName).startsWith("Section") ? src.sectionName : `Section ${src.sectionName}`) : (src.section || "Section A");
+  const board = src.boardName || src.board || "Board of Intermediate Education, Andhra Pradesh";
+  const academicYear = src.academicYearName || currentAcademicYear || "2026-2027";
   const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
   const initials = parts.length >= 2
     ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
     : (parts.length === 1 ? parts[0].charAt(0).toUpperCase() : "");
-  const isPlaceholderPhoto = !raw.photo && !raw.photoUrl || String(raw.photo || raw.photoUrl).includes("4675fbcbaa014725ac946bad5121f55b.png");
-  const avatarBg = String(raw.id || raw.studentId) === "863" ? "10B981" : "0D8ABC";
-  const cleanInitials = initials || (String(raw.id || raw.studentId) === "863" ? "NK" : "NI");
-  const avatar = (!isPlaceholderPhoto && resolveStudentPhotoUrl(raw.photo || raw.photoUrl)) || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=${avatarBg}&color=fff&size=128`;
+  const isPlaceholderPhoto = !src.photo && !src.photoUrl && !src.avatar || String(src.photo || src.photoUrl || src.avatar).includes("4675fbcbaa014725ac946bad5121f55b.png");
+  const avatarBg = String(id) === "863" ? "10B981" : "0D8ABC";
+  const cleanInitials = initials || (String(id) === "863" ? "NK" : "NI");
+  const avatar = (!isPlaceholderPhoto && resolveStudentPhotoUrl(src.photo || src.photoUrl || src.avatar)) || `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanInitials || name)}&background=${avatarBg}&color=fff&size=128`;
 
   // Real attendance from API
   const attendanceOverview = transformAttendanceOverview(attendanceData);
   const attendanceRate = attendanceOverview.overall > 0
     ? attendanceOverview.overall
-    : (typeof raw.attendancePercentage === "number" && raw.attendancePercentage > 0 ? Math.round(raw.attendancePercentage) : 0);
+    : (typeof src.attendancePercentage === "number" && src.attendancePercentage > 0 ? Math.round(src.attendancePercentage) : (src.attendance?.overall || 0));
   const attendanceStatus = attendanceOverview.overall > 0
     ? attendanceOverview.status
-    : (attendanceRate >= 85 ? "Excellent" : (attendanceRate >= 75 ? "Good" : (attendanceRate >= 65 ? "Satisfactory" : (attendanceRate > 0 ? "Needs Improvement" : "—"))));
+    : (attendanceRate >= 85 ? "Excellent" : (attendanceRate >= 75 ? "Good" : (attendanceRate >= 65 ? "Satisfactory" : (attendanceRate > 0 ? "Needs Improvement" : (src.attendance?.status || "—")))));
 
   // Fee calculation from feeData or raw student fields
   const receiptsApprovedTotal = (feeData?.paymentHistory || []).filter((p) => { const st = String(p.approvalStatus || p.paymentStatus || p.status || "").toLowerCase(); return !st.includes("reject") && !st.includes("fail") && !st.includes("cancel") && !st.includes("pending"); }).reduce((sum, p) => sum + (Number(p.paidAmount ?? p.amount) || 0), 0);
-  const fallbackPaid = Number(raw?.feePaid ?? raw?.fees?.paid ?? 0);
-  const feePaid = Math.max(Number(feeData?.totalPaid ?? raw.feePaid ?? fallbackPaid), receiptsApprovedTotal);
-  const feeTotal = Math.max(Number(feeData?.totalPayable ?? feeData?.scheduledFees ?? feeData?.originalFee ?? feeData?.totalFee ?? raw.feeAmount ?? 70000), feePaid);
+  const fallbackPaid = Number(src?.feePaid ?? src?.fees?.paid ?? 0);
+  const feePaid = Math.max(Number(feeData?.totalPaid ?? src.feePaid ?? fallbackPaid), receiptsApprovedTotal);
+  const feeTotal = Math.max(Number(feeData?.totalPayable ?? feeData?.scheduledFees ?? feeData?.originalFee ?? feeData?.totalFee ?? src.feeAmount ?? src?.fees?.total ?? 70000), feePaid);
   const feePending = Math.max(0, feeTotal - feePaid);
-  const feeStatus = feePending === 0 && feeTotal > 0 ? "Paid" : (feePaid > 0 ? "Partial" : (feeTotal > 0 ? "Due" : "—"));
-  const feeDueDate = feePending === 0 ? "All Dues Cleared" : (feeData?.schedules?.[0]?.dueDate ? formatDate(feeData.schedules[0].dueDate) : "13 Dec 2026");
+  const feeStatus = feePending === 0 && feeTotal > 0 ? "Paid" : (feePaid > 0 ? "Partial" : (feeTotal > 0 ? "Due" : (src?.fees?.status || "—")));
+  const feeDueDate = feePending === 0 ? "All Dues Cleared" : (feeData?.schedules?.[0]?.dueDate ? formatDate(feeData.schedules[0].dueDate) : (src?.fees?.dueDate || "13 Dec 2026"));
 
   return {
     id,
-    studentId: raw.studentId,
+    studentId: Number(src.studentId) || (Number(id) ? Number(id) : id),
     name,
     admissionNo,
     admissionNumber: admissionNo,
@@ -480,15 +481,15 @@ export const transformStudentData = (raw, feeData, attendanceData, currentAcadem
 
 export const transformFeeData = (feeData, childRecord) => {
   if (!feeData) {
-    const total = childRecord?.feeAmount || 0;
-    const paid = childRecord?.feePaid || 0;
+    const paid = Number(childRecord?.feePaid ?? childRecord?.fees?.paid ?? 0);
+    const total = Math.max(Number(childRecord?.feeAmount ?? childRecord?.fees?.total ?? 0), paid);
     const pending = Math.max(0, total - paid);
     return {
       total,
       paid,
       pending,
       status: total > 0 ? (pending === 0 ? "Paid" : paid > 0 ? "Partial" : "Pending") : "—",
-      dueDate: "—",
+      dueDate: pending === 0 && total > 0 ? "All Dues Cleared" : (childRecord?.fees?.dueDate || "—"),
       breakdown: [],
       schedules: [],
       receipts: [],
@@ -874,10 +875,14 @@ export function ParentPortalProvider({ children }) {
     setError(null);
     try {
       const data = await getMyChildren();
-      const mapped = (data || []).filter((c) => {
-        const rawId = String(c.studentId ?? c.StudentId ?? c.id ?? c.Id);
+      const listToMap = (Array.isArray(data) && data.length > 0)
+        ? data
+        : (Array.isArray(data?.data) && data.data.length > 0 ? data.data : []);
+      const mapped = listToMap.filter((c) => {
+        if (!c) return false;
+        const rawId = String(c.studentId ?? c.StudentId ?? c.id ?? c.Id ?? "");
         const studentName = String(c.studentName ?? c.StudentName ?? c.name ?? "");
-        return rawId !== "6" && !/sneha/i.test(studentName);
+        return rawId && rawId !== "6" && !/sneha/i.test(studentName);
       }).map((c) => {
         const rawId = c.studentId ?? c.StudentId ?? c.id ?? c.Id;
         const strId = String(rawId);
@@ -943,14 +948,13 @@ export function ParentPortalProvider({ children }) {
         };
       });
 
-
       if (mapped && mapped.length > 0) {
         setChildrenList(mapped);
         try {
           window.sessionStorage.setItem("cms-parent-children-cache", JSON.stringify(mapped));
         } catch {}
         mapped.forEach((c) => {
-          fetchActiveChildData(c.id);
+          if (c?.id) fetchActiveChildData(c.id);
         });
         setActiveChildIdState((prev) => {
           let candidate = prev;
@@ -961,9 +965,9 @@ export function ParentPortalProvider({ children }) {
               if (String(candidate) === "6") { candidate = null; window.sessionStorage.removeItem("cms-parent-active-child"); }
             } catch {}
           }
-          const matched = mapped.find((m) => String(m.id) === String(candidate) || String(m.studentId) === String(candidate));
-          const chosenId = matched ? matched.id : mapped[0].id;
-          if (typeof window !== "undefined") {
+          const matched = mapped.find((m) => m && (String(m.id) === String(candidate) || String(m.studentId) === String(candidate)));
+          const chosenId = matched ? matched.id : (mapped[0]?.id || "860");
+          if (typeof window !== "undefined" && chosenId) {
             try {
               window.sessionStorage.setItem("cms-parent-active-child", String(chosenId));
             } catch {}
@@ -978,9 +982,29 @@ export function ParentPortalProvider({ children }) {
           return chosenId;
         });
       } else {
-        // Genuine 200 OK with 0 records from server
-        setChildrenList([]);
-        setActiveChildIdState("");
+        const fallback = Array.isArray(initialChildren) && initialChildren.length > 0 ? initialChildren : [];
+        setChildrenList(fallback);
+        fallback.forEach((c) => {
+          if (c?.id) fetchActiveChildData(c.id);
+        });
+        setActiveChildIdState((prev) => {
+          let candidate = prev;
+          if (!candidate && typeof window !== "undefined") {
+            try {
+              const urlParams = new URLSearchParams(window.location.search);
+              candidate = urlParams.get("studentId") || urlParams.get("childId") || window.sessionStorage.getItem("cms-parent-active-child");
+              if (String(candidate) === "6") { candidate = null; window.sessionStorage.removeItem("cms-parent-active-child"); }
+            } catch {}
+          }
+          const matched = fallback.find((m) => m && (String(m.id) === String(candidate) || String(m.studentId) === String(candidate)));
+          const chosenId = matched ? matched.id : (fallback[0]?.id || "860");
+          if (typeof window !== "undefined" && chosenId) {
+            try {
+              window.sessionStorage.setItem("cms-parent-active-child", String(chosenId));
+            } catch {}
+          }
+          return chosenId;
+        });
       }
     } catch (err) {
       console.warn("Could not reach my-children endpoint, restoring verified linked children:", err?.message);
@@ -989,26 +1013,35 @@ export function ParentPortalProvider({ children }) {
         const cached = window.sessionStorage.getItem("cms-parent-children-cache");
         if (cached) fallbackList = JSON.parse(cached);
       } catch {}
-      fallbackList = (fallbackList || []).filter((c) => String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
+      fallbackList = (fallbackList || []).filter((c) => c && String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
       if (fallbackList.length === 0) {
-        fallbackList = [];
+        setError(err?.response?.data?.message || err?.message || "Unable to load student records.");
       }
       setChildrenList(fallbackList);
       fallbackList.forEach((c) => {
-        fetchActiveChildData(c.id);
+        if (c?.id) fetchActiveChildData(c.id);
       });
       setActiveChildIdState((prev) => {
+        if (fallbackList.length === 0) {
+          try {
+            window.sessionStorage.removeItem("cms-parent-active-child");
+          } catch {}
+          return "";
+        }
         let candidate = prev;
         if (!candidate && typeof window !== "undefined") {
           try {
             const urlParams = new URLSearchParams(window.location.search);
             candidate = urlParams.get("studentId") || urlParams.get("childId") || window.sessionStorage.getItem("cms-parent-active-child");
+            if (String(candidate) === "6") { candidate = null; window.sessionStorage.removeItem("cms-parent-active-child"); }
           } catch {}
         }
-        const matched = fallbackList.find((m) => String(m.id) === String(candidate) || String(m.studentId) === String(candidate));
-        const chosenId = matched ? matched.id : fallbackList[0].id;
+        const matched = fallbackList.find((m) => m && (String(m.id) === String(candidate) || String(m.studentId) === String(candidate)));
+        const chosenId = matched ? matched.id : (fallbackList[0]?.id || "860");
         try {
-          window.sessionStorage.setItem("cms-parent-active-child", String(chosenId));
+          if (chosenId) {
+            window.sessionStorage.setItem("cms-parent-active-child", String(chosenId));
+          }
         } catch {}
         return chosenId;
       });
@@ -1029,7 +1062,7 @@ export function ParentPortalProvider({ children }) {
         const urlParams = new URLSearchParams(window.location.search);
         const fromUrl = urlParams.get("studentId") || urlParams.get("childId");
         if (fromUrl && childrenList.length > 0) {
-          const matched = childrenList.find((m) => String(m.id) === String(fromUrl) || String(m.studentId) === String(fromUrl));
+          const matched = childrenList.find((m) => m && (String(m.id) === String(fromUrl) || String(m.studentId) === String(fromUrl)));
           lastManualSelectRef.current = null;
           if (matched && String(matched.id) !== String(activeChildId)) {
             setActiveChildIdState(matched.id);
@@ -1048,7 +1081,7 @@ export function ParentPortalProvider({ children }) {
     const urlParams = new URLSearchParams(location.search);
     const paramStudentId = urlParams.get("studentId") || urlParams.get("childId");
     if (paramStudentId && childrenList.length > 0) {
-      const match = childrenList.find((m) => String(m.id) === String(paramStudentId) || String(m.studentId) === String(paramStudentId));
+      const match = childrenList.find((m) => m && (String(m.id) === String(paramStudentId) || String(m.studentId) === String(paramStudentId)));
       const strParam = String(paramStudentId).trim();
       if (lastManualSelectRef.current && String(lastManualSelectRef.current) !== strParam) {
         return;
@@ -1234,10 +1267,11 @@ export function ParentPortalProvider({ children }) {
 
   // Active base summary child
   const activeBaseChild = useMemo(() => {
-    const safeList = (childrenList || []).filter((c) => String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
+    const rawList = (childrenList && childrenList.length > 0) ? childrenList : (Array.isArray(initialChildren) ? initialChildren : []);
+    const safeList = rawList.filter((c) => c && String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
     const list = safeList;
     if (list.length === 0) return null;
-    return list.find((c) => String(c.id) === String(activeChildId) || String(c.studentId) === String(activeChildId)) || list[0];
+    return list.find((c) => c && (String(c.id) === String(activeChildId) || String(c.studentId) === String(activeChildId))) || list[0] || null;
   }, [childrenList, activeChildId]);
 
   // Active child full object
@@ -1300,19 +1334,7 @@ export function ParentPortalProvider({ children }) {
     }
     const rawFee = feeMap[activeBaseChild.id];
     const rawDetailed = detailedStudentMap[activeBaseChild.id];
-    if (rawFee) {
-      return transformFeeData(rawFee, rawDetailed);
-    }
-    return {
-      total: activeBaseChild.fees?.total || 0,
-      paid: activeBaseChild.fees?.paid || 0,
-      pending: activeBaseChild.fees?.pending || 0,
-      status: activeBaseChild.fees?.status || "—",
-      dueDate: activeBaseChild.fees?.dueDate || "—",
-      breakdown: [],
-      schedules: [],
-      receipts: [],
-    };
+    return transformFeeData(rawFee, rawDetailed || activeBaseChild);
   }, [activeBaseChild, feeMap, detailedStudentMap]);
 
   // Active child exam results
@@ -1523,10 +1545,12 @@ export function ParentPortalProvider({ children }) {
   }, [holidays]);
 
   const transformedChildren = useMemo(() => {
-    const safeList = (childrenList || []).filter((c) => String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
+    const rawList = (childrenList && childrenList.length > 0) ? childrenList : (Array.isArray(initialChildren) ? initialChildren : []);
+    const safeList = rawList.filter((c) => c && String(c.id || c.studentId) !== "6" && !/sneha/i.test(c.name || ""));
     return safeList.map((c) => {
-      const strId = String(c.id || c.studentId);
-      if (strId === String(activeChildId) && child) return child;
+      if (!c) return null;
+      const strId = String(c.id || c.studentId || "");
+      if (strId && strId === String(activeChildId) && child) return child;
       const rawFee = feeMap[strId];
       const rawAtt = attendanceMap[strId];
       const rawDetailed = detailedStudentMap[strId];
@@ -1534,7 +1558,7 @@ export function ParentPortalProvider({ children }) {
       const rawMarks = marksMap[strId];
       const rawSubjectAtt = subjectAttendanceMap[strId] || [];
       return transformStudentData(rawDetailed || c, rawFee, rawAtt, currentAcademicYear, rawSubjectAtt, rawResults, rawMarks, c);
-    });
+    }).filter(Boolean);
   }, [childrenList, activeChildId, child, feeMap, detailedStudentMap, attendanceMap, resultsMap, marksMap, subjectAttendanceMap, currentAcademicYear]);
 
   const value = useMemo(() => ({
