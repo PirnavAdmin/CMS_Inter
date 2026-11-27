@@ -14,7 +14,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> UpdatePreferencesAsync(int staffId, DriverPreferencesUpdateRequestDto request, CancellationToken ct = default);
         Task<List<DriverNotification>> GetNotificationsAsync(int staffId, CancellationToken ct = default);
         Task<bool> MarkNotificationsAsReadAsync(int staffId, CancellationToken ct = default);
-        Task<object?> GetDashboardDataAsync(int staffId, CancellationToken ct = default);
+        Task<object?> GetDashboardDataAsync(int staffId, int campusId = 0, CancellationToken ct = default);
         Task<object?> GetRouteDetailsAsync(int staffId, CancellationToken ct = default);
         Task<object?> GetProfileAsync(int staffId, CancellationToken ct = default);
 

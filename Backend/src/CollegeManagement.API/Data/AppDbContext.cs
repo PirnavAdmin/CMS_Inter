@@ -1950,6 +1950,12 @@ private static void ConfigureTransportVehicleAssignment(ModelBuilder modelBuilde
                         .HasForeignKey(x => x.DriverId)
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    entity.HasOne(x => x.Attendant)
+                        .WithMany()
+                        .HasForeignKey(x => x.AttendantId)
+                        .IsRequired(false)
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     entity.HasIndex(x => new
                     {
                         x.RouteId,

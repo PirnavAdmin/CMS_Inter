@@ -71,7 +71,7 @@ namespace CollegeManagement.API.Models
 
         public TransportDriver Driver { get; set; } = null!;
 
-        [NotMapped]
+        [ForeignKey("AttendantId")]
         public TransportAttendant? Attendant { get; set; }
     }
 }

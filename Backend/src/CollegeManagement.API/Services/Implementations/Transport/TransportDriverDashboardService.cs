@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,8 +33,8 @@ namespace CollegeManagement.API.Services.Implementations.Transport
         public Task<bool> MarkNotificationsAsReadAsync(int staffId, CancellationToken ct = default) =>
             _repository.MarkNotificationsAsReadAsync(staffId, ct);
 
-        public Task<object?> GetDashboardDataAsync(int staffId, CancellationToken ct = default) =>
-            _repository.GetDashboardDataAsync(staffId, ct);
+        public Task<object?> GetDashboardDataAsync(int staffId, int campusId = 0, CancellationToken ct = default) =>
+            _repository.GetDashboardDataAsync(staffId, campusId, ct);
 
         public Task<object?> GetRouteDetailsAsync(int staffId, CancellationToken ct = default) =>
             _repository.GetRouteDetailsAsync(staffId, ct);
