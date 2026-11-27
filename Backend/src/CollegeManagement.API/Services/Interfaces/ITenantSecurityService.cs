@@ -8,6 +8,7 @@ namespace CollegeManagement.API.Services.Interfaces
         Task<bool> ValidateCampusOwnershipAsync(int campusId, int collegeId);
         Task<List<int>> GetCampusesForCollegeAsync(int collegeId);
         Task ValidateStudentOwnershipAsync(int studentId, int collegeId);
+        Task ValidateAdmissionOwnershipAsync(int admissionId, int collegeId);
         Task ValidateStaffOwnershipAsync(int staffId, int collegeId);
         Task ValidateDepartmentOwnershipAsync(int departmentId, int collegeId);
         Task ValidateDesignationOwnershipAsync(int designationId, int collegeId);

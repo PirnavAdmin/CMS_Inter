@@ -348,7 +348,7 @@ namespace CollegeManagement.API.Repositories.Implementations
         // =========================================================
         // VERIFY ADMISSION
         // =========================================================
-        public async Task<bool> VerifyAsync(VerifyStudentAdmissionRequest request)
+                public async Task<bool> VerifyAsync(VerifyStudentAdmissionRequest request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
 
@@ -356,12 +356,12 @@ namespace CollegeManagement.API.Repositories.Implementations
             var parameters = new DynamicParameters();
             parameters.Add("p_AdmissionId", request.AdmissionId, DbType.Int32);
 
-            var rows = await connection.ExecuteAsync(
+            var affectedRows = await connection.ExecuteScalarAsync<int>(
                 "sp_VerifyStudentAdmission",
                 parameters,
                 commandType: CommandType.StoredProcedure);
 
-            return rows > 0;
+            return affectedRows > 0;
         }
 
         // =========================================================
